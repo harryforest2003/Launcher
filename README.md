@@ -13,7 +13,7 @@ Everything the app is built from is in this repository, so a new Mac needs only 
 
 **Download a build from GitHub**
 
-1. On GitHub, open **Actions**, then **Build Mac app**, then **Run workflow**. It builds the app for Apple Silicon and Intel Macs, which takes about 15 minutes.
+1. On GitHub, open **Actions**, then **Build Mac app**, then **Run workflow**. It builds the app for Apple Silicon and Intel Macs, which takes about 5 minutes.
 2. Open **Releases** and download the zip for your Mac: `apple-silicon` for an M1 chip or later, `intel` otherwise. (Apple menu > About This Mac says which.)
 3. Unzip it and drag **Unity Launcher** into Applications.
 4. The app has no Apple developer signature, so the first time macOS won't open it. Open System Settings > Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine "/Applications/Unity Launcher.app"` in Terminal.
