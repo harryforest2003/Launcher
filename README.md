@@ -7,29 +7,31 @@ A Minecraft launcher built with Electron, React and TypeScript. It browses Modri
 - **From source:** `npm install`, then `npm run electron:dev`.
 - **As an installed Mac app:** `npm run app:install` builds it and puts it in Applications. Run the same command after making changes to update it. The first time, it also builds the copy of Blockbench the launcher opens, from Blockbench's official source.
 
-## Getting it on a new Mac
+## Getting it on another computer
 
-Everything the app is built from is in this repository, so a new Mac needs only this repository and GitHub.
+Everything the app is built from is in this repository, so another computer needs only this repository and GitHub. The launcher runs on Mac, Windows and Linux.
 
 **Download a build from GitHub**
 
-1. On GitHub, open **Actions**, then **Build Mac app**, then **Run workflow**. It builds the app for Apple Silicon and Intel Macs, which takes about 5 minutes.
-2. Open **Releases** and download the zip for your Mac: `apple-silicon` for an M1 chip or later, `intel` otherwise. (Apple menu > About This Mac says which.)
-3. Unzip it and drag **Unity Launcher** into Applications.
-4. The app has no Apple developer signature, so the first time macOS won't open it. Open System Settings > Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine "/Applications/Unity Launcher.app"` in Terminal.
+1. On GitHub, open **Actions**, then **Build app**, then **Run workflow**. Choose **all**, or just the system you need: Mac builds use the most of GitHub's build minutes, which are limited each month on a free account. It takes about 5 minutes, and checks that each build starts before publishing it.
+2. Open **Releases** and download the file for your computer, then install it:
+   - **Mac:** the zip for `apple-silicon` (an M1 chip or later) or `intel`; Apple menu > About This Mac says which. Unzip it and drag **Unity Launcher** into Applications. The app has no Apple developer signature, so the first time macOS won't open it: open System Settings > Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine "/Applications/Unity Launcher.app"` in Terminal.
+   - **Windows:** run `Unity-Launcher-windows-setup.exe`. It installs for you only and adds Unity Launcher to the Start menu. The app has no developer signature, so Windows may say it protected your PC: click **More info**, then **Run anyway**.
+   - **Linux:** `chmod +x Unity-Launcher-linux.AppImage`, then run it. AppImages need FUSE 2 (`sudo apt install libfuse2t64` on Ubuntu 24.04 or later, `libfuse2` before that). If it doesn't open on Ubuntu 24.04 or later, run it with `--no-sandbox`.
 
-Run the workflow again after changing the code to get an updated build. Each run uses GitHub's Mac build minutes, which are limited each month on a free account.
+Run the workflow again after changing the code to get an updated build; on Windows, run the new setup over the old one.
 
-**Build it on the Mac**
+**Build it yourself**
 
-1. Install git with `xcode-select --install`, and Node.js 26 or later from <https://nodejs.org>.
-2. `git clone https://github.com/harryforest2003/Launcher.git`, then `cd Launcher`.
-3. `npm ci`, then `npm run app:install`.
+1. Install git and Node.js 26 or later (<https://nodejs.org>). On a Mac, `xcode-select --install` gives you git.
+2. `git clone https://github.com/harryforest2003/Launcher.git`, then `cd Launcher`, then `npm ci`.
+3. On a Mac, `npm run app:install` builds the app and puts it in Applications. On Windows or Linux, `npm run blockbench:build`, then `npm run dist`, and the installer or AppImage is in `release/`.
 
 **What isn't in the repository**
 
-- Your instances, worlds and mods are on the Mac. Back them up with **Back up to cloud** (below) and restore them with Library > Import Instance > Import Cloud.
-- Personal API tokens (Modrinth, Nexus Mods, GitHub) and your Microsoft sign-in are kept encrypted on each Mac. Add them again in Settings, and sign in again.
+- Minecraft needs Java on the computer (from <https://adoptium.net>, say), or a Java chosen in Settings.
+- Your instances, worlds and mods are on the computer. Back them up with **Back up to cloud** (below) and restore them with Library > Import Instance > Import Cloud.
+- Personal API tokens (Modrinth, Nexus Mods, GitHub) and your Microsoft sign-in are kept encrypted on each computer. Add them again in Settings, and sign in again.
 - CurseForge's key is kept by the launcher's proxy on Cloudflare, not here. [proxy/curseforge/README.md](proxy/curseforge/README.md) says how to change it.
 
 ## Cloud backups

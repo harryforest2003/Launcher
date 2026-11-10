@@ -72,6 +72,22 @@
       "hardenedRuntime": false,
       "category": "public.app-category.games"
     },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "executableName": "unity-launcher"
+    },
     "extraResources": [
       {
         "from": "vendor/blockbench",

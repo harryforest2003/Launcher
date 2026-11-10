@@ -1,0 +1,150 @@
+# Builds Unity Launcher on GitHub for Mac (Apple Silicon and Intel), Windows and Linux,
+# checks each build starts, and publishes them on the repository's Releases page.
+# Start it from the Actions tab: Build app, then Run workflow. It needs no keys:
+# CurseForge goes through the launcher's proxy.
+name: Build app
+
+on:
+  workflow_dispatch:
+    inputs:
+      systems:
+        description: Which systems to build for. Mac builds use the most of GitHub's monthly minutes.
+        type: choice
+        default: all
+        options:
+          - all
+          - mac
+          - windows
+          - linux
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-app
+
+jobs:
+  plan:
+    name: Choose builds
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          SYSTEMS: ${{ inputs.systems }}
+        run: |
+          all='[
+            {"system": "mac", "runner": "macos-26", "label": "Mac, Apple Silicon", "file": "Unity-Launcher-mac-apple-silicon.zip"},
+            {"system": "mac", "runner": "macos-15-intel", "label": "Mac, Intel", "file": "Unity-Launcher-mac-intel.zip"},
+            {"system": "windows", "runner": "windows-latest", "label": "Windows", "file": "Unity-Launcher-windows-setup.exe"},
+            {"system": "linux", "runner": "ubuntu-latest", "label": "Linux", "file": "Unity-Launcher-linux.AppImage"}
+          ]'
+          echo "matrix=$(jq -c --arg s "$SYSTEMS" '{include: [.[] | select($s == "all" or .system == $s)]}' <<< "$all")" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.label }})
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # Blockbench is built from its pinned official source, then reused until
+      # scripts/build-blockbench.cjs changes. It's the same on every system.
+      - name: Reuse Blockbench
+        id: blockbench
+        uses: actions/cache@v6
+        with:
+          path: vendor/blockbench
+          key: blockbench-${{ hashFiles('scripts/build-blockbench.cjs') }}
+          enableCrossOsArchive: true
+
+      - name: Build Blockbench
+        if: steps.blockbench.outputs.cache-hit != 'true'
+        run: npm run blockbench:build
+
+      - name: Build the app
+        run: |
+          npx tsc -b
+          npx vite build
+          case "$RUNNER_OS" in
+            macOS) npx electron-builder --mac --publish never ;;
+            Windows) npx electron-builder --win --publish never ;;
+            Linux) npx electron-builder --linux --publish never ;;
+          esac
+
+      - name: Check it starts
+        run: |
+          case "$RUNNER_OS" in
+            macOS)
+              app=$(find release -maxdepth 2 -name "Unity Launcher.app" -type d | head -1)
+              node scripts/check-app-starts.cjs "$app/Contents/MacOS/Unity Launcher" ;;
+            Windows)
+              node scripts/check-app-starts.cjs "release/win-unpacked/Unity Launcher.exe" ;;
+            Linux)
+              command -v xvfb-run > /dev/null || { sudo apt-get update -q && sudo apt-get install -y -q xvfb; }
+              xvfb-run --auto-servernum node scripts/check-app-starts.cjs release/linux-unpacked/unity-launcher ;;
+          esac
+
+      - name: Package it
+        run: |
+          case "$RUNNER_OS" in
+            macOS)
+              app=$(find release -maxdepth 2 -name "Unity Launcher.app" -type d | head -1)
+              ditto -c -k --sequesterRsrc --keepParent "$app" "${{ matrix.file }}" ;;
+            Windows)
+              cp "$(ls release/*.exe | head -1)" "${{ matrix.file }}" ;;
+            Linux)
+              cp "$(ls release/*.AppImage | head -1)" "${{ matrix.file }}" ;;
+          esac
+          test -s "${{ matrix.file }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.file }}
+          path: ${{ matrix.file }}
+          if-no-files-found: error
+          retention-days: 7
+
+  # Publishes whatever built, so one system's failure doesn't hold back the others.
+  publish:
+    name: Publish
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(out/*)
+          if [ ${#files[@]} -eq 0 ]; then echo "Nothing built, so there's nothing to publish."; exit 1; fi
+          gh release create "build-${{ github.run_number }}" "${files[@]}" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "Unity Launcher, build ${{ github.run_number }}" \
+            --notes "Built from ${GITHUB_SHA::7}. Download the file for your computer: the Mac zip for Apple Silicon (an M1 chip or later) or Intel, the Windows setup, or the Linux AppImage. The README says how to install each." \
+            --latest

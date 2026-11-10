@@ -35,7 +35,9 @@ const SHIPPED = [
 ];
 
 function run(command, args, cwd, env = {}) {
-  execFileSync(command, args, { cwd, stdio: "inherit", env: { ...process.env, ...env } });
+  // On Windows npm is a .cmd script, which Node only starts through a shell.
+  const shell = process.platform === "win32" && command === "npm";
+  execFileSync(command, args, { cwd, stdio: "inherit", shell, env: { ...process.env, ...env } });
 }
 
 function checkedOutTag() {
