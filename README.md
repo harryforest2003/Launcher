@@ -47,9 +47,13 @@ No keys or tokens are stored in this repository.
 - **Web preview (`npm run web`):** this runs outside Electron, so it has no keychain. To use CurseForge there, copy `.env.example` to `.env.local` and set a key. Git ignores that file.
 - **Microsoft sign-in:** `electron/auth/config.cjs` holds the app's Azure client ID, which is public rather than secret. Mojang has to approve each Azure app for Minecraft sign-in, at <https://aka.ms/mce-reviewappid>. Sign-in tokens are encrypted the same way as API keys.
 
+## Model editor
+
+The model and skin editor in `blockbench/` is [Blockbench](https://www.blockbench.net) by JannisX11 and its contributors, with its start screen and desktop-app parts taken out so the launcher opens things straight into the editor. [blockbench/README.md](blockbench/README.md) says what changed. Edit it like any other part of the launcher; `npm run blockbench:build` rebuilds it, and `npm run app:install` builds it when it's missing.
+
 ## Licence
 
-GPL-3.0. See [LICENSE](LICENSE).
+GPL-3.0. See [LICENSE](LICENSE). Blockbench, in `blockbench/`, is GPL-3.0-or-later; see [blockbench/LICENSE.MD](blockbench/LICENSE.MD).
 
 ---
 

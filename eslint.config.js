@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // blockbench/ is the model editor's own code, with its own style.
+  globalIgnores(['dist', 'blockbench', 'vendor', 'release', '.cache']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

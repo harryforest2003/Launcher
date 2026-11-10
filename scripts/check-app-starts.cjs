@@ -67,12 +67,14 @@ function evaluate(page, expression) {
 }
 
 const CHECKS = `(async () => {
-  for (let i = 0; i < 60 && !document.body.innerText.includes("Minecraft"); i++) {
+  // The window can be found before its page has any content.
+  const text = () => document.body?.innerText ?? "";
+  for (let i = 0; i < 60 && !text().includes("Minecraft"); i++) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   return {
-    name: /Unity\\s+Launcher/.test(document.body.innerText),
-    homeScreen: document.body.innerText.includes("Minecraft"),
+    name: /Unity\\s+Launcher/.test(text()),
+    homeScreen: text().includes("Minecraft"),
     appConnected: typeof window.instanceAPI === "object",
     blockbench: await window.blockbenchAPI.available(),
   };

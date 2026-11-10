@@ -65,17 +65,17 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      # Blockbench is built from its pinned official source, then reused until
-      # scripts/build-blockbench.cjs changes. It's the same on every system.
-      - name: Reuse Blockbench
+      # The model editor is built from blockbench/, then reused until something in it or
+      # its build script changes. It's the same on every system.
+      - name: Reuse the model editor
         id: blockbench
         uses: actions/cache@v6
         with:
           path: vendor/blockbench
-          key: blockbench-${{ hashFiles('scripts/build-blockbench.cjs') }}
+          key: blockbench-${{ hashFiles('scripts/build-blockbench.cjs', 'blockbench/**') }}
           enableCrossOsArchive: true
 
-      - name: Build Blockbench
+      - name: Build the model editor
         if: steps.blockbench.outputs.cache-hit != 'true'
         run: npm run blockbench:build
 
@@ -142,9 +142,11 @@ jobs:
           shopt -s nullglob
           files=(out/*)
           if [ ${#files[@]} -eq 0 ]; then echo "Nothing built, so there's nothing to publish."; exit 1; fi
-          gh release create "build-${{ github.run_number }}" "${files[@]}" \
+          # Named by when it was built, so a name is never used twice.
+          built=$(date -u +%Y-%m-%d-%H%M)
+          gh release create "build-$built" "${files[@]}" \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "Unity Launcher, build ${{ github.run_number }}" \
+            --title "Unity Launcher, built $(date -u '+%-d %B %Y, %H:%M UTC')" \
             --notes "Built from ${GITHUB_SHA::7}. Download the file for your computer: the Mac zip for Apple Silicon (an M1 chip or later) or Intel, the Windows setup, or the Linux AppImage. The README says how to install each." \
             --latest

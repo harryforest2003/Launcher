@@ -28,12 +28,15 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), injectMockBridge()],
     cacheDir: 'node_modules/.vite-web',
+    // blockbench/ is the model editor's own page, built on its own.
+    optimizeDeps: { entries: ['index.html'] },
     define: {
       __WEB_PREVIEW_HAS_CURSEFORGE__: JSON.stringify(Boolean(curseForgeKey)),
     },
     server: {
       port: 5175,
       strictPort: true,
+      watch: { ignored: ['**/blockbench/**', '**/vendor/**'] },
       proxy: curseForgeKey
         ? {
             '/curseforge-api': {

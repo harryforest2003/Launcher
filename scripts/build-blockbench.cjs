@@ -1,38 +1,25 @@
 /*
- * Builds the copy of Blockbench that the launcher opens, from a pinned release of its
- * official source, into vendor/blockbench. Blockbench is GPL-3.0-or-later; its licence
- * and the exact source it came from are copied in beside it.
+ * Builds the model editor the launcher opens, Blockbench, from its source in blockbench/
+ * into vendor/blockbench, which the app packs inside itself. Nothing is downloaded from
+ * Blockbench: only the build tools its package.json lists, from npm.
  *
- * Run it again after changing BLOCKBENCH_TAG: npm run blockbench:build
+ * Blockbench is by JannisX11 and its contributors, under GPL-3.0-or-later. The copy in
+ * blockbench/ is its editor, with the start screen and desktop-app parts taken out
+ * (blockbench/README.md says what changed). Its licence goes in beside the build.
+ *
+ * Run it again after changing anything in blockbench/: npm run blockbench:build
  */
 
 const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-const BLOCKBENCH_TAG = "v5.2.2";
-const BLOCKBENCH_REPO = "https://github.com/JannisX11/blockbench.git";
-
 const repo = path.join(__dirname, "..");
-const source = path.join(repo, ".cache", "blockbench-src");
+const source = path.join(repo, "blockbench");
 const output = path.join(repo, "vendor", "blockbench");
 
-// What the web version's page loads. The rest of the repository is for building it,
-// or for its desktop version.
-const SHIPPED = [
-  "index.html",
-  "dist",
-  "css",
-  "font",
-  "assets",
-  "lang",
-  "lib",
-  "content",
-  "favicon.png",
-  "icon.png",
-  "icon_full.png",
-  "LICENSE.MD",
-];
+// What the editor's page loads. The rest of blockbench/ is for building it.
+const SHIPPED = ["index.html", "dist", "css", "font", "assets", "lang", "lib", "favicon.png", "icon.png", "LICENSE.MD"];
 
 function run(command, args, cwd, env = {}) {
   // On Windows npm is a .cmd script, which Node only starts through a shell.
@@ -40,21 +27,7 @@ function run(command, args, cwd, env = {}) {
   execFileSync(command, args, { cwd, stdio: "inherit", shell, env: { ...process.env, ...env } });
 }
 
-function checkedOutTag() {
-  try {
-    return execFileSync("git", ["describe", "--tags", "--exact-match"], { cwd: source, encoding: "utf8" }).trim();
-  } catch {
-    return null;
-  }
-}
-
-if (checkedOutTag() !== BLOCKBENCH_TAG) {
-  fs.rmSync(source, { recursive: true, force: true });
-  fs.mkdirSync(path.dirname(source), { recursive: true });
-  run("git", ["clone", "--quiet", "--depth", "1", "--branch", BLOCKBENCH_TAG, BLOCKBENCH_REPO, source], repo);
-}
-
-// Its own install scripts and Electron download are only for its desktop version.
+// Its install scripts and Electron download are only for Blockbench's desktop version.
 run("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], source, {
   ELECTRON_SKIP_BINARY_DOWNLOAD: "1",
 });
@@ -69,20 +42,24 @@ for (const item of SHIPPED) {
   fs.cpSync(from, path.join(output, item), { recursive: true });
 }
 
-// A source map for debugging Blockbench itself, twice the size of everything else.
-fs.rmSync(path.join(output, "dist", "bundle.js.map"), { force: true });
+// Build leftovers: a source map for debugging, twice the size of everything else, and
+// a record of the build's inputs.
+for (const leftover of ["bundle.js.map", "esbuild-metafile.json"]) {
+  fs.rmSync(path.join(output, "dist", leftover), { force: true });
+}
 
-const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: source, encoding: "utf8" }).trim();
+const { version } = JSON.parse(fs.readFileSync(path.join(source, "package.json"), "utf8"));
 
 fs.writeFileSync(
   path.join(output, "SOURCE.txt"),
   [
-    `Blockbench ${BLOCKBENCH_TAG}, built for Unity Launcher from its official source.`,
-    `Source: ${BLOCKBENCH_REPO.replace(/\.git$/, "")}/tree/${BLOCKBENCH_TAG}`,
-    `Commit: ${commit}`,
+    `Blockbench ${version}, by JannisX11 and contributors, built for Unity Launcher.`,
+    "Built from blockbench/ in Unity Launcher's source, which is Blockbench's editor from",
+    `https://github.com/JannisX11/blockbench/tree/v${version}, with its start screen and`,
+    "desktop-app parts taken out.",
     "Licence: GPL-3.0-or-later, in LICENSE.MD.",
     "",
   ].join("\n")
 );
 
-console.log(`\nBlockbench ${BLOCKBENCH_TAG} built into ${path.relative(repo, output)}`);
+console.log(`\nBlockbench ${version} built into ${path.relative(repo, output)}`);
