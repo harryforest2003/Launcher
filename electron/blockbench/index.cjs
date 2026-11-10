@@ -97,8 +97,7 @@ function fitBounds(rect) {
 
 const BRIDGE = fs.readFileSync(path.join(__dirname, "bridge.js"), "utf8");
 
-// Blockbench's own colour names, set to the launcher's. Its "Download App" button makes
-// no sense inside an app.
+// Blockbench's own colour names, set to the launcher's.
 const THEME = `
 body {
     --color-ui: #151515 !important;
@@ -119,15 +118,49 @@ body {
     --color-checkerboard: #141414 !important;
     --color-menu_separator: #2b1d47 !important;
 }
-#web_download_button { display: none !important; }
+/* The launcher opens one thing at a time, and its own bar names it, so Blockbench's
+   project tabs have no place here. */
+#tab_bar { display: none !important; }
 `;
 
-function finish(editor) {
+// If Blockbench never says it's ready, it's shown anyway after this long, so any
+// message it has is seen instead of an empty space.
+const SHOW_ANYWAY_MS = 20 * 1000;
+
+/* Shows the editor, once what it's editing is open. */
+function reveal(editor) {
+    if (editor.done || editor.shown || !editor.job) return;
+    editor.shown = true;
+    clearTimeout(editor.showAnyway);
+    editor.view.setVisible(true);
+}
+
+/*
+ * Blockbench takes a few seconds to start, so each launcher window keeps one running,
+ * hidden, from when a page with a Blockbench button opens. Opening something only has
+ * to load it, and Done closes it and hides Blockbench again for the next one, so every
+ * open is quick, however soon after the last.
+ */
+const spares = new Map();
+
+// If Blockbench ever has to be started afresh, it's once things have settled.
+const RESTART_SPARE_MS = 1500;
+
+function warmUp(host) {
+    if (!host || host.isDestroyed() || !isAvailable()) return;
+    if (spares.has(host.id) || editorsByWindow.has(host.id)) return;
+    spares.set(host.id, createEditor(host));
+}
+
+/* Closes a Blockbench for good, as when its launcher window closes. */
+function destroy(editor) {
     if (editor.done) return;
     editor.done = true;
 
+    clearTimeout(editor.showAnyway);
     editors.delete(editor.contentsId);
-    editorsByWindow.delete(editor.windowId);
+    if (editorsByWindow.get(editor.windowId) === editor) editorsByWindow.delete(editor.windowId);
+    if (spares.get(editor.windowId) === editor) spares.delete(editor.windowId);
 
     try {
         editor.host.contentView.removeChildView(editor.view);
@@ -137,7 +170,39 @@ function finish(editor) {
 
     if (!editor.view.webContents.isDestroyed()) editor.view.webContents.close();
 
-    editor.resolve(editor.last);
+    editor.resolve?.(editor.last);
+}
+
+/*
+ * Done: the launcher gets what was saved, and Blockbench is hidden, closes what it had
+ * open, and waits for the next thing. If it can't close it, it's replaced instead.
+ */
+function finish(editor) {
+    if (editor.done || !editor.job) return;
+
+    clearTimeout(editor.showAnyway);
+    editor.view.setVisible(false);
+    editorsByWindow.delete(editor.windowId);
+
+    const { resolve, last } = editor;
+    Object.assign(editor, { job: null, onSave: null, last: null, resolve: null, shown: false, showAnyway: null, placed: false });
+    resolve?.(last);
+
+    // Ready for the next open straight away: Blockbench only asks what to open once
+    // it has closed this.
+    if (!spares.has(editor.windowId)) spares.set(editor.windowId, editor);
+
+    editor.view.webContents
+        .executeJavaScript("window.__unityLauncherClose?.()")
+        .then((closed) => {
+            if (!closed) throw new Error("Blockbench didn't close the last thing it had open.");
+        })
+        .catch(() => {
+            // Unless it's already been given something else to open.
+            if (editor.job) return;
+            destroy(editor);
+            setTimeout(() => warmUp(editor.host), RESTART_SPARE_MS);
+        });
 }
 
 /*
@@ -154,6 +219,43 @@ function openEditor(job, onSave, host) {
         throw new Error("Blockbench is already open. Press Done there first.");
     }
 
+    // The one started ahead of time, or a new one if there isn't one yet.
+    const editor = spares.get(host.id) ?? createEditor(host);
+    spares.delete(host.id);
+    editorsByWindow.set(host.id, editor);
+
+    editor.job = job;
+    editor.onSave = onSave;
+    editor.view.setBounds(fitBounds(spaceByWindow.get(host.id) ?? editor.view.getBounds()));
+    editor.showAnyway = setTimeout(() => reveal(editor), SHOW_ANYWAY_MS);
+
+    const opened = new Promise((resolve) => (editor.resolve = resolve));
+
+    // Blockbench sizes its panels from its width, so it's told what to open once the
+    // page has said where it goes. The first time, the page's bar appears just after this.
+    editor.placed = spaceByWindow.has(host.id);
+    if (editor.placed) handOver(editor);
+    else setTimeout(() => place(editor), PLACE_WAIT_MS);
+
+    return opened;
+}
+
+// The longest Blockbench waits to hear where it goes before opening anyway.
+const PLACE_WAIT_MS = 500;
+
+function place(editor) {
+    if (editor.placed || !editor.job) return;
+    editor.placed = true;
+    handOver(editor);
+}
+
+/* Tells a Blockbench waiting to be told what to open. */
+function handOver(editor) {
+    for (const hand of editor.waitingForJob.splice(0)) hand();
+}
+
+/* A hidden Blockbench in `host`, starting up, with nothing to edit yet. */
+function createEditor(host) {
     prepare();
 
     const view = new WebContentsView({
@@ -163,12 +265,18 @@ function openEditor(job, onSave, host) {
             contextIsolation: true,
             nodeIntegration: false,
             sandbox: true,
+            // It loads while hidden, so it mustn't be slowed down as a background page.
+            backgroundThrottling: false,
         },
     });
 
     view.setBackgroundColor("#0d0d0d");
-    // Nothing shows until the page says where it goes.
-    view.setBounds(fitBounds(spaceByWindow.get(host.id) ?? { x: 0, y: 0, width: 0, height: 0 }));
+    // Hidden while Blockbench starts and opens the thing to edit, so the first thing
+    // shown is the editor. The page shows "Opening..." in the space meanwhile.
+    view.setVisible(false);
+    // The space the page last made for it, or the window's size until it makes one.
+    const { width, height } = host.getContentBounds();
+    view.setBounds(fitBounds(spaceByWindow.get(host.id) ?? { x: 0, y: 0, width, height }));
     host.contentView.addChildView(view);
 
     const contents = view.webContents;
@@ -183,26 +291,27 @@ function openEditor(job, onSave, host) {
         contents.executeJavaScript(BRIDGE).catch(() => {});
     });
 
-    return new Promise((resolve) => {
-        const editor = {
-            job,
-            onSave,
-            last: null,
-            view,
-            host,
-            resolve,
-            contentsId: contents.id,
-            windowId: host.id,
-            done: false,
-        };
+    const editor = {
+        job: null,
+        onSave: null,
+        last: null,
+        view,
+        host,
+        resolve: null,
+        contentsId: contents.id,
+        windowId: host.id,
+        done: false,
+        shown: false,
+        showAnyway: null,
+        // Blockbench asking what to open, before anything has been chosen.
+        waitingForJob: [],
+    };
 
-        editors.set(editor.contentsId, editor);
-        editorsByWindow.set(editor.windowId, editor);
+    editors.set(editor.contentsId, editor);
+    host.once("closed", () => destroy(editor));
 
-        host.once("closed", () => finish(editor));
-
-        contents.loadURL(START_PAGE);
-    });
+    contents.loadURL(START_PAGE);
+    return editor;
 }
 
 function editorFor(event) {
@@ -212,7 +321,16 @@ function editorFor(event) {
 }
 
 function registerBridgeIpc() {
-    ipcMain.handle("blockbench-bridge:job", (event) => editorFor(event).job);
+    // What to open, with the width it's shown at: while hidden, its page can't measure
+    // itself. A spare waits here until something is chosen.
+    ipcMain.handle("blockbench-bridge:job", async (event) => {
+        const editor = editorFor(event);
+        if (!editor.job || !editor.placed) await new Promise((resolve) => editor.waitingForJob.push(resolve));
+        return { ...editor.job, width: editor.view.getBounds().width };
+    });
+
+    // What's being edited is open, so the editor can be shown.
+    ipcMain.handle("blockbench-bridge:ready", (event) => reveal(editorFor(event)));
 
     ipcMain.handle("blockbench-bridge:save", async (event, result) => {
         const editor = editorFor(event);
@@ -242,8 +360,15 @@ function registerBlockbenchIpc() {
         if (!host) return;
 
         spaceByWindow.set(host.id, rect);
-        editorsByWindow.get(host.id)?.view.setBounds(fitBounds(rect));
+        const active = editorsByWindow.get(host.id);
+        active?.view.setBounds(fitBounds(rect));
+        // Where it goes is known now, so Blockbench can open what it was given.
+        if (active) place(active);
+        spares.get(host.id)?.view.setBounds(fitBounds(rect));
     });
+
+    // A page with a Blockbench button has opened, so start one ready for it.
+    ipcMain.handle("blockbench:prepare", (event) => warmUp(BrowserWindow.fromWebContents(event.sender)));
 
     ipcMain.handle("blockbench:save", (event) => {
         const editor = editorIn(event);

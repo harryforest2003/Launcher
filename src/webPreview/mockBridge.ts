@@ -937,6 +937,7 @@ if (!window.launcherAPI) {
   target.skinAPI = withFallback("skinAPI", skinBridge);
   target.blockbenchAPI = withFallback("blockbenchAPI", {
     available: async () => false,
+    prepare: async () => {},
     editSkin: async () => {
       throw new Error("Blockbench needs the desktop app.");
     },

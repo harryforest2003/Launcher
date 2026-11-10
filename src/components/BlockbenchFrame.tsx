@@ -75,7 +75,13 @@ export default function BlockbenchFrame({ title }: { title: string }) {
         </button>
       </div>
 
-      <div ref={spaceRef} style={{ flex: 1 }} />
+      {/* Blockbench is drawn over this once what it's editing is open. */}
+      <div
+        ref={spaceRef}
+        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 14 }}
+      >
+        Opening the model editor...
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import BlockbenchFrame from "../components/BlockbenchFrame";
 import Sidebar from "../components/MCSidebar";
 import { applyBlockbenchEdit } from "../skinBuilder/blockbenchEdit";
@@ -157,11 +157,25 @@ export default function SkinBuilder({
   const [blockbenchReady, setBlockbenchReady] = useState(false);
 
   useEffect(() => {
-    window.blockbenchAPI.available().then(setBlockbenchReady).catch(() => {});
+    window.blockbenchAPI
+      .available()
+      .then((ready) => {
+        setBlockbenchReady(ready);
+        // Started now, so it opens at once when a Blockbench button is pressed.
+        if (ready) window.blockbenchAPI.prepare().catch(() => {});
+      })
+      .catch(() => {});
   }, []);
+
+  // Set from the first click, so a quick second one can't open another editor and take
+  // down the bar of the one that's open.
+  const blockbenchOpen = useRef(false);
 
   // `unchanged` is what to say if Blockbench closes with nothing saved.
   async function editInBlockbench(skin: SkinMeta, unchanged?: string) {
+    if (blockbenchOpen.current) return;
+    blockbenchOpen.current = true;
+
     setInBlockbench(skin);
     setError(null);
     setNotice(null);
@@ -179,6 +193,7 @@ export default function SkinBuilder({
       setError(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(err));
     }
 
+    blockbenchOpen.current = false;
     setInBlockbench(null);
     setLibraryVersion((version) => version + 1);
   }

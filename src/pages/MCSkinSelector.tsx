@@ -145,6 +145,8 @@ function SkinSelector({
   const [view, setView] = useState<"search" | "saved">("search");
   const [saved, setSaved] = useState<SavedSkin[]>([]);
   const [blockbenchReady, setBlockbenchReady] = useState(false);
+  // Set from the first click on a Blockbench button until the editor closes.
+  const blockbenchOpen = useRef(false);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
   const { request: namePrompt, ask: askName } = usePrompt();
 
@@ -181,7 +183,14 @@ function SkinSelector({
 
   useEffect(() => {
     window.skinAPI.saved().then(setSaved).catch(() => {});
-    window.blockbenchAPI.available().then(setBlockbenchReady).catch(() => {});
+    window.blockbenchAPI
+      .available()
+      .then((ready) => {
+        setBlockbenchReady(ready);
+        // Started now, so it opens at once when a Blockbench button is pressed.
+        if (ready) window.blockbenchAPI.prepare().catch(() => {});
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -333,7 +342,9 @@ function SkinSelector({
   }
 
   function editInBlockbench(target: Preview | null = preview, armsSlim = slim) {
-    if (!target) return;
+    // A quick second click mustn't open another editor and take down this one's bar.
+    if (!target || blockbenchOpen.current) return;
+    blockbenchOpen.current = true;
 
     const name = target.source === "mine" ? profile?.name ?? "My skin" : target.label.replace(/'s skin$/, "");
 
@@ -342,12 +353,16 @@ function SkinSelector({
     setSlim(armsSlim);
 
     run("blockbench", async () => {
-      const edited = await window.blockbenchAPI.editSkin(target.skin, armsSlim, name);
-      if (!edited) return null;
+      try {
+        const edited = await window.blockbenchAPI.editSkin(target.skin, armsSlim, name);
+        if (!edited) return null;
 
-      setPreview({ source: "file", skin: edited.dataUrl, label: edited.name, pickedId: edited.id });
-      setView("search");
-      return "Edited in Blockbench. Save Changes to use it in game, or Save to favourites to keep it.";
+        setPreview({ source: "file", skin: edited.dataUrl, label: edited.name, pickedId: edited.id });
+        setView("search");
+        return "Edited in Blockbench. Save Changes to use it in game, or Save to favourites to keep it.";
+      } finally {
+        blockbenchOpen.current = false;
+      }
     });
   }
 

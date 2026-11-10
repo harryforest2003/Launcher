@@ -177,6 +177,7 @@ contextBridge.exposeInMainWorld("instanceAPI", {
 // Opens Blockbench, inside the launcher, to edit something and bring it back.
 contextBridge.exposeInMainWorld("blockbenchAPI", {
     available: () => ipcRenderer.invoke("blockbench:available"),
+    prepare: () => ipcRenderer.invoke("blockbench:prepare"),
     editSkin: (skin, slim, name) => ipcRenderer.invoke("blockbench:editSkin", { skin, slim, name }),
     setBounds: (rect) => ipcRenderer.invoke("blockbench:setBounds", rect),
     save: () => ipcRenderer.invoke("blockbench:save"),

@@ -216,6 +216,8 @@ declare global {
         blockbenchAPI: {
             /** False until Blockbench has been built into the launcher. */
             available(): Promise<boolean>;
+            /** Starts Blockbench in the background, so opening something is instant. */
+            prepare(): Promise<void>;
             /** Resolves when the editor closes, with the edited skin, or null if it wasn't saved. */
             editSkin(skin: string, slim: boolean, name: string): Promise<PickedSkin | null>;
             /** Where the open editor goes, in window coordinates. */

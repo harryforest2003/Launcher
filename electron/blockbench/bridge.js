@@ -1,7 +1,7 @@
 /*
- * Runs inside Blockbench's page once it has loaded. It opens what the launcher asked
- * to edit, and makes Save send the result back to the launcher instead of downloading
- * a file. It uses only Blockbench's public objects, so Blockbench itself is unchanged.
+ * Runs inside Blockbench's page once it has loaded. It opens each thing the launcher asks
+ * to edit, one after another in this same window, and makes Save send the result back to
+ * the launcher instead of downloading a file. It uses only Blockbench's public objects.
  */
 (async () => {
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -10,21 +10,48 @@
     await pause(100);
   }
 
-  if (!window.Blockbench?.setup_successful) return;
+  // The launcher keeps this window hidden until this says what's being edited is open,
+  // so the first thing seen is the editor. Anything that stops it opening still shows
+  // the window, with whatever Blockbench has to say.
+  const ready = () => window.unityLauncher.ready().catch(() => {});
 
-  const job = await window.unityLauncher.job();
-  if (!job) return;
+  if (!window.Blockbench?.setup_successful) return ready();
 
-  // The side panels' default share of the width, in every mode, from a layout picked in
-  // the launcher. Panels can still be dragged; the next time it opens, it starts here.
+  /*
+   * The side panels take these shares of the editor's width when something opens, and
+   * keep their share when the window changes size, including after being dragged.
+   */
   const LEFT_SHARE = 0.254;
   const RIGHT_SHARE = 0.29;
+  let lastWidth = 0;
 
-  Interface.data.left_bar_width = Math.round(innerWidth * LEFT_SHARE);
-  Interface.data.right_bar_width = Math.round(innerWidth * RIGHT_SHARE);
-  // Widths saved for a single mode would win over these.
-  Interface.data.modes = {};
-  updateInterface();
+  const setPanelShares = (width) => {
+    Interface.data.left_bar_width = Math.round(width * LEFT_SHARE);
+    Interface.data.right_bar_width = Math.round(width * RIGHT_SHARE);
+    // Widths saved for a single mode would win over these.
+    Interface.data.modes = {};
+    lastWidth = width;
+    updateInterface();
+  };
+
+  // Keeps each panel's share when the width changes, including while it was hidden.
+  const keepShares = () => {
+    const width = innerWidth;
+    if (!width || !lastWidth || width === lastWidth) return;
+
+    const scale = width / lastWidth;
+    for (const data of [Interface.data, ...Object.values(Interface.data.modes ?? {})]) {
+      if (data.left_bar_width) data.left_bar_width = Math.round(data.left_bar_width * scale);
+      if (data.right_bar_width) data.right_bar_width = Math.round(data.right_bar_width * scale);
+    }
+    lastWidth = width;
+    updateInterface();
+  };
+
+  addEventListener("resize", keepShares);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") keepShares();
+  });
 
   /*
    * Skins from before 2014 are 64x32, with no separate left arm or leg. Minecraft makes
@@ -65,27 +92,8 @@
     return canvas.toDataURL("image/png");
   };
 
-  if (job.kind === "skin") {
-    const content = await modernSkin(job.image);
-
-    // The same steps as Blockbench's own "Minecraft Skin" dialog, with the answers filled in.
-    Formats.skin.setup_dialog.onConfirm({
-      model: job.slim ? "alex" : "steve",
-      game_edition: "java_edition",
-      resolution: 1,
-      texture_source: "upload_texture",
-      texture_file: { name: `${job.name}.png`, path: `${job.name}.png`, content },
-      pose: false,
-      layer_template: false,
-    });
-  } else {
-    loadModelFile({ name: `${job.name}.bbmodel`, path: `${job.name}.bbmodel`, content: job.model });
-  }
-
-  if (window.Project) {
-    Project.name = job.name;
-    Project.saved = true;
-  }
+  // What's open now, as the launcher described it.
+  let job = null;
 
   const collect = () => {
     if (job.kind === "skin") {
@@ -100,6 +108,7 @@
 
   // True once it's saved, so the launcher knows whether it's safe to close.
   const saveToLauncher = async () => {
+    if (!job) return false;
     try {
       const message = await window.unityLauncher.save(collect());
       if (window.Project) Project.saved = true;
@@ -122,5 +131,70 @@
     if (window.BarItems?.[id]) BarItems[id].click = saveToLauncher;
   }
 
+  /*
+   * Done in the launcher: what's open is closed without asking, as the launcher has
+   * already dealt with unsaved changes, and this window waits for the next thing.
+   */
+  let closed = null;
+  window.__unityLauncherClose = async () => {
+    for (const project of [...ModelProject.all]) await project.close(true);
+    job = null;
+    closed?.();
+    return true;
+  };
 
+  const open = async () => {
+    if (job.kind === "skin") {
+      const content = await modernSkin(job.image);
+
+      // The same steps as Blockbench's own "Minecraft Skin" dialog, with the answers filled in.
+      Formats.skin.setup_dialog.onConfirm({
+        model: job.slim ? "alex" : "steve",
+        game_edition: "java_edition",
+        resolution: 1,
+        texture_source: "upload_texture",
+        texture_file: { name: `${job.name}.png`, path: `${job.name}.png`, content },
+        pose: false,
+        layer_template: false,
+      });
+    } else {
+      loadModelFile({ name: `${job.name}.bbmodel`, path: `${job.name}.bbmodel`, content: job.model });
+    }
+
+    if (window.Project) {
+      Project.name = job.name;
+      Project.saved = true;
+    }
+
+    // Its textures, so the model isn't first seen blank. Blockbench sets a texture's width
+    // once its image has loaded, or its error if it couldn't.
+    const loading = () => window.Texture?.all.some((texture) => !texture.width && !texture.error);
+    for (let tries = 0; tries < 30 && loading(); tries += 1) {
+      await pause(50);
+    }
+  };
+
+  // One thing at a time: open it, show it, then wait for Done before taking the next.
+  for (;;) {
+    const waitForClose = new Promise((resolve) => (closed = resolve));
+    job = await window.unityLauncher.job();
+
+    // The width the launcher gives it: hidden, it may not know its own yet.
+    setPanelShares(job.width || innerWidth || 1200);
+
+    try {
+      await open();
+    } catch (err) {
+      Blockbench.showMessageBox({
+        title: "Couldn't open this in Blockbench",
+        message: String(err?.message ?? err),
+      });
+    } finally {
+      // A moment for the editor to draw itself.
+      await pause(50);
+      ready();
+    }
+
+    await waitForClose;
+  }
 })();
