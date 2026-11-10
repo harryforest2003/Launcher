@@ -1,0 +1,67 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Node
+node_modules/
+
+# Unity
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+UserSettings/
+
+# OS
+.DS_Store
+
+# Node
+node_modules/
+
+# Electron/Vite
+dist/
+out/
+
+# Minecraft runtime data (IMPORTANT)
+instances/
+mc-cache/
+cache/
+
+# API keys for local development
+.env
+.env.*
+!.env.example
+
+# Built app
+release/
+
+# Blockbench, built by scripts/build-blockbench.cjs
+.cache/
+vendor/blockbench/
+
+# The CurseForge proxy's local key and Wrangler's working files.
+proxy/**/.dev.vars
+proxy/**/.wrangler/

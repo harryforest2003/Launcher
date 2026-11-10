@@ -1,0 +1,738 @@
+const fs = require("fs");
+const path = require("path");
+const { ipcMain, shell, dialog, BrowserWindow } = require("electron");
+
+const instanceManager = require("../instanceManager.cjs");
+const instanceMods = require("./instanceMods.cjs");
+const modSearch = require("./modSearch.cjs");
+const account = require("./account.cjs");
+const modpack = require("./modpack.cjs");
+const importer = require("./importer.cjs");
+const cloud = require("./cloud.cjs");
+const skins = require("./skins.cjs");
+const github = require("./github.cjs");
+const starterMods = require("./starterMods.cjs");
+const curseforge = require("../curseforge.cjs");
+const launcherSettings = require("./settings.cjs");
+const { getLatestLoaderVersion } = require("./loaders.cjs");
+const { clearSecret, getSecret, isPersonal, secretStatus, setSecret } = require("../secrets.cjs");
+
+/*
+ * IPC for instance management and per-instance mods.
+ */
+
+function send(event, channel, payload) {
+    BrowserWindow.fromWebContents(event.sender)
+        ?.webContents.send(channel, payload);
+}
+
+/*
+ * A modpack description carries its full file manifest (485 entries for
+ * a big pack). The renderer only needs the summary, so drop the heavy
+ * fields before sending it across IPC.
+ */
+function stripHeavy(info) {
+    const { index, manifest, ...rest } = info;
+    void index;
+    void manifest;
+
+    return rest;
+}
+
+/*
+ * Asks each service whether a key works before it's saved, so a saved key is one
+ * that's known to work. Only the service the key belongs to ever sees it.
+ */
+const KEY_CHECKS = {
+    modrinth: (key) => ["https://api.modrinth.com/v2/user", { Authorization: key }],
+    nexus: (key) => ["https://api.nexusmods.com/v1/users/validate.json", { apikey: key }],
+    github: (key) => ["https://api.github.com/rate_limit", { Authorization: `Bearer ${key}` }],
+};
+
+const KEY_LABELS = { modrinth: "Modrinth", nexus: "Nexus Mods", github: "GitHub" };
+
+async function checkKey(name, key) {
+    const check = KEY_CHECKS[name];
+    if (!check) throw new Error(`"${name}" is not an API key this app uses.`);
+
+    const label = KEY_LABELS[name];
+    const [url, headers] = check(key);
+
+    let res;
+    try {
+        res = await fetch(url, {
+            headers: { ...headers, Accept: "application/json", "User-Agent": "UnityLauncher/1.0" },
+            signal: AbortSignal.timeout(15 * 1000),
+        });
+    } catch {
+        throw new Error(`Couldn't reach ${label} to check that. Check your internet connection and try again.`);
+    }
+
+    if (res.ok) return;
+
+    if (res.status === 401 || res.status === 403) {
+        throw new Error(`${label} didn't accept that. Check it was copied in full, and try again.`);
+    }
+
+    throw new Error(`${label} couldn't check it just now (HTTP ${res.status}). Try again in a minute.`);
+}
+
+/* CurseForge counts as set up when it can be reached, by a key here or the proxy. */
+function withCurseForge(statuses) {
+    return { ...statuses, curseforge: { set: curseforge.available(), fromEnvironment: false, hint: null } };
+}
+
+/* Whatever holds a key in memory, or results found with it, starts again. */
+function keyChanged(name) {
+    modSearch.resetCatalog();
+    if (name === "nexus") require("../mods/providers/nexus.cjs").setApiKey(getSecret("nexus"));
+}
+
+function registerInstanceIpc() {
+
+    /* ---------------- instances ---------------- */
+
+    ipcMain.handle("instance:list", () => instanceManager.getInstances());
+
+    ipcMain.handle("instance:get", (_e, name) => {
+        const instance = instanceManager.getInstance(name);
+
+        return {
+            ...instance,
+            running: instanceManager.isRunning(name),
+        };
+    });
+
+    ipcMain.handle("instance:create", async (event, config) => {
+        const onProgress = (progress) => send(event, "instance:progress", { name: config.name, ...progress });
+        const created = await instanceManager.createInstance(config, { onProgress });
+
+        // Starter mods, unless the page said not to. What couldn't be added is reported.
+        const starter = config.starterMods === false
+            ? null
+            : await starterMods.installStarterMods(created, instanceManager.instanceFolder(created.name), { onProgress });
+
+        return { ...created, starter };
+    });
+
+    ipcMain.handle("starterMods:list", () => starterMods.readList());
+    ipcMain.handle("starterMods:save", (_e, list) => starterMods.writeList(list));
+    ipcMain.handle("starterMods:add", (_e, input) => starterMods.addToList(input));
+    ipcMain.handle("starterMods:reset", () => starterMods.resetList());
+
+    ipcMain.handle("instance:repair", async (event, name) => {
+        return instanceManager.repairInstance(name, {
+            onProgress: (progress) =>
+                send(event, "instance:progress", { name, ...progress }),
+        });
+    });
+
+    ipcMain.handle("instance:delete", (_e, name) =>
+        instanceManager.deleteInstance(name)
+    );
+
+    ipcMain.handle("instance:launch", async (event, name) => {
+        const instance = instanceManager.getInstance(name);
+
+        const acct = await account.accountForLaunch(instance.name);
+
+        const result = instanceManager.launchInstance(name, acct, {
+            onLog: (text) =>
+                send(event, "instance:log", { name, text }),
+
+            onExit: (code) =>
+                send(event, "instance:exit", { name, code }),
+        });
+
+        return { ...result, online: acct.online, playerName: acct.name };
+    });
+
+    ipcMain.handle("instance:stop", (_e, name) =>
+        instanceManager.stopInstance(name)
+    );
+
+    ipcMain.handle("instance:openFolder", (_e, name) => {
+        const folder = instanceManager.instanceFolder(name);
+        shell.openPath(folder);
+        return folder;
+    });
+
+    ipcMain.handle("instance:latestLoader", (_e, { loader, mcVersion }) =>
+        getLatestLoaderVersion(loader, mcVersion)
+    );
+
+    /* ---------------- instance mods ---------------- */
+
+    ipcMain.handle("instance:content", (_e, name) => {
+        const folder = instanceManager.instanceFolder(name);
+        return instanceMods.listContent(folder);
+    });
+
+    ipcMain.handle("instance:contentToggle", (_e, { name, item, enabled }) => {
+        const folder = instanceManager.instanceFolder(name);
+        return instanceMods.setEnabled(folder, item, enabled);
+    });
+
+    ipcMain.handle("instance:contentDelete", (_e, { name, item }) => {
+        const folder = instanceManager.instanceFolder(name);
+        return instanceMods.deleteItem(folder, item);
+    });
+
+    ipcMain.handle("instance:copyDatapack", (_e, { name, fileName, world }) => {
+        const folder = instanceManager.instanceFolder(name);
+        return instanceMods.copyDatapackToWorld(folder, fileName, world);
+    });
+
+    /* ---------------- API keys: never returned to the page ---------------- */
+
+    ipcMain.handle("settings:apiKeys", () => withCurseForge(secretStatus()));
+
+    ipcMain.handle("settings:setApiKey", async (_e, { name, value }) => {
+        // Only a player's own tokens. The launcher's CurseForge key isn't the app's to change.
+        if (!isPersonal(name)) throw new Error("That key can't be changed from the app.");
+
+        const key = String(value ?? "").trim();
+
+        if (!key) {
+            clearSecret(name);
+            keyChanged(name);
+            return withCurseForge(secretStatus());
+        }
+
+        // Saying so now beats every search or install failing later.
+        await checkKey(name, key);
+
+        setSecret(name, key);
+        keyChanged(name);
+        return withCurseForge(secretStatus());
+    });
+
+    /*
+     * Search is scoped to the instance, so results are guaranteed to run
+     * on its Minecraft version and loader.
+     */
+    ipcMain.handle("instance:modSearch", async (_e, { name, query, type, source, page }) => {
+        const instance = instanceManager.getInstance(name);
+
+        return modSearch.browse({
+            query,
+            mcVersion: instance.version,
+            loader: instance.loader,
+            type: type || "mod",
+            source,
+            page,
+            // Nothing typed means browsing, where the most used make the best start.
+            sort: query?.trim() ? "relevance" : "downloads",
+        });
+    });
+
+    ipcMain.handle("github:releases", (_e, { input, type }) => github.listReleases(input, type));
+
+    ipcMain.handle("github:install", (_e, request) => {
+        const instance = instanceManager.getInstance(request.name);
+        return github.installAsset(
+            instance,
+            instanceManager.instanceFolder(request.name),
+            instanceMods.installContent,
+            request
+        );
+    });
+
+    ipcMain.handle("instance:modInstall", async (event, payload) => {
+        const { name, source, projectId, modName, iconUrl, world } = payload;
+
+        const instance = instanceManager.getInstance(name);
+        const folder = instanceManager.instanceFolder(name);
+
+        // The source says what a project is if the caller doesn't already know.
+        const type = payload.type ?? (await modSearch.getProject(source, projectId)).type;
+
+        if (type === "modpack") {
+            throw new Error("A modpack creates its own instance, so it can't be added to this one.");
+        }
+
+        if (type !== "mod" && type !== "resourcepack" && type !== "shader" && type !== "datapack") {
+            throw new Error("This kind of project can't be added to an instance.");
+        }
+
+        const file = await modSearch.resolveModFile(
+            source, projectId, instance.version, instance.loader, type
+        );
+
+        const result = await instanceMods.installContent(
+            folder,
+            {
+                ...file,
+                type: file.targetType,
+                world,
+                name: modName,
+                source,
+                projectId,
+                iconUrl,
+            },
+            (percent) =>
+                send(event, "instance:modProgress", {
+                    name, projectId, percent,
+                })
+        );
+
+        /*
+         * Install required dependencies, recursively. A mod often needs
+         * an API which itself needs a core library, so one level is not
+         * enough — this walks the whole required graph for both
+         * Modrinth and CurseForge.
+         */
+        const installedDeps = [];
+
+        try {
+            const deps = await modSearch.collectDependencies(
+                source, projectId, instance.version, instance.loader, type
+            );
+
+            for (const dep of deps) {
+                try {
+                    await instanceMods.installContent(folder, {
+                        ...dep.file,
+                        type: dep.file.targetType,
+                        world,
+                        name: dep.info.name,
+                        source: dep.source,
+                        projectId: dep.projectId,
+                        iconUrl: dep.info.icon,
+                    });
+
+                    installedDeps.push(dep.info.name);
+
+                } catch (err) {
+                    console.warn(
+                        `Could not install dependency ${dep.info.name}:`,
+                        err.message
+                    );
+                }
+            }
+        } catch (err) {
+            console.warn("Dependency resolution failed:", err.message);
+        }
+
+        return { ...result, dependencies: installedDeps };
+    });
+
+    ipcMain.handle("instance:update", (_e, { name, patch }) =>
+        instanceManager.updateInstance(name, patch)
+    );
+
+    /* ---------------- modpacks ---------------- */
+
+    /*
+     * Installs a modpack as a brand new instance: the pack manifest
+     * supplies the Minecraft version and loader, so no manual setup.
+     */
+    ipcMain.handle("instance:installModpack", async (event, payload) => {
+        const { source, projectId, fileId, name: requestedName } = payload;
+
+        const report = (progress) =>
+            send(event, "instance:progress", {
+                name: requestedName ?? "modpack",
+                ...progress,
+            });
+
+        report({ stage: "pack", percent: 0, detail: "Downloading modpack" });
+
+        let packResult = null;
+
+        const { zipPath, tempDir } = await modpack.downloadPackFile(
+            source, projectId, fileId
+        );
+
+        try {
+            const info = await modpack.inspectModpack(zipPath);
+
+            if (!info.mcVersion) {
+                throw new Error("That modpack does not declare a Minecraft version.");
+            }
+
+            const instanceName = instanceManager.uniqueName(
+                requestedName || info.name
+            );
+
+            report({
+                stage: "pack",
+                percent: 5,
+                detail: `${info.name} — Minecraft ${info.mcVersion}, ${info.loader}`,
+            });
+
+            const created = await instanceManager.createInstanceFrom(
+                {
+                    name: instanceName,
+                    version: info.mcVersion,
+                    loader: info.loader,
+                    loaderVersion: info.loaderVersion,
+                    // Honour the pack's own RAM recommendation.
+                    ram: info.recommendedRam ?? undefined,
+                },
+                async ({ gameDir }) => {
+                    const result = await modpack.applyModpack(
+                        zipPath, info, gameDir,
+                        (progress) => send(event, "instance:progress", {
+                            name: instanceName, ...progress,
+                        })
+                    );
+
+                    if (result.failed) {
+                        console.warn(
+                            `${result.failed} pack file(s) failed:`,
+                            result.firstError
+                        );
+                    }
+
+                    packResult = result;
+                },
+                {
+                    onProgress: (progress) =>
+                        send(event, "instance:progress", {
+                            name: instanceName, ...progress,
+                        }),
+                }
+            );
+
+            return {
+                ...created,
+                pack: {
+                    name: info.name,
+                    version: info.packVersion,
+                    fileCount: info.fileCount,
+                    blocked: packResult?.blocked ?? [],
+                    failed: packResult?.failed ?? 0,
+                },
+            };
+
+        } finally {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        }
+    });
+
+    /* ---------------- importing ---------------- */
+
+    ipcMain.handle("import:scan", () => importer.scanLaunchers());
+
+    ipcMain.handle("import:pickFolder", async () => {
+        const picked = await dialog.showOpenDialog({
+            title: "Choose a Minecraft instance folder",
+            properties: ["openDirectory"],
+        });
+
+        if (picked.canceled) return null;
+
+        return importer.inspectFolder(picked.filePaths[0]);
+    });
+
+    ipcMain.handle("import:pickZip", async () => {
+        const picked = await dialog.showOpenDialog({
+            title: "Choose a modpack or exported instance",
+            properties: ["openFile"],
+            filters: [
+                { name: "Modpack or instance", extensions: ["zip", "mrpack"] },
+            ],
+        });
+
+        if (picked.canceled) return null;
+
+        const file = picked.filePaths[0];
+
+        // Could be a modpack or one of our own exports.
+        try {
+            const info = await modpack.inspectModpack(file);
+            return { kind: "modpack", file, info: stripHeavy(info) };
+        } catch {
+            // fall through
+        }
+
+        try {
+            const { config } = await cloud.readCloudInstance(file);
+            return { kind: "export", file, info: config };
+        } catch {
+            throw new Error(
+                "That zip is neither a modpack nor a Unity instance export."
+            );
+        }
+    });
+
+    /*
+     * Creates an instance from a scanned launcher entry or a folder the
+     * user pointed at, copying its mods, configs and saves across.
+     */
+    ipcMain.handle("import:instance", async (event, payload) => {
+        const { entry, name: requestedName, version: overrideVersion } = payload;
+
+        let mcVersion = overrideVersion || entry.mcVersion;
+
+        if (!mcVersion && entry.floatingVersion) {
+            mcVersion = await importer.resolveFloatingVersion(entry.floatingVersion);
+        }
+
+        if (!mcVersion) {
+            throw new Error(
+                "Could not determine the Minecraft version — pick one manually."
+            );
+        }
+
+        const instanceName = instanceManager.uniqueName(
+            requestedName || entry.name
+        );
+
+        return instanceManager.createInstanceFrom(
+            {
+                name: instanceName,
+                version: mcVersion,
+                loader: entry.loader || "vanilla",
+                loaderVersion: entry.loaderVersion || "",
+            },
+            async ({ gameDir }) => {
+                send(event, "instance:progress", {
+                    name: instanceName,
+                    stage: "import",
+                    percent: 95,
+                    detail: "Copying mods, configs and saves",
+                });
+
+                importer.copyGameContent(entry.gameDir, gameDir, (detail) =>
+                    send(event, "instance:progress", {
+                        name: instanceName,
+                        stage: "import",
+                        percent: 97,
+                        detail,
+                    })
+                );
+            },
+            {
+                onProgress: (progress) =>
+                    send(event, "instance:progress", {
+                        name: instanceName, ...progress,
+                    }),
+            }
+        );
+    });
+
+    ipcMain.handle("import:modpackFile", async (event, { file, name }) => {
+        const info = await modpack.inspectModpack(file);
+
+        if (!info.mcVersion) {
+            throw new Error("That modpack does not declare a Minecraft version.");
+        }
+
+        const instanceName = instanceManager.uniqueName(name || info.name);
+
+        let packResult = null;
+
+        const created = await instanceManager.createInstanceFrom(
+            {
+                name: instanceName,
+                version: info.mcVersion,
+                loader: info.loader,
+                loaderVersion: info.loaderVersion,
+                ram: info.recommendedRam ?? undefined,
+            },
+            async ({ gameDir }) => {
+                packResult = await modpack.applyModpack(
+                    file, info, gameDir,
+                    (progress) => send(event, "instance:progress", {
+                        name: instanceName, ...progress,
+                    })
+                );
+            },
+            {
+                onProgress: (progress) =>
+                    send(event, "instance:progress", {
+                        name: instanceName, ...progress,
+                    }),
+            }
+        );
+
+        return {
+            ...created,
+            pack: {
+                name: info.name,
+                blocked: packResult?.blocked ?? [],
+                failed: packResult?.failed ?? 0,
+            },
+        };
+    });
+
+    /* ---------------- cloud ---------------- */
+
+    const cloudFolderInUse = () =>
+        launcherSettings.readSettings().cloudFolder || cloud.defaultCloudFolder();
+
+    ipcMain.handle("cloud:detect", () => cloud.detectCloudFolders());
+
+    ipcMain.handle("cloud:pickFolder", async () => {
+        const picked = await dialog.showOpenDialog({
+            title: "Choose a cloud-synced folder",
+            properties: ["openDirectory", "createDirectory"],
+        });
+
+        if (picked.canceled) return null;
+
+        const folder = picked.filePaths[0];
+
+        launcherSettings.writeSettings({ cloudFolder: folder });
+
+        return folder;
+    });
+
+    ipcMain.handle("cloud:setFolder", (_e, folder) => {
+        launcherSettings.writeSettings({ cloudFolder: folder || "" });
+        return launcherSettings.readSettings().cloudFolder;
+    });
+
+    ipcMain.handle("cloud:list", () => {
+        const folder = cloudFolderInUse();
+
+        return {
+            folder,
+            instances: cloud.listCloudInstances(folder),
+        };
+    });
+
+    ipcMain.handle("cloud:export", (event, name) => {
+        const folder = cloudFolderInUse();
+
+        if (!folder) {
+            throw new Error(
+                "OneDrive isn't set up on this computer. Install it and sign in, then back up again. " +
+                "You can also choose a different folder in Settings."
+            );
+        }
+
+        // A world being saved right now could be caught half written.
+        if (instanceManager.isRunning(name)) {
+            throw new Error("Close Minecraft first, so the backup can't catch your world halfway through saving.");
+        }
+
+        return cloud.exportInstance(
+            instanceManager.instanceFolder(name),
+            name,
+            folder,
+            (percent, detail) => send(event, "instance:progress", {
+                name, stage: "cloud", percent, detail,
+            })
+        );
+    });
+
+    /*
+     * Restores a backup as a new instance, so whatever is already on this device stays
+     * as it is. Mods and saves go back first, so they're safe here even if downloading
+     * Minecraft then fails: Repair can finish that part later.
+     */
+    ipcMain.handle("cloud:import", async (event, file) => {
+        const { config } = await cloud.readCloudInstance(file);
+
+        if (!config?.version) {
+            throw new Error("That export has no Minecraft version recorded.");
+        }
+
+        const instanceName = instanceManager.uniqueName(config.name);
+        const folder = instanceManager.instanceFolder(instanceName);
+
+        const report = (percent, detail) => send(event, "instance:progress", {
+            name: instanceName, stage: "cloud", percent, detail,
+        });
+
+        let restored = false;
+
+        try {
+            fs.mkdirSync(folder, { recursive: true });
+
+            await cloud.extractCloudInstance(file, path.join(folder, ".minecraft"), folder, percent =>
+                report(percent, "Restoring mods and saves")
+            );
+
+            restored = true;
+
+            const created = await instanceManager.createInstance(
+                {
+                    name: instanceName,
+                    version: config.version,
+                    loader: config.loader || "vanilla",
+                    loaderVersion: config.loaderVersion || "",
+                    ram: config.ram,
+                },
+                {
+                    onProgress: (progress) =>
+                        send(event, "instance:progress", {
+                            name: instanceName, ...progress,
+                        }),
+                }
+            );
+
+            return config.jvmArgs
+                ? instanceManager.updateInstance(created.name, { jvmArgs: config.jvmArgs })
+                : created;
+
+        } catch (err) {
+            if (restored) {
+                throw new Error(
+                    `${err.message}\nYour mods and saves are back, in "${instanceName}". ` +
+                    "Open it and use Repair to finish downloading Minecraft."
+                );
+            }
+
+            fs.rmSync(folder, { recursive: true, force: true });
+            throw new Error(`${err.message}\nYour backup is safe. Nothing was changed, so you can try again.`);
+        }
+    });
+
+    /* ---------------- launcher settings ---------------- */
+
+    ipcMain.handle("settings:get", () => ({
+        ...launcherSettings.readSettings(),
+        system: launcherSettings.systemInfo(),
+    }));
+
+    ipcMain.handle("settings:set", (_e, patch) => ({
+        ...launcherSettings.writeSettings(patch),
+        system: launcherSettings.systemInfo(),
+    }));
+
+    ipcMain.handle("settings:pickJava", async () => {
+        const picked = await dialog.showOpenDialog({
+            title: "Choose a Java executable",
+            properties: ["openFile"],
+        });
+
+        if (picked.canceled) return null;
+
+        const javaPath = picked.filePaths[0];
+
+        launcherSettings.writeSettings({ javaPath });
+
+        return javaPath;
+    });
+
+    /* ---------------- account ---------------- */
+
+    ipcMain.handle("account:get", () => account.publicAccount());
+
+    /* ---------------- skin and cape ---------------- */
+
+    const windowOf = (event) => BrowserWindow.fromWebContents(event.sender);
+
+    ipcMain.handle("skins:profile", () => skins.getProfile());
+    ipcMain.handle("skins:applyUrl", (_e, { url, slim }) => skins.applyFromUrl(url, slim));
+    ipcMain.handle("skins:pickFile", (event) => skins.pickFile(windowOf(event)));
+    ipcMain.handle("skins:upload", (_e, { id, slim }) => skins.uploadPicked(id, slim));
+    ipcMain.handle("skins:reset", () => skins.resetSkin());
+    ipcMain.handle("skins:setCape", (_e, capeId) => skins.setCape(capeId));
+    ipcMain.handle("skins:download", (event, { url, name }) => skins.download(windowOf(event), url, name));
+    ipcMain.handle("skins:saved", () => skins.listSaved());
+    ipcMain.handle("skins:save", (_e, request) => skins.saveSkin(request));
+    ipcMain.handle("skins:useSaved", (_e, { id, slim }) => skins.useSaved(id, slim));
+    ipcMain.handle("skins:deleteSaved", (_e, id) => skins.deleteSaved(id));
+
+    ipcMain.handle("account:clear", () => {
+        account.clearAccount();
+        return null;
+    });
+}
+
+module.exports = { registerInstanceIpc, saveAccount: account.saveAccount };

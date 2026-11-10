@@ -1,0 +1,14 @@
+# Unity Launcher's CurseForge proxy. See README.md for setting it up.
+name = "unity-launcher-curseforge"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Up to 120 requests a minute from each address (period may be 10 or 60 seconds).
+# Needs Wrangler 4.36 or later. Without it, the Worker falls back to its own count.
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 120
+  period = 60

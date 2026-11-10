@@ -1,0 +1,304 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap');
+
+:root {
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: 'Orbitron', sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #9ca3af;
+    --text-h: #f3f4f6;
+    --bg: #16171d;
+    --border: #2e303a;
+    --code-bg: #1f2028;
+    --accent: #c084fc;
+    --accent-bg: rgba(192, 132, 252, 0.15);
+    --accent-border: rgba(192, 132, 252, 0.5);
+    --social-bg: rgba(47, 48, 58, 0.5);
+    --shadow:
+      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  }
+
+  #social .button-icon {
+    filter: invert(1) brightness(2);
+  }
+}
+
+#root {
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  border-inline: 1px solid var(--border);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2 {
+  font-family: var(--heading);
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+p {
+  margin: 0;
+}
+
+code,
+.counter {
+  font-family: var(--mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--text-h);
+}
+
+code {
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
+
+}
+
+.game-card {
+  background: rgba(31, 31, 31, 0.85);
+  border: 1px solid #6d28d9;
+  border-radius: 18px;
+
+  padding: 18px 20px;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.game-card:hover {
+  transform: scale(1.05);
+
+  background: rgba(109, 40, 217, 0.25);
+
+  border-color: #c084fc;
+
+  box-shadow:
+    0 0 20px rgba(168, 85, 247, 0.4),
+    0 0 40px rgba(168, 85, 247, 0.15);
+}
+
+.sidebar-button {
+  background: #232323;
+  color: white;
+
+  border: 1px solid #6d28d9;
+  border-radius: 10px;
+
+  padding: 12px;
+
+  cursor: pointer;
+
+  transition:
+    transform 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.sidebar-button:hover {
+  transform: scale(1.04);
+
+  background: rgba(109, 40, 217, 0.25);
+
+  border-color: #c084fc;
+
+  box-shadow:
+    0 0 15px rgba(168, 85, 247, 0.4);
+}
+.mod-description {
+    text-align: left;
+}
+
+.mod-description * {
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* The app's global heading, paragraph and code styles are for its own pages. */
+.mod-description h1,
+.mod-description h2,
+.mod-description h3,
+.mod-description h4,
+.mod-description h5,
+.mod-description h6 {
+    font-family: var(--heading);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: normal;
+    color: #c084fc;
+    margin: 22px 0 8px;
+}
+
+.mod-description h1 { font-size: 26px; }
+.mod-description h2 { font-size: 22px; }
+.mod-description h3 { font-size: 18px; }
+.mod-description h4,
+.mod-description h5,
+.mod-description h6 { font-size: 16px; }
+
+.mod-description > :first-child {
+    margin-top: 0;
+}
+
+.mod-description p,
+.mod-description ul,
+.mod-description ol,
+.mod-description dl,
+.mod-description blockquote,
+.mod-description details,
+.mod-description table,
+.mod-description pre {
+    margin: 0 0 12px;
+}
+
+.mod-description ul,
+.mod-description ol {
+    padding-left: 24px;
+}
+
+.mod-description li {
+    margin: 4px 0;
+}
+
+.mod-description blockquote {
+    padding: 4px 14px;
+    border-left: 3px solid #6d28d9;
+    color: #bbb;
+}
+
+.mod-description hr {
+    border: 0;
+    border-top: 1px solid #333;
+    margin: 18px 0;
+}
+
+.mod-description summary {
+    cursor: pointer;
+    color: #c084fc;
+}
+
+.mod-description th,
+.mod-description td {
+    border: 1px solid #333;
+    padding: 6px 10px;
+    text-align: left;
+}
+
+.mod-description th {
+    background: #1b1b1b;
+}
+
+.mod-description img {
+    height: auto;
+    vertical-align: middle;
+}
+
+.mod-description img,
+.mod-description iframe,
+.mod-description video,
+.mod-description table,
+.mod-description pre,
+.mod-description code {
+    max-width: 100% !important;
+    overflow-x: auto;
+}
+
+.mod-description table {
+    display: block;
+    border-collapse: collapse;
+}
+
+.mod-description code {
+    display: inline;
+    font-size: 0.9em;
+    padding: 2px 5px;
+    background: #232323;
+    color: #e5e7eb;
+}
+
+.mod-description pre {
+    padding: 12px;
+    border-radius: 8px;
+    background: #1b1b1b;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.mod-description pre code {
+    display: block;
+    padding: 0;
+    background: none;
+}
+
+.mod-description a {
+    word-break: break-word;
+}
+
+/* Links the sanitiser had to disarm stay as plain text instead of looking broken. */
+.mod-description a[href] {
+    color: #8ab4ff;
+}
