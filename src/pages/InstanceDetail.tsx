@@ -9,7 +9,7 @@ import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
-import { Cloud, Hammer, Play, Settings, Square } from "lucide-react";
+import { Cloud, Folder, Hammer, Play, Settings, Square } from "lucide-react";
 
 const LOADER_NAMES: Record<string, string> = { fabric: "Fabric Loader", quilt: "Quilt Loader", forge: "Forge", neoforge: "NeoForge" };
 
@@ -496,6 +496,16 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+          <button
+            className="sidebar-button"
+            aria-label="Open folder"
+            data-tip="Open this instance's folder"
+            style={iconStyle}
+            onClick={() => window.instanceAPI.openFolder(instanceName).catch(() => {})}
+          >
+            <Folder size={18} aria-hidden="true" />
+          </button>
+
           <button
             className="sidebar-button"
             aria-label="Repair"

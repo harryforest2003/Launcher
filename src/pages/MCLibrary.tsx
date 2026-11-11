@@ -2,6 +2,8 @@ import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useState } from "react";
 import CreateInstancePanel from "../components/CreateInstancePanel";
 import Sidebar from "../components/MCSidebar";
+import { BinIcon } from "../components/Icons";
+import { Folder, Play } from "lucide-react";
 import InstanceDetail from "./InstanceDetail";
 
 type Props = {
@@ -50,6 +52,8 @@ function Library({
   const [instances, setInstances] = useState<Instance[]>([]);
 
   const [selected, setSelected] = useState<string | null>(null);
+  // The instance whose quick Play was pressed, until Minecraft has started.
+  const [starting, setStarting] = useState<string | null>(null);
   // Making or importing an instance takes over the list, under the same sidebar.
   const [creating, setCreating] = useState(false);
 
@@ -277,9 +281,21 @@ function Library({
               <div
                 key={instance.name}
                 className="game-card"
+                data-testid="instance-card"
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${instance.name}`}
+                onClick={() => setSelected(instance.name)}
+                onKeyDown={(event) => {
+                  if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    setSelected(instance.name);
+                  }
+                }}
                 style={{
                   display: "flex",
                   flexDirection: "column",
+                  cursor: "pointer",
                 }}
               >
                 <div
@@ -327,48 +343,48 @@ function Library({
                     : "Never played"}
                 </p>
 
+                {/* Quick Play, the instance's folder and delete; clicking anywhere else opens it. */}
                 <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "10px",
-                    marginTop: "auto",
-                  }}
+                  style={{ display: "flex", gap: "10px", marginTop: "auto", alignItems: "center" }}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
                 >
                   <button
                     className="sidebar-button"
-                    style={{ background: "#7c3aed" }}
+                    data-testid="quick-play"
+                    style={{ flex: 1, height: 38, boxSizing: "border-box", background: "#7c3aed", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "0 14px" }}
+                    aria-disabled={starting === instance.name || undefined}
                     onClick={async () => {
+                      if (starting) return;
+                      setStarting(instance.name);
                       try {
                         await window.instanceAPI.launch(instance.name);
                         loadInstances();
                       } catch (err) {
                         alert(err instanceof Error ? err.message : String(err));
                       }
+                      setStarting(null);
                     }}
                   >
-                    Launch
+                    <Play size={16} fill="currentColor" aria-hidden="true" />
+                    {starting === instance.name ? "Starting..." : "Play"}
                   </button>
 
                   <button
                     className="sidebar-button"
-                    onClick={() => setSelected(instance.name)}
+                    aria-label={`Open ${instance.name}'s folder`}
+                    data-tip="Open this instance's folder"
+                    style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 9 }}
+                    onClick={() => window.instanceAPI.openFolder(instance.name).catch(() => {})}
                   >
-                    Manage
+                    <Folder size={18} aria-hidden="true" />
                   </button>
 
                   <button
-                    className="sidebar-button"
-                    onClick={() =>
-                      window.instanceAPI.openFolder(instance.name).catch(() => {})
-                    }
-                  >
-                    Folder
-                  </button>
-
-                  <button
-                    className="sidebar-button"
-                    style={{ background: "#7f1d1d" }}
+                    className="bin-button"
+                    aria-label={`Delete ${instance.name}`}
+                    data-tip="Delete this instance and all its files"
+                    style={{ width: 38, height: 38, borderRadius: 10 }}
                     onClick={async () => {
                       if (!confirm(`Delete instance "${instance.name}" and all its files?`)) return;
                       try {
@@ -379,7 +395,7 @@ function Library({
                       }
                     }}
                   >
-                    Delete
+                    <BinIcon size={18} />
                   </button>
                 </div>
               </div>
