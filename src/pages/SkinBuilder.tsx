@@ -197,12 +197,6 @@ export default function SkinBuilder({
     setLibraryVersion((version) => version + 1);
   }
 
-  // Going elsewhere while Blockbench is open closes it first, which asks about unsaved work.
-  const leaving = (go: () => void) => async () => {
-    if (inBlockbench && !(await window.blockbenchAPI.close())) return;
-    go();
-  };
-
   const inWizard = step !== "library";
   const stepIndex = WIZARD_STEPS.findIndex((entry) => entry.id === step);
 
@@ -217,14 +211,14 @@ export default function SkinBuilder({
     >
       <Sidebar
         currentPage="skinbuilder"
-        goHome={leaving(goHome)}
-        goMinecraft={leaving(goMinecraft)}
-        goDiscover={leaving(goDiscover)}
-        goLibrary={leaving(goLibrary)}
-        goSkinSelector={leaving(goSkinSelector)}
-        goSettings={leaving(goSettings)}
+        goHome={goHome}
+        goMinecraft={goMinecraft}
+        goDiscover={goDiscover}
+        goLibrary={goLibrary}
+        goSkinSelector={goSkinSelector}
+        goSettings={goSettings}
         showBack
-        onBack={leaving(onBack)}
+        onBack={onBack}
       />
 
       <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", overflow: "hidden" }}>

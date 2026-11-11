@@ -191,7 +191,9 @@ contextBridge.exposeInMainWorld("blockbenchAPI", {
     editSkin: (skin, slim, name, savedId) => ipcRenderer.invoke("blockbench:editSkin", { skin, slim, name, savedId }),
     setBounds: (rect) => ipcRenderer.invoke("blockbench:setBounds", rect),
     save: () => ipcRenderer.invoke("blockbench:save"),
-    close: () => ipcRenderer.invoke("blockbench:close"),
+    close: (choice) => ipcRenderer.invoke("blockbench:close", choice),
+    unsaved: () => ipcRenderer.invoke("blockbench:unsaved"),
+    hide: (hidden) => ipcRenderer.invoke("blockbench:hide", Boolean(hidden)),
     onSaved: (callback) => {
         const listener = (_event, message) => callback(message);
         ipcRenderer.on("blockbench:saved", listener);

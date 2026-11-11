@@ -375,18 +375,44 @@ function registerBlockbenchIpc() {
         return editor?.view.webContents.executeJavaScript("window.__unityLauncherSave?.()");
     });
 
+    // Whether what's open has changes that haven't been saved back to the launcher.
+    const hasUnsaved = (editor) =>
+        editor.view.webContents.executeJavaScript("Boolean(window.Project && Project.saved === false)").catch(() => false);
+
+    ipcMain.handle("blockbench:unsaved", async (event) => {
+        const editor = editorIn(event);
+        return editor ? hasUnsaved(editor) : false;
+    });
+
+    // Blockbench is drawn over the page, so it steps aside while the page asks something
+    // (whether to save before leaving), and comes back if the answer is to stay.
+    ipcMain.handle("blockbench:hide", (event, hidden) => {
+        const editor = editorIn(event);
+        if (!editor || editor.done) return;
+        editor.view.setVisible(!hidden && editor.shown);
+    });
+
     /*
-     * Done, or leaving the page. With unsaved changes it asks whether to save them, leave
-     * without them, or stay. Resolves false if Blockbench stays open.
+     * Done, or leaving the page. The page asks about unsaved changes itself, in the
+     * launcher's own style, and says what was chosen: "save" saves first, "discard"
+     * leaves without. Without a choice, it asks here instead. Resolves false if
+     * Blockbench stays open (a save that failed, or Cancel).
      */
-    ipcMain.handle("blockbench:close", async (event) => {
+    ipcMain.handle("blockbench:close", async (event, choice) => {
         const editor = editorIn(event);
         if (!editor) return true;
 
         const contents = editor.view.webContents;
-        const unsaved = await contents
-            .executeJavaScript("Boolean(window.Project && Project.saved === false)")
-            .catch(() => false);
+
+        if (choice === "save") {
+            const saved = await contents.executeJavaScript("window.__unityLauncherSave?.()").catch(() => false);
+            // A failed save already showed why, in Blockbench, which stays open.
+            if (!saved) return false;
+            finish(editor);
+            return true;
+        }
+
+        const unsaved = choice === "discard" ? false : await hasUnsaved(editor);
 
         if (unsaved) {
             const { response } = await dialog.showMessageBox(editor.host, {

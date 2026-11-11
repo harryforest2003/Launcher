@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { leaveBlockbench } from "./leaveBlockbench";
 
 /*
  * Makes room for Blockbench over the page it was opened from, under a bar of the
@@ -69,7 +70,7 @@ export default function BlockbenchFrame({ title }: { title: string }) {
         <button
           className="sidebar-button"
           style={{ padding: "6px 16px", background: "#7c3aed" }}
-          onClick={() => window.blockbenchAPI.close()}
+          onClick={() => leaveBlockbench()}
         >
           Done
         </button>

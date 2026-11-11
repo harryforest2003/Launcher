@@ -363,8 +363,15 @@ declare global {
             /** Where the open editor goes, in window coordinates. */
             setBounds(rect: { x: number; y: number; width: number; height: number }): Promise<void>;
             save(): Promise<void>;
-            /** False if the person chose to keep editing. */
-            close(): Promise<boolean>;
+            /**
+             * Closes the editor. "save" saves first, "discard" leaves without; with no choice
+             * it asks itself. False if it stays open (Cancel, or a save that failed).
+             */
+            close(choice?: "save" | "discard"): Promise<boolean>;
+            /** Whether what's open has changes not yet saved back to the launcher. */
+            unsaved(): Promise<boolean>;
+            /** Steps the editor aside while the page asks something, and brings it back. */
+            hide(hidden: boolean): Promise<void>;
             onSaved(callback: (message: string) => void): () => void;
         };
 

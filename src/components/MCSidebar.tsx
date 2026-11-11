@@ -1,6 +1,7 @@
-import { useContext } from "react";
+import { useContext, useRef } from "react";
 import AccountSwitcher from "./AccountSwitcher";
 import { SkinBuilderNavContext } from "../skinBuilder/navContext";
+import { leaveBlockbench } from "./leaveBlockbench";
 
 type Props = {
   currentPage:
@@ -34,6 +35,20 @@ function MCSidebar({
   onBack,
 }: Props) {
   const goSkinBuilder = useContext(SkinBuilderNavContext);
+
+  // Every button here leaves the page, so each closes Blockbench first, as Done would:
+  // with unsaved changes it asks whether to save them, and Cancel stays on the page.
+  // A second press while it's still asking does nothing.
+  const leaving = useRef(false);
+  const go = (to: (() => void) | null | undefined) => async () => {
+    if (!to || leaving.current) return;
+    leaving.current = true;
+    try {
+      if (await leaveBlockbench()) to();
+    } finally {
+      leaving.current = false;
+    }
+  };
 
   const buttonStyle = (active: boolean): React.CSSProperties => ({
     background: active ? "#6d28d9" : "#232323",
@@ -81,7 +96,7 @@ function MCSidebar({
         {showBack && onBack && (
           <button
             className="sidebar-button"
-            onClick={onBack}
+            onClick={go(onBack)}
             style={{ textAlign: "left" }}
           >
             ← Back
@@ -90,21 +105,21 @@ function MCSidebar({
 
         <button
           style={buttonStyle(currentPage === "minecraft")}
-          onClick={goMinecraft}
+          onClick={go(goMinecraft)}
         >
           Home
         </button>
 
         <button
           style={buttonStyle(currentPage === "discover")}
-          onClick={goDiscover}
+          onClick={go(goDiscover)}
         >
           Discover Content
         </button>
 
         <button
           style={buttonStyle(currentPage === "skins")}
-          onClick={goSkinSelector}
+          onClick={go(goSkinSelector)}
         >
           Skin Selector
         </button>
@@ -112,7 +127,7 @@ function MCSidebar({
         {goSkinBuilder && (
           <button
             style={buttonStyle(currentPage === "skinbuilder")}
-            onClick={goSkinBuilder}
+            onClick={go(goSkinBuilder)}
           >
             Model Builder
           </button>
@@ -120,14 +135,14 @@ function MCSidebar({
 
         <button
           style={buttonStyle(currentPage === "library")}
-          onClick={goLibrary}
+          onClick={go(goLibrary)}
         >
           Library
         </button>
 
         <button
           style={buttonStyle(currentPage === "settings")}
-          onClick={goSettings}
+          onClick={go(goSettings)}
         >
           Settings
         </button>
@@ -139,7 +154,7 @@ function MCSidebar({
 
       <button
         className="sidebar-button"
-        onClick={goHome}
+        onClick={go(goHome)}
         style={{
           position: "absolute",
           bottom: "20px",

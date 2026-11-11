@@ -377,12 +377,6 @@ function SkinSelector({
     });
   }
 
-  // Going elsewhere while Blockbench is open closes it first, which asks about unsaved work.
-  const leaving = (go: () => void) => async () => {
-    if (busy === "blockbench" && !(await window.blockbenchAPI.close())) return;
-    go();
-  };
-
   function previewSaved(entry: SavedSkin) {
     setPreview({ source: "saved", skin: entry.dataUrl, label: entry.name, savedId: entry.id });
     setSlim(entry.slim);
@@ -495,14 +489,14 @@ function SkinSelector({
     >
       <Sidebar
         currentPage="skins"
-        goHome={leaving(goHome)}
-        goMinecraft={leaving(goMinecraft)}
-        goDiscover={leaving(goDiscover)}
-        goLibrary={leaving(goLibrary)}
-        goSkinSelector={leaving(goSkinSelector)}
-        goSettings={leaving(goSettings)}
+        goHome={goHome}
+        goMinecraft={goMinecraft}
+        goDiscover={goDiscover}
+        goLibrary={goLibrary}
+        goSkinSelector={goSkinSelector}
+        goSettings={goSettings}
         showBack
-        onBack={leaving(onBack)}
+        onBack={onBack}
       />
 
       <div
