@@ -411,26 +411,36 @@ function registerBlockbenchIpc() {
         return true;
     });
 
-    ipcMain.handle("blockbench:editSkin", async (event, { skin, slim, name }) => {
+    /*
+     * Each Save goes straight into Saved skins: over the saved skin it was opened from
+     * (savedId), or as a copy the first time and over that copy after. So it's kept
+     * however the editor is left. Resolves with the saved skin, or null if nothing was saved.
+     */
+    ipcMain.handle("blockbench:editSkin", async (event, { skin, slim, name, savedId }) => {
         const image = await skins.skinImage(skin);
-        let edited = null;
+        const title = String(name || "Skin").slice(0, 60);
+        let kept = null;
 
-        const result = await openEditor(
+        await openEditor(
             {
                 kind: "skin",
-                name: String(name || "Skin").slice(0, 60),
+                name: title,
                 slim: Boolean(slim),
                 image: `data:image/png;base64,${image.toString("base64")}`,
             },
             async (saved) => {
                 if (!PNG_DATA_URL.test(saved?.image ?? "")) throw new Error("Blockbench didn't send an image back.");
-                edited = Buffer.from(saved.image.replace(PNG_DATA_URL, ""), "base64");
-                return "Saved. Press Done when you've finished.";
+                kept = skins.keepEditedInSaved(Buffer.from(saved.image.replace(PNG_DATA_URL, ""), "base64"), {
+                    savedId: kept?.id ?? savedId,
+                    name: `${title} (edited)`,
+                    slim,
+                });
+                return kept.updated ? `Saved over "${kept.name}" in your skins.` : `Saved to your skins as "${kept.name}".`;
             },
             BrowserWindow.fromWebContents(event.sender)
         );
 
-        return result && edited ? skins.keepEditedSkin(edited, `${name} (edited)`) : null;
+        return kept;
     });
 }
 

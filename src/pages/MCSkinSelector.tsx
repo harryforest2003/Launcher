@@ -352,12 +352,22 @@ function SkinSelector({
 
     run("blockbench", async () => {
       try {
-        const edited = await window.blockbenchAPI.editSkin(target.skin, armsSlim, name);
-        if (!edited) return null;
+        // Saves go into Saved skins: over this one if it's from there, or as a copy.
+        const kept = await window.blockbenchAPI.editSkin(
+          target.skin,
+          armsSlim,
+          name,
+          target.source === "saved" ? target.savedId : undefined
+        );
+        if (!kept) return null;
 
-        setPreview({ source: "file", skin: edited.dataUrl, label: edited.name, pickedId: edited.id });
-        setView("search");
-        return "Edited in Blockbench. Save Changes to use it in game, or Save to favourites to keep it.";
+        setSaved(await window.skinAPI.saved());
+        setPreview({ source: "saved", skin: kept.dataUrl, label: kept.name, savedId: kept.id });
+        setSlim(kept.slim);
+        setView("saved");
+        return kept.updated
+          ? `Updated "${kept.name}" in your saved skins. Save Changes to use it in game.`
+          : `Saved your edit as "${kept.name}" in your saved skins. Save Changes to use it in game.`;
       } finally {
         blockbenchOpen.current = false;
       }

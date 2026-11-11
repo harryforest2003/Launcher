@@ -240,8 +240,11 @@ declare global {
             available(): Promise<boolean>;
             /** Starts Blockbench in the background, so opening something is instant. */
             prepare(): Promise<void>;
-            /** Resolves when the editor closes, with the edited skin, or null if it wasn't saved. */
-            editSkin(skin: string, slim: boolean, name: string): Promise<PickedSkin | null>;
+            /**
+             * Resolves when the editor closes. Each Save goes into Saved skins, over savedId if
+             * given, or as a copy. Gives that saved skin, or null if nothing was saved.
+             */
+            editSkin(skin: string, slim: boolean, name: string, savedId?: string): Promise<(SavedSkin & { updated: boolean }) | null>;
             /** Where the open editor goes, in window coordinates. */
             setBounds(rect: { x: number; y: number; width: number; height: number }): Promise<void>;
             save(): Promise<void>;

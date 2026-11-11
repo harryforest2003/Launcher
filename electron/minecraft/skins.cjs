@@ -205,22 +205,6 @@ async function skinImage(skin) {
     return buffer;
 }
 
-/* An edited skin, kept like a chosen file so it can be previewed, applied or saved. */
-function keepEditedSkin(buffer, name) {
-    checkSkinImage(buffer);
-
-    const folder = path.join(app.getPath("temp"), "unity-launcher-skins");
-    fs.mkdirSync(folder, { recursive: true });
-
-    const file = path.join(folder, `${crypto.randomUUID()}.png`);
-    fs.writeFileSync(file, buffer);
-
-    const id = String(nextPick++);
-    pickedFiles.set(id, file);
-
-    return { id, name, dataUrl: `data:image/png;base64,${buffer.toString("base64")}` };
-}
-
 /* ---------------- saved skins ---------------- */
 
 /*
@@ -295,6 +279,36 @@ async function saveSkin({ url, pickedId, savedId, name, slim }) {
     return listSaved();
 }
 
+/*
+ * A skin edited in Blockbench, kept in Saved skins: over the saved skin it was opened
+ * from, or as a new one if it came from anywhere else (your own, a player's, a file).
+ */
+function keepEditedInSaved(buffer, { savedId, name, slim }) {
+    checkSkinImage(buffer);
+    fs.mkdirSync(savedFolder(), { recursive: true });
+
+    const list = readSaved();
+    const dataUrl = `data:image/png;base64,${buffer.toString("base64")}`;
+    const now = new Date().toISOString();
+    const existing = savedId ? list.find((saved) => saved.id === savedId) : null;
+
+    if (existing) {
+        fs.writeFileSync(savedImage(existing.id), buffer);
+        writeSaved(list.map((saved) => (saved.id === existing.id ? { ...saved, savedAt: now } : saved)));
+        return { ...existing, savedAt: now, dataUrl, updated: true };
+    }
+
+    const entry = {
+        id: crypto.randomUUID(),
+        name: String(name || "Skin").trim().slice(0, 60) || "Skin",
+        slim: Boolean(slim),
+        savedAt: now,
+    };
+    fs.writeFileSync(savedImage(entry.id), buffer);
+    writeSaved([entry, ...list]);
+    return { ...entry, dataUrl, updated: false };
+}
+
 function useSaved(id, slim) {
     const entry = savedEntry(id);
     return uploadImage(fs.readFileSync(savedImage(entry.id)), `${entry.name}.png`, slim ?? entry.slim);
@@ -309,7 +323,7 @@ function deleteSaved(id) {
 
 module.exports = {
     skinImage,
-    keepEditedSkin,
+    keepEditedInSaved,
     listSaved,
     saveSkin,
     useSaved,

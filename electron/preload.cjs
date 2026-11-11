@@ -167,7 +167,7 @@ contextBridge.exposeInMainWorld("instanceAPI", {
 contextBridge.exposeInMainWorld("blockbenchAPI", {
     available: () => ipcRenderer.invoke("blockbench:available"),
     prepare: () => ipcRenderer.invoke("blockbench:prepare"),
-    editSkin: (skin, slim, name) => ipcRenderer.invoke("blockbench:editSkin", { skin, slim, name }),
+    editSkin: (skin, slim, name, savedId) => ipcRenderer.invoke("blockbench:editSkin", { skin, slim, name, savedId }),
     setBounds: (rect) => ipcRenderer.invoke("blockbench:setBounds", rect),
     save: () => ipcRenderer.invoke("blockbench:save"),
     close: () => ipcRenderer.invoke("blockbench:close"),

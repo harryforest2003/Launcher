@@ -23,6 +23,15 @@ const field: React.CSSProperties = {
 
 const loaderVersionOf = (v: LoaderVersion) => v.version || v.loader?.version || v.version_number || "";
 
+// The listing to install from: Modrinth's when a pack is on both sites and allows it.
+const installableSource = (item: CatalogItem) => {
+  const usable = item.sources.filter((source) => source.installable);
+  return usable.find((source) => source.source === "modrinth") ?? usable[0] ?? null;
+};
+
+const formatDownloads = (count: number) =>
+  count >= 1e6 ? `${(count / 1e6).toFixed(1)}M` : count >= 1e3 ? `${Math.round(count / 1e3)}K` : String(count);
+
 /* Making a new instance, or importing one, inside the Library. */
 export default function CreateInstancePanel({ onDone, onCancel }: Props) {
   // Starts at the Default RAM from Settings once that has loaded.
@@ -41,6 +50,39 @@ export default function CreateInstancePanel({ onDone, onCancel }: Props) {
   const [creating, setCreating] = useState(false);
   const [progress, setProgress] = useState<InstallProgress | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Starting from a modpack instead: what's searched, found and chosen.
+  const [startFrom, setStartFrom] = useState<"blank" | "modpack">("blank");
+  const [packQuery, setPackQuery] = useState("");
+  const [packResults, setPackResults] = useState<CatalogItem[] | null>(null);
+  const [searchingPacks, setSearchingPacks] = useState(false);
+  const [pack, setPack] = useState<CatalogItem | null>(null);
+  const [packNotice, setPackNotice] = useState<string | null>(null);
+
+  // Popular packs at first, then whatever's typed, a moment after typing stops.
+  useEffect(() => {
+    if (startFrom !== "modpack") return;
+    let current = true;
+    const timer = setTimeout(async () => {
+      setSearchingPacks(true);
+      try {
+        const page = await window.launcherAPI.browseCatalog({
+          query: packQuery.trim(),
+          type: "modpack",
+          sort: packQuery.trim() ? "relevance" : "downloads",
+          page: 1,
+        });
+        if (current) setPackResults(page.items.slice(0, 8));
+      } catch (err) {
+        if (current) setCreateError(err instanceof Error ? err.message : String(err));
+      }
+      if (current) setSearchingPacks(false);
+    }, 350);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [startFrom, packQuery]);
 
   // Starter mods: the list from Settings, whether to add them, and what happened.
   const [starterList, setStarterList] = useState<StarterMod[]>([]);
@@ -85,7 +127,45 @@ export default function CreateInstancePanel({ onDone, onCancel }: Props) {
 
   const shownVersions = versions.filter((v) => showSnapshots || v.type === "release");
 
+  async function createFromPack(chosen: CatalogItem) {
+    const source = installableSource(chosen);
+    if (!source) return setCreateError(`${chosen.name}'s authors don't allow launchers to download it.`);
+
+    setCreating(true);
+    setCreateError(null);
+    setProgress(null);
+    setPackNotice(null);
+
+    try {
+      const created = await window.instanceAPI.installModpack({
+        source: source.source,
+        projectId: source.id,
+        name: instanceName.trim() || chosen.name,
+      });
+      const blocked = created.pack?.blocked?.length ?? 0;
+
+      if (blocked) {
+        // Stay, to say which files need downloading by hand.
+        setPackNotice(
+          `Made ${created.name}: Minecraft ${created.version}, ${created.loader} ${created.loaderVersion}. ` +
+            `${blocked} file${blocked === 1 ? "" : "s"} couldn't be downloaded automatically, as their authors don't allow it.`
+        );
+      } else {
+        onDone();
+      }
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(err));
+    }
+
+    setCreating(false);
+  }
+
   async function create() {
+    if (startFrom === "modpack") {
+      if (!pack) return setCreateError("Choose a modpack first.");
+      return createFromPack(pack);
+    }
+
     const name = instanceName.trim();
 
     if (!name) return setCreateError("Give the instance a name first.");
@@ -143,6 +223,99 @@ export default function CreateInstancePanel({ onDone, onCancel }: Props) {
             style={field}
           />
 
+          <div role="radiogroup" aria-label="Start from" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {(
+              [
+                ["blank", "Choose a version and loader"],
+                ["modpack", "Start from a modpack"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={startFrom === value}
+                className="sidebar-button"
+                style={{ flex: "1 1 220px", background: startFrom === value ? "#7c3aed" : undefined }}
+                onClick={() => {
+                  setStartFrom(value);
+                  setCreateError(null);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {startFrom === "modpack" && (
+            <div data-testid="modpack-picker" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                value={packQuery}
+                onChange={(e) => setPackQuery(e.target.value)}
+                placeholder="Search Modrinth and CurseForge modpacks..."
+                aria-label="Search modpacks"
+                style={field}
+              />
+
+              {searchingPacks && <div style={{ color: "#9ca3af", fontSize: 13 }}>Searching...</div>}
+              {packResults && !searchingPacks && packResults.length === 0 && (
+                <div style={{ color: "#9ca3af", fontSize: 13 }}>No modpacks found.</div>
+              )}
+
+              {packResults?.map((item) => {
+                const source = installableSource(item);
+                const chosen = pack?.id === item.id && pack.source === item.source;
+                return (
+                  <button
+                    key={`${item.source}:${item.id}`}
+                    data-testid="modpack-result"
+                    disabled={!source}
+                    title={source ? undefined : "Its authors don't allow launchers to download it."}
+                    onClick={() => {
+                      setPack(item);
+                      if (!instanceName.trim() || instanceName === pack?.name) setInstanceName(item.name);
+                    }}
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "center",
+                      textAlign: "left",
+                      padding: 10,
+                      borderRadius: 10,
+                      cursor: source ? "pointer" : "not-allowed",
+                      opacity: source ? 1 : 0.5,
+                      background: chosen ? "#2e1065" : "#1a1a1a",
+                      border: `1px solid ${chosen ? "#a855f7" : "#333"}`,
+                      color: "white",
+                    }}
+                  >
+                    {item.icon ? (
+                      <img src={item.icon} alt="" width={40} height={40} style={{ borderRadius: 8, flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 40, height: 40, borderRadius: 8, background: "#2b1d47", flexShrink: 0 }} />
+                    )}
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: "block", color: "#ede9fe", fontSize: 14 }}>
+                        {item.name}
+                        {chosen ? " ✓" : ""}
+                      </span>
+                      <span style={{ display: "block", color: "#6b7280", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {item.sources.map((entry) => (entry.source === "modrinth" ? "Modrinth" : "CurseForge")).join(" + ")} •{" "}
+                        {formatDownloads(item.downloads)} downloads • {item.summary}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+
+              <p style={{ color: "#6b7280", fontSize: 12, margin: 0 }}>
+                The pack sets the Minecraft version, loader and mods, and its recommended RAM. You can
+                change the RAM and Java in the instance's settings afterwards.
+              </p>
+            </div>
+          )}
+
+          {startFrom === "blank" && (
+          <>
           <SearchDropdown
             value={version}
             onChange={setVersion}
@@ -234,6 +407,8 @@ export default function CreateInstancePanel({ onDone, onCancel }: Props) {
               </span>
             </span>
           </label>
+          </>
+          )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "15px", marginTop: "20px" }}>
             <button className="sidebar-button" onClick={onCancel}>
@@ -243,6 +418,17 @@ export default function CreateInstancePanel({ onDone, onCancel }: Props) {
               {creating ? "Installing..." : "Create Instance"}
             </button>
           </div>
+
+          {packNotice && (
+            <div style={{ background: "#1a1a1a", border: "1px solid #b45309", borderRadius: 12, padding: 15, color: "#fcd34d" }}>
+              {packNotice}
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}>
+                <button className="sidebar-button" style={{ background: "#7c3aed" }} onClick={onDone}>
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
 
           {createError && (
             <div
