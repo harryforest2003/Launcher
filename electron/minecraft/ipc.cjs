@@ -1,11 +1,13 @@
 const fs = require("fs");
 const path = require("path");
-const { ipcMain, shell, dialog, BrowserWindow } = require("electron");
+const { app, ipcMain, shell, dialog, BrowserWindow } = require("electron");
 
 const instanceManager = require("../instanceManager.cjs");
 const instanceMods = require("./instanceMods.cjs");
 const instanceFiles = require("./instanceFiles.cjs");
 const javaRuntime = require("./javaRuntime.cjs");
+const modUpdates = require("./modUpdates.cjs");
+const modpackExport = require("./modpackExport.cjs");
 const modSearch = require("./modSearch.cjs");
 const account = require("./account.cjs");
 const modpack = require("./modpack.cjs");
@@ -171,6 +173,38 @@ function registerInstanceIpc() {
         const downloaded = javaRuntime.installedRuntimes().some((runtime) => runtime.component === need.component);
         return { ...need, downloaded };
     });
+
+    /* ---------------- export ---------------- */
+
+    // Asks where to save it, then writes the .mrpack. Null if cancelled.
+    ipcMain.handle("instance:exportModpack", async (event, name, options = {}) => {
+        const instance = instanceManager.getInstance(name);
+        const picked = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: `Export ${name} as a modpack`,
+            defaultPath: path.join(app.getPath("downloads"), `${name.replace(/[/\\:*?"<>|]/g, "-")}.mrpack`),
+            filters: [{ name: "Modrinth modpack", extensions: ["mrpack"] }],
+        });
+        if (picked.canceled || !picked.filePath) return null;
+
+        return modpackExport.exportModpack(instance, instanceManager.instanceFolder(name), picked.filePath, {
+            name: instance.name,
+            worlds: Boolean(options.worlds),
+            options: Boolean(options.options),
+        });
+    });
+
+    /* ---------------- updates ---------------- */
+
+    ipcMain.handle("instance:checkUpdates", (_e, name) =>
+        modUpdates.checkUpdates(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name))
+    );
+
+    // Installs updates from the latest check, by key; the page never sends download addresses.
+    ipcMain.handle("instance:applyUpdates", (event, name, keys) =>
+        modUpdates.applyUpdates(name, instanceManager.instanceFolder(name), Array.isArray(keys) ? keys.map(String) : [], {
+            onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
+        })
+    );
 
     ipcMain.handle("instance:log", (_e, name) => instanceManager.getLog(name));
 

@@ -318,4 +318,5 @@ module.exports = {
     copyDatapackToWorld,
     installContent,
     modsDir,
+    resolveItem,
 };

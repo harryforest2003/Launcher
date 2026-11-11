@@ -56,6 +56,20 @@ declare global {
         lines: string[];
     };
 
+    type ModUpdate = {
+        key: string;
+        type: ContentType;
+        fileName: string;
+        newFileName: string;
+        enabled: boolean;
+        name: string;
+        iconUrl: string | null;
+        source: "modrinth" | "curseforge";
+        projectId: string;
+        current: string;
+        latest: string;
+    };
+
     type CrashCause = {
         kind: string;
         title: string;
@@ -489,6 +503,12 @@ declare global {
             onModProgress(
                 cb: (p: { name: string; projectId: string; percent: number }) => void
             ): () => void;
+            /** Asks where to save it, then writes a Modrinth modpack (.mrpack). Null if cancelled. */
+            exportModpack(name: string, options: { worlds?: boolean; options?: boolean }): Promise<{ file: string; bytes: number; linked: number; included: string[]; configFiles: number } | null>;
+            /** Newer builds of its mods, resource packs and shaders, for its version and loader. */
+            checkUpdates(name: string): Promise<{ checked: number; identified: number; updates: ModUpdate[] }>;
+            /** Installs updates from the latest check, by their keys. */
+            applyUpdates(name: string, keys: string[]): Promise<{ updated: { name: string; from: string; to: string }[]; failed: { name: string; reason: string }[] }>;
             /** Chooses a Java for this instance alone. Null if cancelled. */
             pickInstanceJava(name: string): Promise<string | null>;
             /** The Java automatic would use, and whether it has been downloaded. */

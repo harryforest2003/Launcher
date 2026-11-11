@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GitHubInstall from "../components/GitHubInstall";
 import InstanceLog from "../components/InstanceLog";
+import ModUpdatesPanel from "../components/ModUpdatesPanel";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
@@ -102,6 +103,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   /* ---------------- per-instance settings ---------------- */
   const [ramDraft, setRamDraft] = useState<number | null>(null);
   const [jvmDraft, setJvmDraft] = useState<string | null>(null);
+  // What an exported modpack includes beyond mods and config.
+  const [exportWorlds, setExportWorlds] = useState(false);
+  const [exportOptions, setExportOptions] = useState(false);
   // The name typed for a copy, or null for the suggested one.
   const [copyName, setCopyName] = useState<string | null>(null);
   const [system, setSystem] = useState<LauncherSettings["system"] | null>(null);
@@ -556,6 +560,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {/* ---------------- CONTENT ---------------- */}
       {tab === "mods" && (
         <>
+          <ModUpdatesPanel instanceName={instanceName} onUpdated={refresh} />
+
           {contentTabs}
 
           {items.length === 0 ? (
@@ -708,6 +714,44 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               A copy with the same mods, worlds and settings, under a new name. Logs and play history
               aren't copied.
             </p>
+          </div>
+
+          <div style={card} data-testid="instance-export">
+            <p style={{ color: "#d8b4fe", marginBottom: 6 }}>Export as a modpack</p>
+            <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 10 }}>
+              Saves it as a Modrinth modpack (.mrpack) to share, which the Modrinth App, Prism and this
+              launcher can install. Mods on Modrinth are linked, so it stays small; others, and its
+              config, go inside it. Disabled mods are left out.
+            </p>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ color: "#d4d4d8", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="checkbox" checked={exportWorlds} onChange={(e) => setExportWorlds(e.target.checked)} />
+                Include worlds
+              </label>
+              <label style={{ color: "#d4d4d8", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="checkbox" checked={exportOptions} onChange={(e) => setExportOptions(e.target.checked)} />
+                Include game settings (options.txt)
+              </label>
+              <button
+                className="sidebar-button"
+                style={{ marginLeft: "auto" }}
+                disabled={busy === "export"}
+                onClick={() =>
+                  run("export", async () => {
+                    const done = await window.instanceAPI.exportModpack(instanceName, { worlds: exportWorlds, options: exportOptions });
+                    if (!done) return;
+                    setNotice(
+                      `Saved ${done.file.split(/[\\/]/).pop()} (${formatBytes(done.bytes)}): ${done.linked} linked from Modrinth` +
+                        (done.included.length ? `, ${done.included.length} packed in` : "") +
+                        (done.configFiles ? `, plus ${done.configFiles} config file${done.configFiles === 1 ? "" : "s"}` : "") +
+                        "."
+                    );
+                  })
+                }
+              >
+                {busy === "export" ? "Exporting..." : "Export..."}
+              </button>
+            </div>
           </div>
 
           <div style={card} data-testid="instance-java">
