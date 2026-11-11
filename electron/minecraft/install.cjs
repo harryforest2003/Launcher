@@ -5,6 +5,7 @@ const unzipper = require("unzipper");
 const { downloadFile, fetchJson, pool } = require("./net.cjs");
 const { downloadAssets } = require("./assets.cjs");
 const { installLoader } = require("./loaders.cjs");
+const { javaNeedOf, LEGACY } = require("./javaRuntime.cjs");
 const {
     isLibraryAllowed,
     libraryArtifact,
@@ -161,8 +162,11 @@ async function extractNatives(nativeJars, versionJson, instanceFolder, report) {
 /*
  * Installs everything an instance needs and writes the merged version
  * JSON to versions/<id>/<id>.json inside the instance.
+ *
+ * resolveJava(need) gives the Java to run the Forge/NeoForge installer with, where need
+ * is the Java this Minecraft version asks for ({ component, majorVersion }).
  */
-async function installInstance(instance, instanceFolder, { onProgress, javaPath = "java" } = {}) {
+async function installInstance(instance, instanceFolder, { onProgress, resolveJava } = {}) {
     const report = reporter(onProgress);
 
     fs.mkdirSync(instanceFolder, { recursive: true });
@@ -219,7 +223,7 @@ async function installInstance(instance, instanceFolder, { onProgress, javaPath 
             mcVersion: instance.version,
             loaderVersion: instance.loaderVersion || null,
             instanceFolder,
-            javaPath,
+            getJava: async () => (resolveJava ? resolveJava(javaNeedOf(vanilla) ?? LEGACY) : "java"),
             onLog: (text) => report("loader", 50, text),
         });
 

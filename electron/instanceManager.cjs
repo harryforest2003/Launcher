@@ -161,7 +161,7 @@ async function createInstance(config, { onProgress } = {}) {
         const result = await installInstance(
             { ...stub, loaderVersion },
             folder,
-            { onProgress }
+            { onProgress, resolveJava: installerJava(stub, onProgress) }
         );
 
         const finished = {
@@ -192,13 +192,22 @@ async function createInstance(config, { onProgress } = {}) {
     }
 }
 
+/* The Java a Forge/NeoForge installer runs on: the same choice as launching makes. */
+function installerJava(instance, onProgress) {
+    return (need) =>
+        chooseJava(instance, need, {
+            onProgress,
+            note: (text) => onProgress?.({ stage: "loader", percent: 50, detail: text }),
+        });
+}
+
 /* ---------------- REPAIR / DELETE ---------------- */
 
 async function repairInstance(name, { onProgress } = {}) {
     const instance = getInstance(name);
     const folder = instanceFolder(name);
 
-    const result = await installInstance(instance, folder, { onProgress });
+    const result = await installInstance(instance, folder, { onProgress, resolveJava: installerJava(instance, onProgress) });
 
     const finished = {
         ...instance,
@@ -430,8 +439,12 @@ function recordLog(name, text) {
     instanceEvents.emit("log", { name, text });
 }
 
-/* The Java to launch with: the instance's own, the one chosen in Settings, or automatic. */
-async function chooseJava(instance, folder, { onProgress, note }) {
+/*
+ * The Java to use: the instance's own, the one chosen in Settings, or automatic (need is
+ * the Java this Minecraft version asks for). Used for launching and for Forge/NeoForge
+ * installers.
+ */
+async function chooseJava(instance, need, { onProgress, note }) {
     if (instance.javaPath && fs.existsSync(instance.javaPath)) {
         note(`Using this instance's Java: ${instance.javaPath}`);
         return instance.javaPath;
@@ -443,7 +456,6 @@ async function chooseJava(instance, folder, { onProgress, note }) {
         return chosen;
     }
 
-    const need = requiredJava(folder, instance);
     try {
         const javaPath = await ensureRuntime(need, { onProgress });
         note(`Using Java ${need.majorVersion}, downloaded automatically for Minecraft ${instance.version}.`);
@@ -500,7 +512,7 @@ async function launchInstance(name, account, { onProgress } = {}) {
             instanceEvents.emit("progress", { name, ...update });
             onProgress?.(update);
         };
-        javaPath = await chooseJava(instance, folder, { onProgress: progress, note });
+        javaPath = await chooseJava(instance, requiredJava(folder, instance), { onProgress: progress, note });
     } finally {
         starting.delete(name);
     }

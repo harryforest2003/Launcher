@@ -151,9 +151,10 @@ function ensureLauncherProfiles(instanceFolder) {
 
 function runInstaller(javaPath, jarPath, instanceFolder, onLog) {
     return new Promise((resolve, reject) => {
+        // Headless, so the installer never puts a Java icon in the Dock.
         const proc = spawn(
             javaPath,
-            ["-jar", jarPath, "--installClient", instanceFolder],
+            ["-Djava.awt.headless=true", "-jar", jarPath, "--installClient", instanceFolder],
             { cwd: instanceFolder }
         );
 
@@ -168,7 +169,13 @@ function runInstaller(javaPath, jarPath, instanceFolder, onLog) {
         proc.stdout.on("data", capture);
         proc.stderr.on("data", capture);
 
-        proc.on("error", reject);
+        proc.on("error", (err) => {
+            if (err.code !== "ENOENT") return reject(err);
+            reject(new Error(
+                `Java couldn't be started to run ${path.basename(jarPath)}. ` +
+                "Check your internet connection and use Repair, or choose a Java in Settings."
+            ));
+        });
 
         proc.on("close", (code) => {
             if (code === 0) return resolve(output);
@@ -217,7 +224,7 @@ async function installJarLoader(
     mcVersion,
     loaderVersion,
     instanceFolder,
-    javaPath,
+    getJava,
     onLog
 ) {
     ensureLauncherProfiles(instanceFolder);
@@ -229,6 +236,9 @@ async function installJarLoader(
         if (onLog) onLog(`Downloading ${loader} installer...`);
 
         await downloadFile(installerUrl(loader, loaderVersion), jarPath);
+
+        // The Java this Minecraft version needs, downloaded first if it isn't here yet.
+        const javaPath = await getJava();
 
         if (onLog) onLog(`Running ${loader} installer...`);
 
@@ -262,7 +272,7 @@ async function installLoader({
     mcVersion,
     loaderVersion,
     instanceFolder,
-    javaPath = "java",
+    getJava = async () => "java",
     onLog,
 }) {
     const kind = (loader || "vanilla").toLowerCase();
@@ -292,7 +302,7 @@ async function installLoader({
     if (kind === "forge" || kind === "neoforge") {
         return {
             profile: await installJarLoader(
-                kind, mcVersion, loaderVersion, instanceFolder, javaPath, onLog
+                kind, mcVersion, loaderVersion, instanceFolder, getJava, onLog
             ),
             loaderVersion,
         };

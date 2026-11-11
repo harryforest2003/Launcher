@@ -31,19 +31,27 @@ function javaExecutable(home) {
     return path.join(home, "bin", "java");
 }
 
+// Versions from before Mojang said which Java they need all ran on Java 8.
+const LEGACY = { component: "jre-legacy", majorVersion: 8 };
+
+/* The Java a Minecraft version file asks for, or null if it doesn't say. */
+function javaNeedOf(versionJson) {
+    const java = versionJson?.javaVersion;
+    return java?.component ? { component: java.component, majorVersion: java.majorVersion } : null;
+}
+
 /* The Java an installed instance's Minecraft version needs. */
 function requiredJava(folder, instance) {
     for (const id of [instance.versionId, instance.vanillaId, instance.version]) {
         if (!id) continue;
         try {
-            const json = JSON.parse(fs.readFileSync(path.join(folder, "versions", id, `${id}.json`), "utf8"));
-            if (json.javaVersion?.component) return { component: json.javaVersion.component, majorVersion: json.javaVersion.majorVersion };
+            const need = javaNeedOf(JSON.parse(fs.readFileSync(path.join(folder, "versions", id, `${id}.json`), "utf8")));
+            if (need) return need;
         } catch {
             // Not this one.
         }
     }
-    // Versions from before Mojang said, which all ran on Java 8.
-    return { component: "jre-legacy", majorVersion: 8 };
+    return LEGACY;
 }
 
 async function getJson(url) {
@@ -137,4 +145,4 @@ function installedRuntimes() {
     }
 }
 
-module.exports = { requiredJava, ensureRuntime, installedRuntimes, javaExecutable, platformKeys };
+module.exports = { requiredJava, javaNeedOf, LEGACY, ensureRuntime, installedRuntimes, javaExecutable, platformKeys };
