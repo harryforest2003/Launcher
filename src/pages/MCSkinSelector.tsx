@@ -79,14 +79,13 @@ function PlayerPreview({ player }: { player: PlayerSearchResult }) {
 }
 
 // The search cards' buttons: small, side by side, each a symbol with its name on hover.
-const iconButton: React.CSSProperties = {
+// A player card's icon buttons share its width.
+const cardButton: React.CSSProperties = {
   flex: 1,
   minWidth: 0,
+  width: "auto",
   height: 34,
-  padding: 0,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
+  borderRadius: 10,
 };
 
 const TickIcon = () => (
@@ -95,11 +94,6 @@ const TickIcon = () => (
   </svg>
 );
 
-const BookmarkIcon = () => (
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-  </svg>
-);
 
 const message = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(
@@ -152,6 +146,13 @@ function SkinSelector({
 
   // Resetting can't be undone, so it takes a second click.
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [why, setWhyNow] = useState<string | null>(null);
+  const whyTimer = useRef(0);
+  const setWhy = (text: string) => {
+    setWhyNow(text);
+    window.clearTimeout(whyTimer.current);
+    whyTimer.current = window.setTimeout(() => setWhyNow(null), 4000);
+  };
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showMine = useCallback((mine: SkinProfile | null) => {
@@ -425,6 +426,58 @@ function SkinSelector({
     });
   }
 
+  // The sidebar's buttons: whether each can be used now, and what its tip says (why not, if not).
+  const wait = "Wait for the current change to finish";
+  const canBlockbench = Boolean(preview) && blockbenchReady && !busy;
+  const canSave = signedIn && Boolean(preview) && !busy;
+  const canDownload = Boolean(preview && (preview.source === "mine" || preview.source === "player")) && !busy;
+  const canReset = signedIn && !busy;
+  const canFavourite = Boolean(preview) && preview?.source !== "saved" && !busy;
+  const tips = {
+    blockbench:
+      busy === "blockbench"
+        ? "Editing in Blockbench..."
+        : busy
+        ? wait
+        : !preview
+        ? "Edit in Blockbench (pick a skin first)"
+        : !blockbenchReady
+        ? "Edit in Blockbench (it's still getting ready)"
+        : "Edit in Blockbench: paint or change this skin, then save it back here",
+    save:
+      busy === "save"
+        ? "Saving..."
+        : busy
+        ? wait
+        : !signedIn
+        ? "Save changes (sign in with Microsoft on the Minecraft page first)"
+        : !preview
+        ? "Save changes (pick a skin first)"
+        : "Save changes: make this your skin and cape in game",
+    download: busy
+      ? wait
+      : canDownload
+      ? "Download this skin"
+      : "Download this skin (works for your own skin or another player's)",
+    reset:
+      busy === "reset"
+        ? "Resetting..."
+        : busy
+        ? wait
+        : !signedIn
+        ? "Reset to the default skin (sign in with Microsoft on the Minecraft page first)"
+        : confirmingReset
+        ? "Click again to reset your skin"
+        : "Reset to the default skin. Mojang doesn't keep your old one, so download it first if you want it back",
+    favourite: busy
+      ? wait
+      : preview?.source === "saved"
+      ? "Already in your favourites"
+      : !preview
+      ? "Save to favourites (pick a skin first)"
+      : "Save to favourites",
+  };
+
   const unsaved =
     signedIn &&
     preview &&
@@ -626,11 +679,18 @@ function SkinSelector({
                       <button
                         className="sidebar-button"
                         style={{ width: "100%", fontSize: 12, padding: "6px", marginBottom: 6 }}
-                        disabled={!signedIn || !!busy}
-                        title={signedIn ? "Make this your skin in game" : "Sign in to change your skin"}
+                        // Looks like the others even when it can't be used yet; hovering says why.
+                        aria-disabled={!signedIn || !!busy || undefined}
+                        data-tip={
+                          !signedIn
+                            ? "Sign in with Microsoft on the Minecraft page to use this skin"
+                            : busy
+                            ? "Wait for the current change to finish"
+                            : "Make this your skin in game"
+                        }
                         onClick={(event) => {
                           event.stopPropagation();
-                          applySavedSkin(entry);
+                          if (signedIn && !busy) applySavedSkin(entry);
                         }}
                       >
                         {busy === `use-${entry.id}` ? "Applying..." : "Use"}
@@ -718,54 +778,54 @@ function SkinSelector({
                   </h3>
 
                   <div style={{ display: "flex", gap: 6 }}>
-                    <button
-                      className="sidebar-button"
-                      aria-label="Save to favourites"
-                      title="Save to favourites"
-                      style={iconButton}
+                    <IconButton
+                      label="Save to favourites"
+                      tip={busy ? wait : "Save to favourites"}
                       disabled={!!busy}
-                      onClick={(event) => {
-                        event.stopPropagation();
+                      style={cardButton}
+                      onClick={() =>
                         saveToMySkins(
                           { source: "player", skin: player.skin, label: `${player.username}'s skin` },
                           player.username,
                           player.slim
-                        );
-                      }}
+                        )
+                      }
                     >
-                      <BookmarkIcon />
-                    </button>
+                      <StarIcon size={17} />
+                    </IconButton>
 
-                    <button
-                      className="sidebar-button"
-                      aria-label="Apply"
-                      title={signedIn ? "Apply: make this your skin in game" : "Sign in to change your skin"}
-                      style={{ ...iconButton, background: "#7c3aed" }}
+                    <IconButton
+                      label="Apply"
+                      tip={
+                        busy === `apply-${player.uuid}`
+                          ? "Making this your skin..."
+                          : busy
+                          ? wait
+                          : signedIn
+                          ? "Make this your skin in game"
+                          : "Make this your skin in game (sign in with Microsoft on the Minecraft page first)"
+                      }
                       disabled={!signedIn || !!busy}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        applyPlayer(player);
-                      }}
+                      style={cardButton}
+                      onClick={() => applyPlayer(player)}
                     >
                       {busy === `apply-${player.uuid}` ? "…" : <TickIcon />}
-                    </button>
+                    </IconButton>
 
-                    <button
-                      className="sidebar-button"
-                      aria-label="Edit in Blockbench"
-                      title="Edit in Blockbench"
-                      style={iconButton}
+                    <IconButton
+                      label="Edit in Blockbench"
+                      tip={busy ? wait : blockbenchReady ? "Edit in Blockbench" : "Edit in Blockbench (it's still getting ready)"}
                       disabled={!!busy || !blockbenchReady}
-                      onClick={(event) => {
-                        event.stopPropagation();
+                      style={cardButton}
+                      onClick={() =>
                         editInBlockbench(
                           { source: "player", skin: player.skin, label: `${player.username}'s skin` },
                           player.slim
-                        );
-                      }}
+                        )
+                      }
                     >
                       <img src={blockbenchLogo} alt="" style={{ width: 19, height: 19 }} />
-                    </button>
+                    </IconButton>
                   </div>
                 </div>
               ))}
@@ -865,75 +925,28 @@ function SkinSelector({
             </p>
           )}
 
-          {/* What each does comes up above the cursor (HoverTips). */}
+          {/* All five look alike; what each does, or why it can't yet, comes up on hover (HoverTips). */}
           <div data-testid="skin-actions" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 18, flexShrink: 0 }}>
-            <IconButton
-              testId="edit-in-blockbench"
-              label="Edit in Blockbench"
-              tip={
-                busy === "blockbench"
-                  ? "Editing in Blockbench..."
-                  : !preview
-                  ? "Edit in Blockbench (pick a skin first)"
-                  : !blockbenchReady
-                  ? "Edit in Blockbench (it's still getting ready)"
-                  : "Edit in Blockbench: paint or change this skin, then save it back here"
-              }
-              disabled={!preview || !blockbenchReady || !!busy}
-              onClick={() => editInBlockbench()}
-            >
+            <IconButton testId="edit-in-blockbench" label="Edit in Blockbench" tip={tips.blockbench} disabled={!canBlockbench} onUnavailable={() => setWhy(tips.blockbench)} onClick={() => editInBlockbench()}>
               <img src={blockbenchLogo} alt="" style={{ width: 24, height: 24 }} />
             </IconButton>
 
-            <IconButton
-              testId="save-changes"
-              label="Save changes"
-              variant={unsaved ? "ready" : ""}
-              tip={
-                busy === "save"
-                  ? "Saving..."
-                  : !signedIn
-                  ? "Save changes (sign in with Microsoft first)"
-                  : !preview
-                  ? "Save changes (pick a skin first)"
-                  : "Save changes: make this your skin and cape in game"
-              }
-              disabled={!signedIn || !preview || !!busy}
-              onClick={saveChanges}
-            >
+            <IconButton testId="save-changes" label="Save changes" variant={unsaved ? "ready" : ""} tip={tips.save} disabled={!canSave} onUnavailable={() => setWhy(tips.save)} onClick={saveChanges}>
               <SaveIcon size={21} />
             </IconButton>
 
             <IconButton
               testId="download-skin"
               label="Download this skin"
-              tip={
-                preview && (preview.source === "mine" || preview.source === "player")
-                  ? "Download this skin"
-                  : "Download this skin (your own or another player's)"
-              }
-              disabled={!preview || !(preview.source === "mine" || preview.source === "player") || !!busy}
+              tip={tips.download}
+              disabled={!canDownload}
+              onUnavailable={() => setWhy(tips.download)}
               onClick={() => preview && downloadSkin(preview.skin, preview.source === "mine" ? profile?.name ?? "skin" : preview.label)}
             >
               <DownloadIcon size={21} />
             </IconButton>
 
-            <IconButton
-              testId="reset-skin"
-              label="Reset to default"
-              variant={confirmingReset ? "confirming" : ""}
-              tip={
-                busy === "reset"
-                  ? "Resetting..."
-                  : !signedIn
-                  ? "Reset to the default skin (sign in with Microsoft first)"
-                  : confirmingReset
-                  ? "Click again to reset your skin"
-                  : "Reset to the default skin. Mojang doesn't keep your old one, so download it first if you want it back"
-              }
-              disabled={!signedIn || !!busy}
-              onClick={resetToDefault}
-            >
+            <IconButton testId="reset-skin" label="Reset to default" variant={confirmingReset ? "confirming" : ""} tip={tips.reset} disabled={!canReset} onUnavailable={() => setWhy(tips.reset)} onClick={resetToDefault}>
               <ResetIcon size={21} />
             </IconButton>
 
@@ -941,14 +954,9 @@ function SkinSelector({
               testId="save-favourite"
               label="Save to favourites"
               variant={preview?.source === "saved" ? "on" : ""}
-              tip={
-                preview?.source === "saved"
-                  ? "Already in your favourites"
-                  : !preview
-                  ? "Save to favourites (pick a skin first)"
-                  : "Save to favourites"
-              }
-              disabled={!preview || preview.source === "saved" || !!busy}
+              tip={tips.favourite}
+              disabled={!canFavourite}
+              onUnavailable={() => setWhy(tips.favourite)}
               onClick={() =>
                 preview &&
                 preview.source !== "saved" &&
@@ -971,7 +979,7 @@ function SkinSelector({
               ? "Resetting..."
               : confirmingReset
               ? "Click reset again to put your skin back to the default."
-              : ""}
+              : why ?? ""}
           </div>
         </div>
       </div>

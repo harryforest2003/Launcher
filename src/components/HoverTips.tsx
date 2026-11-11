@@ -73,6 +73,14 @@ export default function HoverTips() {
       else timer = window.setTimeout(show, DELAY);
     };
 
+    // Pressed before the tip came up (an unavailable button says why): show it now.
+    const press = () => {
+      if (!current) return;
+      window.clearTimeout(timer);
+      const tip = tipFor(current);
+      if (tip) setText(tip);
+    };
+
     const move = (event: PointerEvent) => {
       cursor.current = { x: event.clientX, y: event.clientY };
       if (!current) return;
@@ -85,6 +93,7 @@ export default function HoverTips() {
 
     document.addEventListener("pointerover", over);
     document.addEventListener("pointermove", move);
+    document.addEventListener("pointerdown", press);
     document.addEventListener("pointerleave", hide);
     window.addEventListener("blur", hide);
     window.addEventListener("scroll", hide, true);
@@ -92,6 +101,7 @@ export default function HoverTips() {
       hide();
       document.removeEventListener("pointerover", over);
       document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerdown", press);
       document.removeEventListener("pointerleave", hide);
       window.removeEventListener("blur", hide);
       window.removeEventListener("scroll", hide, true);

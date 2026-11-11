@@ -41,25 +41,27 @@ export function UpdatesControls({ updates }: { updates: ContentUpdates }) {
         <RefreshIcon size={14} />
       </button>
 
-      <button
-        className="sidebar-button"
-        data-testid="update-all"
-        disabled={!count || updates.checking || busy}
-        onClick={updates.updateAll}
-        style={{
-          padding: "6px 12px",
-          fontSize: 13,
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          background: count ? GREEN : undefined,
-          borderColor: count ? GREEN : undefined,
-          opacity: count ? 1 : 0.5,
-        }}
-      >
-        <DownloadIcon size={14} />
-        Update All{count ? ` (${count})` : ""}
-      </button>
+      {/* Only there when there's something to update, rather than greyed out. */}
+      {count > 0 && (
+        <button
+          className="sidebar-button"
+          data-testid="update-all"
+          disabled={updates.checking || busy}
+          onClick={updates.updateAll}
+          style={{
+            padding: "6px 12px",
+            fontSize: 13,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            background: GREEN,
+            borderColor: GREEN,
+          }}
+        >
+          <DownloadIcon size={14} />
+          Update All ({count})
+        </button>
+      )}
     </div>
   );
 }

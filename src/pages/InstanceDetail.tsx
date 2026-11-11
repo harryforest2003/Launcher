@@ -496,46 +496,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
         <button
           className="sidebar-button"
-          onClick={() => setTab("mods")}
-          style={{ opacity: tab === "mods" || tab === "browse" ? 1 : 0.6 }}
-        >
-          Content ({allItems.length})
-        </button>
-
-        <button
-          className="sidebar-button"
-          onClick={() => setTab("worlds")}
-          style={{ opacity: tab === "worlds" ? 1 : 0.6 }}
-        >
-          Worlds
-        </button>
-
-        <button
-          className="sidebar-button"
-          onClick={() => setTab("screenshots")}
-          style={{ opacity: tab === "screenshots" ? 1 : 0.6 }}
-        >
-          Screenshots
-        </button>
-
-        <button
-          className="sidebar-button"
-          onClick={() => setTab("log")}
-          style={{ opacity: tab === "log" ? 1 : 0.6 }}
-        >
-          Log
-        </button>
-
-        <button
-          className="sidebar-button"
-          onClick={() => setTab("settings")}
-          style={{ opacity: tab === "settings" ? 1 : 0.6 }}
-        >
-          Settings
-        </button>
-
-        <button
-          className="sidebar-button"
           onClick={() =>
             run("cloud", async () => {
               setProgress(null);
@@ -561,7 +521,37 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         >
           {busy === "repair" ? "Repairing..." : "Repair"}
         </button>
+      </div>
 
+      {/* TABS: all alike, the open one filled in purple like the open page in the sidebar */}
+      <div
+        role="tablist"
+        aria-label="Instance"
+        style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #2e2640" }}
+      >
+        {(
+          [
+            ["mods", `Content (${allItems.length})`],
+            ["worlds", "Worlds"],
+            ["screenshots", "Screenshots"],
+            ["log", "Log"],
+            ["settings", "Settings"],
+          ] as const
+        ).map(([id, label]) => {
+          const open = tab === id || (id === "mods" && tab === "browse");
+          return (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={open}
+              className="sidebar-button"
+              onClick={() => setTab(id)}
+              style={{ padding: "8px 16px", background: open ? "#6d28d9" : undefined, borderColor: open ? "#c084fc" : undefined }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
       {/* ---------------- CONTENT ---------------- */}

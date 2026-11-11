@@ -363,8 +363,9 @@ code {
   box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
 }
 
-.icon-button:disabled,
-.icon-button[aria-disabled="true"] {
+/* Greyed out only when truly disabled; one that's unavailable for now (aria-disabled) looks
+   like the rest, and says why when hovered or pressed. */
+.icon-button:disabled {
   opacity: 0.4;
   cursor: default;
 }

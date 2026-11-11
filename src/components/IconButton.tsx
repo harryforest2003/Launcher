@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 type Props = {
   /** What it does, shown above the cursor on hover (HoverTips); say why when it can't be used. */
@@ -10,15 +10,18 @@ type Props = {
   /** Extra classes: "ready" (something to save), "confirming" (click again), "on" (already done). */
   variant?: string;
   testId?: string;
+  /** Pressed while it can't be used: say why somewhere (its hover tip says so too). */
+  onUnavailable?: () => void;
+  style?: CSSProperties;
   children: ReactNode;
 };
 
 /*
- * A square button that's only an icon. When it can't be used it's greyed out but still
- * answers the mouse (aria-disabled rather than disabled, which the browser makes ignore
- * the mouse), so hovering can still say what it does and why it's unavailable.
+ * A square button that's only an icon. When it can't be used it looks just the same, and
+ * hovering or pressing it says why (aria-disabled rather than disabled, which would grey it
+ * out and make the browser ignore the mouse).
  */
-export default function IconButton({ tip, label, onClick, disabled = false, variant = "", testId, children }: Props) {
+export default function IconButton({ tip, label, onClick, disabled = false, variant = "", testId, onUnavailable, style, children }: Props) {
   return (
     <button
       type="button"
@@ -27,8 +30,11 @@ export default function IconButton({ tip, label, onClick, disabled = false, vari
       data-tip={tip}
       aria-label={label}
       aria-disabled={disabled || undefined}
-      onClick={() => {
-        if (!disabled) onClick();
+      style={style}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (disabled) onUnavailable?.();
+        else onClick();
       }}
     >
       {children}
