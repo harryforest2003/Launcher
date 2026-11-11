@@ -361,6 +361,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   );
 
   const actionStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px" };
+  // The square buttons that are only an icon; what each does comes up on hover.
+  const iconStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 9 };
 
   const loaderLabel =
     instance.loader === "vanilla"
@@ -494,17 +496,25 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
-          <button className="sidebar-button" style={actionStyle} disabled={busy === "repair"} onClick={() => run("repair", () => window.instanceAPI.repair(instanceName))}>
-            <Hammer size={16} aria-hidden="true" />
-            {busy === "repair" ? "Repairing..." : "Repair"}
+          <button
+            className="sidebar-button"
+            aria-label="Repair"
+            data-tip={busy === "repair" ? "Repairing..." : "Repair: download anything this instance is missing, and fix broken files"}
+            aria-disabled={busy === "repair" || undefined}
+            style={iconStyle}
+            onClick={() => busy !== "repair" && run("repair", () => window.instanceAPI.repair(instanceName))}
+          >
+            <Hammer size={18} aria-hidden="true" />
           </button>
 
           <button
             className="sidebar-button"
-            data-tip="Back up this instance to your cloud folder"
-            style={actionStyle}
-            disabled={busy === "cloud"}
+            aria-label="Back up to cloud"
+            data-tip={busy === "cloud" ? "Backing up..." : "Back up this instance to your cloud folder"}
+            aria-disabled={busy === "cloud" || undefined}
+            style={iconStyle}
             onClick={() =>
+            busy !== "cloud" &&
             run("cloud", async () => {
               setProgress(null);
               const result = await window.instanceAPI.cloudExport(instanceName);
@@ -516,8 +526,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             })
             }
           >
-            <Cloud size={16} aria-hidden="true" />
-            {busy === "cloud" ? "Backing up..." : "Back up"}
+            <Cloud size={18} aria-hidden="true" />
           </button>
 
           {instance.running && (
@@ -544,7 +553,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             title="This instance's settings"
             aria-pressed={tab === "settings"}
             onClick={() => setTab("settings")}
-            style={{ ...actionStyle, padding: 9, background: tab === "settings" ? "#6d28d9" : undefined, borderColor: tab === "settings" ? "#c084fc" : undefined }}
+            style={{ ...iconStyle, background: tab === "settings" ? "#6d28d9" : undefined, borderColor: tab === "settings" ? "#c084fc" : undefined }}
           >
             <Settings size={18} aria-hidden="true" />
           </button>
