@@ -10,6 +10,7 @@ const modUpdates = require("./modUpdates.cjs");
 const modpackExport = require("./modpackExport.cjs");
 const modSearch = require("./modSearch.cjs");
 const modDependencies = require("./modDependencies.cjs");
+const { contentDetails } = require("./contentDetails.cjs");
 const account = require("./account.cjs");
 const modpack = require("./modpack.cjs");
 const importer = require("./importer.cjs");
@@ -195,6 +196,8 @@ function registerInstanceIpc() {
     });
 
     /* ---------------- updates ---------------- */
+
+    ipcMain.handle("instance:contentDetails", (_e, name) => contentDetails(instanceManager.instanceFolder(name)));
 
     ipcMain.handle("instance:checkUpdates", (_e, name) =>
         modUpdates.checkUpdates(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name))

@@ -13,7 +13,7 @@ const unzipper = require("unzipper");
 const cache = new Map();
 
 // What a jar we can't read, or a file that isn't a mod, is known to contain.
-const EMPTY = { ids: [], name: null, version: null, packages: [], mixinConfigs: [], depends: [], provides: [] };
+const EMPTY = { ids: [], name: null, version: null, packages: [], mixinConfigs: [], depends: [], provides: [], authors: [], icon: null };
 
 // Packages that belong to Minecraft, Java or a loader, never to a mod.
 const NOT_A_MOD = /^(net\/minecraft|com\/mojang|java|javax|jdk|sun|org\/lwjgl|org\/spongepowered|net\/fabricmc|org\/quiltmc|cpw\/mods|net\/neoforged\/fml|net\/minecraftforge\/fml|io\/netty|com\/google|org\/apache|it\/unimi|org\/slf4j|kotlin|org\/objectweb)\//;
@@ -46,13 +46,30 @@ function fromToml(text) {
     const ids = mods.map((table) => table.values.modId).filter(Boolean);
     const name = mods[0]?.values.displayName ?? null;
     const version = mods[0]?.values.version ?? null;
+    const authors = (mods[0]?.values.authors ?? tables[0]?.values.authors ?? "").split(/,\s*|\s+and\s+/).map((a) => a.trim()).filter(Boolean);
+    const icon = mods[0]?.values.logoFile ?? tables[0]?.values.logoFile ?? null;
     // Required: NeoForge says type="required", Forge says mandatory=true. Server-only ones don't count.
     const depends = tables
         .filter((table) => table.name.startsWith("dependencies"))
         .filter(({ values }) => (values.type ? /^required$/i.test(values.type) : values.mandatory === "true") && !/^server$/i.test(values.side ?? ""))
         .map(({ values }) => values.modId)
         .filter(Boolean);
-    return { ids, name, version: version && !version.includes("${") ? version : null, depends };
+    return { ids, name, version: version && !version.includes("${") ? version : null, depends, authors, icon };
+}
+
+/* People named in a fabric.mod.json / quilt.mod.json ("Alice", { name: "Bob" }, { Bob: "Owner" }). */
+function fabricAuthors(json) {
+    const list = json.quilt_loader ? Object.keys(json.quilt_loader.metadata?.contributors ?? {}) : [].concat(json.authors ?? []);
+    return list.map((author) => (typeof author === "string" ? author : author?.name)).filter(Boolean);
+}
+
+/* The path of a fabric.mod.json's icon, the largest if it lists several sizes. */
+function fabricIcon(json) {
+    const icon = json.quilt_loader ? json.quilt_loader.metadata?.icon : json.icon;
+    if (!icon) return null;
+    if (typeof icon === "string") return icon;
+    const sizes = Object.keys(icon).map(Number).filter((n) => n <= 256).sort((a, b) => b - a);
+    return icon[String(sizes[0] ?? Object.keys(icon)[0])] ?? null;
 }
 
 const parseLoose = (text) => JSON.parse(text.replace(/^\uFEFF/, "").replace(/[\u0000-\u001f]+/g, " "));
@@ -96,7 +113,7 @@ async function nestedIds(entries, paths) {
 async function readJar(file) {
     const directory = await unzipper.Open.file(file);
     const entries = directory.files;
-    const info = { ...EMPTY, ids: [], packages: [], mixinConfigs: [], depends: [], provides: [] };
+    const info = { ...EMPTY, ids: [], packages: [], mixinConfigs: [], depends: [], provides: [], authors: [] };
     const nested = [];
 
     const fabric = (await readEntry(entries, "fabric.mod.json")) ?? (await readEntry(entries, "quilt.mod.json"));
@@ -115,6 +132,8 @@ async function readJar(file) {
                 if (id) info.ids.push(id);
             }
             info.depends.push(...fabricDepends(json));
+            info.authors.push(...fabricAuthors(json));
+            info.icon = fabricIcon(json);
             nested.push(...[].concat(json.jars ?? meta.jars ?? []).map((jar) => (typeof jar === "string" ? jar : jar?.file)).filter(Boolean));
         } catch {
             // A broken fabric.mod.json: the jar is still known by its file name.
@@ -129,6 +148,8 @@ async function readJar(file) {
             info.name ??= found.name;
             info.version ??= found.version;
             info.depends.push(...found.depends);
+            if (!info.authors.length) info.authors.push(...found.authors);
+            info.icon ??= found.icon;
         }
     }
     // Forge and NeoForge bundle jars here.
@@ -148,6 +169,7 @@ async function readJar(file) {
     info.packages = [...packages].sort((a, b) => a.length - b.length).filter((dir, i, all) => !all.slice(0, i).some((root) => dir.startsWith(root + "/"))).slice(0, 40);
     info.ids = [...new Set(info.ids.filter(Boolean))];
     info.depends = [...new Set(info.depends.filter((id) => id && !info.ids.includes(id)))];
+    info.authors = [...new Set(info.authors)].slice(0, 6);
     info.mixinConfigs = [...new Set(info.mixinConfigs.filter(Boolean))];
     return info;
 }

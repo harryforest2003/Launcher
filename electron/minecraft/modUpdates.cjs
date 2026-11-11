@@ -70,6 +70,16 @@ async function identify(folder) {
     return items;
 }
 
+/* Several Modrinth projects or teams by ID, 80 to a request. */
+async function modrinthMany(kind, ids) {
+    const out = [];
+    for (let i = 0; i < ids.length; i += 80) {
+        const chunk = ids.slice(i, i + 80);
+        out.push(...((await fetchJson(`https://api.modrinth.com/v2/${kind}?ids=${encodeURIComponent(JSON.stringify(chunk))}`).catch(() => [])) ?? []));
+    }
+    return out;
+}
+
 // The latest check for each instance, which updates are then installed from, so the
 // page never hands over a download address.
 const lastCheck = new Map();
@@ -173,20 +183,25 @@ async function checkUpdates(name, instance, folder) {
 
     for (const item of items) status[keyOf(item)] ??= { state: "unknown" };
 
-    // Names and icons for files the launcher didn't install, from their Modrinth page.
-    const needInfo = onModrinth.filter((item) => item.source === "modrinth" && (looksNameless(item) || !item.iconUrl));
-    const ids = [...new Set(needInfo.map((item) => item.projectId))];
-    const projects = [];
-    for (let i = 0; i < ids.length; i += 80) {
-        const chunk = ids.slice(i, i + 80);
-        projects.push(...(await fetchJson(`https://api.modrinth.com/v2/projects?ids=${encodeURIComponent(JSON.stringify(chunk))}`).catch(() => []) ?? []));
+    // From each file's Modrinth page: who publishes it, and a name and icon for files the
+    // launcher didn't install.
+    const fromModrinth = onModrinth.filter((item) => item.source === "modrinth");
+    const projects = await modrinthMany("projects", [...new Set(fromModrinth.map((item) => item.projectId))]);
+    const teams = await modrinthMany("teams", [...new Set(projects.map((project) => project.team).filter(Boolean))]);
+    // Modrinth lists the original author or owner first.
+    const ownerOf = new Map();
+    for (const members of teams) {
+        const owner = (members ?? []).find((member) => member.role === "Owner") ?? members?.[0];
+        if (owner?.team_id && owner.user?.username) ownerOf.set(owner.team_id, owner.user.username);
     }
-    for (const item of needInfo) {
+    for (const item of fromModrinth) {
         const project = projects.find((p) => p.id === item.projectId);
         if (!project) continue;
         const entry = status[keyOf(item)];
         if (looksNameless(item)) entry.name = project.title;
         if (!item.iconUrl && project.icon_url) entry.iconUrl = project.icon_url;
+        const author = ownerOf.get(project.team);
+        if (author) entry.author = author;
         const update = pending.find((u) => u.key === keyOf(item));
         if (update) Object.assign(update, { name: entry.name ?? update.name, iconUrl: update.iconUrl ?? entry.iconUrl ?? null });
     }

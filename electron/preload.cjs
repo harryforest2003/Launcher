@@ -154,6 +154,7 @@ contextBridge.exposeInMainWorld("instanceAPI", {
     pickInstanceJava: (name) => ipcRenderer.invoke("instance:pickJava", name),
     javaInfo: (name) => ipcRenderer.invoke("instance:javaInfo", name),
     exportModpack: (name, options) => ipcRenderer.invoke("instance:exportModpack", name, options),
+    contentDetails: (name) => ipcRenderer.invoke("instance:contentDetails", name),
     checkUpdates: (name) => ipcRenderer.invoke("instance:checkUpdates", name),
     applyUpdates: (name, keys) => ipcRenderer.invoke("instance:applyUpdates", name, keys),
     log: (name) => ipcRenderer.invoke("instance:log", name),

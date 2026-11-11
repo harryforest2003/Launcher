@@ -65,6 +65,8 @@ declare global {
         latest?: string;
         name?: string;
         iconUrl?: string;
+        /** Who publishes it on Modrinth. */
+        author?: string;
     };
 
     type ModUpdate = {
@@ -535,6 +537,8 @@ declare global {
             /** Asks where to save it, then writes a Modrinth modpack (.mrpack). Null if cancelled. */
             exportModpack(name: string, options: { worlds?: boolean; options?: boolean }): Promise<{ file: string; bytes: number; linked: number; included: string[]; configFiles: number } | null>;
             /** Newer builds of its mods, resource packs and shaders, for its version and loader. */
+            /** Each item's own icon (as a small data URL) and the authors it names, keyed like "mod//file.jar". */
+            contentDetails(name: string): Promise<Record<string, { icon: string | null; authors: string[] }>>;
             /** Every mod, resource pack and shader checked for a newer build; status is keyed "mod/file.jar". */
             checkUpdates(name: string): Promise<{ checked: number; identified: number; updates: ModUpdate[]; status: Record<string, UpdateStatus> }>;
             /** Installs updates from the latest check, by their keys. */

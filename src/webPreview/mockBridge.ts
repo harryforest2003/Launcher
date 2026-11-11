@@ -662,6 +662,7 @@ const instanceBridge = {
   pickInstanceJava: async () => null,
   javaInfo: async () => ({ component: "java-runtime-delta", majorVersion: 21, downloaded: false }),
   javaRuntimes: async () => [],
+  contentDetails: async () => ({}),
   checkUpdates: async () => ({ checked: 0, identified: 0, updates: [], status: {} }),
   applyUpdates: async () => ({ updated: [], failed: [], dependencies: [], missingDependencies: [], disabledDependencies: [] }),
   exportModpack: async () => {

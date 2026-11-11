@@ -2,9 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import GitHubInstall from "../components/GitHubInstall";
 import InstanceLog from "../components/InstanceLog";
 import { dependencyNote } from "../utils/dependencyNote";
-import { ItemUpdateStatus, UpdatesControls, UpdatesMessages } from "../components/UpdatesBar";
-import Toggle from "../components/Toggle";
-import { BinIcon } from "../components/Icons";
+import InstanceContentList from "../components/InstanceContentList";
 import { useContentUpdates } from "../components/useContentUpdates";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
@@ -334,12 +332,11 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
   const allItems = CONTENT_TABS.flatMap(({ type }) => content[type]);
   const installedIds = new Set(allItems.map((m) => m.projectId).filter(Boolean));
-  const items = content[contentType];
   const currentTab = CONTENT_TABS.find(({ type }) => type === contentType) ?? CONTENT_TABS[0];
   const hasShaderMod = content.mod.some((m) => /iris|optifine/i.test(`${m.name} ${m.fileName}`));
 
-  // The Mods / Resource Packs / ... tabs, with anything else for that row on the right.
-  const contentTabs = (extra?: React.ReactNode) => (
+  // What kind of content Add Content searches for.
+  const contentTabs = () => (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
       {CONTENT_TABS.map(({ type, label }) => (
         <button
@@ -355,7 +352,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           {label} ({content[type].length})
         </button>
       ))}
-      {extra}
     </div>
   );
 
@@ -486,17 +482,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         <button
           className="sidebar-button"
           onClick={() => setTab("mods")}
-          style={{ opacity: tab === "mods" ? 1 : 0.6 }}
+          style={{ opacity: tab === "mods" || tab === "browse" ? 1 : 0.6 }}
         >
           Content ({allItems.length})
-        </button>
-
-        <button
-          className="sidebar-button"
-          onClick={() => setTab("browse")}
-          style={{ opacity: tab === "browse" ? 1 : 0.6 }}
-        >
-          Add Content
         </button>
 
         <button
@@ -563,110 +551,18 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
       {/* ---------------- CONTENT ---------------- */}
       {tab === "mods" && (
-        <>
-          {contentTabs(<UpdatesControls updates={updates} />)}
-          <UpdatesMessages updates={updates} />
-
-          {items.length === 0 ? (
-            <div style={{ ...card, color: "#9ca3af" }}>
-              No {currentTab.label.toLowerCase()} yet. Use <b>Add Content</b> to find
-              ones that work on Minecraft {instance.version}.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {items.map((item) => {
-                const key = itemKey(item);
-                const status = updates.statusOf(item);
-                const iconUrl = item.iconUrl ?? status?.iconUrl ?? null;
-
-                return (
-                  <div
-                    key={key}
-                    data-testid="content-item"
-                    style={{
-                      ...card,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 14,
-                      opacity: item.enabled ? 1 : 0.55,
-                      // Turned off: the whole item goes grey.
-                      filter: item.enabled ? undefined : "grayscale(1)",
-                      borderColor: item.enabled ? "#6d28d9" : "#3f3f46",
-                    }}
-                  >
-                    {iconUrl && (
-                      <img
-                        src={iconUrl}
-                        alt=""
-                        style={{
-                          width: 48,
-                          height: 48,
-                          borderRadius: 8,
-                          objectFit: "cover",
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#c084fc", fontWeight: 600 }}>{status?.name ?? item.name}</div>
-
-                      <div style={{ fontSize: 12, color: "#888", wordBreak: "break-all" }}>
-                        {item.fileName}
-                      </div>
-
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-                        {item.kind === "folder" ? "Folder" : formatBytes(item.size)}
-                        {item.type === "datapack"
-                          ? ` • ${item.world ? `World: ${item.world}` : "Not in a world yet"}`
-                          : ""}
-                        {item.versionNumber || status?.current ? ` • ${item.versionNumber ?? status?.current}` : ""}
-                        {status?.state === "update" && (
-                          <span style={{ color: "#86efac" }}> → {status.latest}</span>
-                        )}
-                        {item.source ? ` • ${item.source}` : ""}
-                        {item.enabled ? "" : " • disabled"}
-                      </div>
-                    </div>
-
-                    {item.type === "datapack" && !item.world && content.worlds.length > 0 && (
-                      <button
-                        className="sidebar-button"
-                        disabled={busy === key}
-                        onClick={() => addToWorld(item, targetWorld || content.worlds[0])}
-                        style={{ padding: "6px 10px", fontSize: 12 }}
-                      >
-                        Add to {targetWorld || content.worlds[0]}
-                      </button>
-                    )}
-
-                    <ItemUpdateStatus item={item} updates={updates} />
-
-                    {item.kind === "file" && (
-                      <Toggle
-                        on={item.enabled}
-                        disabled={busy === key}
-                        onChange={() => toggleItem(item)}
-                        label={`${item.enabled ? "Turn off" : "Turn on"} ${status?.name ?? item.name}`}
-                      />
-                    )}
-
-                    <button
-                      data-testid="item-delete"
-                      className="bin-button"
-                      title={`Delete ${status?.name ?? item.name}`}
-                      aria-label={`Delete ${status?.name ?? item.name}`}
-                      disabled={busy === key}
-                      onClick={() => deleteItem(item)}
-                    >
-                      <BinIcon />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
+        <InstanceContentList
+          instanceName={instanceName}
+          mcVersion={instance.version}
+          content={content}
+          updates={updates}
+          busyKey={busy}
+          targetWorld={targetWorld}
+          onToggle={toggleItem}
+          onDelete={deleteItem}
+          onAddToWorld={addToWorld}
+          onAddContent={() => setTab("browse")}
+        />
       )}
 
       {tab === "worlds" && <InstanceWorlds instanceName={instanceName} />}
@@ -901,6 +797,13 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {/* ---------------- BROWSE ---------------- */}
       {tab === "browse" && (
         <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+            <button className="sidebar-button" data-testid="back-to-content" onClick={() => setTab("mods")} style={{ padding: "6px 12px", fontSize: 13 }}>
+              ← Back to Content
+            </button>
+            <span style={{ color: "#d8b4fe", fontSize: 15 }}>Add Content</span>
+          </div>
+
           {contentTabs()}
 
           <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 10 }}>
