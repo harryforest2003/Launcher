@@ -85,13 +85,15 @@ declare global {
 
     /** One thing Optimise looked at: "fix" has a change that should help, "tip" is advice, "ok" needs nothing. */
     type OptimiseItem = {
-        id: "mods" | "shaders" | "java" | "graphics" | "heavy" | "packs";
+        id: "mods" | "fps" | "shaders" | "java" | "graphics" | "heavy" | "packs" | "power";
         state: "fix" | "tip" | "ok";
         title: string;
         detail: string;
         list?: { label: string; text: string }[];
         /** The button that fixes it, when there's something to do. */
         action?: string;
+        /** Separate fixes, each with its own button (the frame rate limiters): applied as "fps:<id>". */
+        fixes?: { id: string; label: string; text: string; action: string; recommended: boolean }[];
     };
 
     type OptimiseReport = {
@@ -631,7 +633,7 @@ declare global {
             undoUpdate(name: string): Promise<{ restored: { name: string; version: string }[] }>;
             /** What's slowing an instance down. */
             optimiseCheck(name: string): Promise<OptimiseReport>;
-            /** Applies the chosen fixes ("mods", "shaders", "java", "graphics"). */
+            /** Applies the chosen fixes ("mods", "fps" or "fps:<id>", "shaders", "java", "graphics"). */
             optimiseApply(name: string, ids: string[]): Promise<{ done: string[]; skipped: { name: string; reason: string }[] }>;
             /** Puts back what Optimise changed. */
             optimiseUndo(name: string): Promise<{ restored: string[] }>;

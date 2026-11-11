@@ -234,6 +234,89 @@ function graphicsChanges(values, hw) {
     return changes;
 }
 
+/* ---------------- frame rate limits ---------------- */
+
+const readJson = (file) => {
+    try {
+        return JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+        return null;
+    }
+};
+
+// Smart FPS Booster's profiles, and what each does to the frame rate (from its own descriptions).
+const SMART_FPS_PROFILES = {
+    BATTERY_SAVER: "Battery Saver profile, which aims for a steady 30 FPS",
+    QUALITY: "Quality profile, which favours looks over frame rate",
+    BALANCED: "Balanced profile, which trades frame rate for looks",
+};
+
+/*
+ * Everything holding the frame rate down: Minecraft's own limits and the mods that set
+ * one. Each can be turned off on its own: [{ id, label, text, action, recommended }].
+ * "recommended" ones go with Fix all; the rest (like Dynamic FPS, which only slows the
+ * game while it's in the background) are there to turn off by choice.
+ */
+function frameRateLimits(folder, enabledMods, values) {
+    const limits = [];
+    const has = (id) => enabledMods.find((mod) => mod.ids.includes(id));
+    const minutes = (ms) => Math.max(1, Math.round(ms / 60000));
+
+    if (values && Number(values.maxFps) < 260) {
+        limits.push({ id: "maxFps", label: "Minecraft's Max Framerate", text: `${values.maxFps} FPS`, action: "Set to Unlimited", recommended: true });
+    }
+    if (values?.enableVsync === "true") {
+        limits.push({ id: "vsync", label: "VSync", text: "holds the frame rate to your screen's refresh rate (60 on a MacBook)", action: "Turn off", recommended: true });
+    }
+
+    const smart = has("smartfpsbooster") && readJson(path.join(gameDir(folder), "config", "smartfpsbooster.json"));
+    if (smart && smart.profile && smart.profile !== "MAX_FPS") {
+        const text = smart.profile === "CUSTOM" ? `Custom profile, aiming for ${smart.customTargetFps ?? "?"} FPS` : SMART_FPS_PROFILES[smart.profile] ?? `${smart.profile} profile`;
+        limits.push({ id: "smartfps", label: "Smart FPS Booster", text, action: "Switch to Max FPS", recommended: true });
+    }
+
+    const reducer = has("fpsreducer");
+    if (reducer) {
+        const config = readJson(path.join(gameDir(folder), "config", "fpsreducer.json")) ?? {};
+        if (config.enableFpsReducer !== false) {
+            const parts = [`drops to ${config.noActFps ?? 30} FPS after ${minutes(config.noActTime ?? 60000)} minute${minutes(config.noActTime ?? 60000) === 1 ? "" : "s"} without input`];
+            if (config.idleFps) parts.push(`to ${config.idleFps} after ${minutes((config.waitingTime ?? 600) * 1000)}`);
+            if (config.reducingInGameMenu !== false) parts.push("and in menus");
+            limits.push({ id: "fpsreducer", label: "FPS Reducer", text: parts.join(", "), action: "Turn off", recommended: Boolean(has("dynamic_fps")), file: reducer.fileName });
+        }
+    }
+
+    const afk = unquote(values?.inactivityFpsLimit);
+    if (afk === "afk") {
+        limits.push({ id: "afk", label: "Minecraft's inactivity limit", text: "drops the frame rate when you've not touched anything for a minute", action: "Only when minimised", recommended: false });
+    }
+
+    const dynamic = has("dynamic_fps");
+    if (dynamic) {
+        limits.push({ id: "dynamicfps", label: "Dynamic FPS", text: "slows the game only while it's in the background or hidden, which keeps your computer cool", action: "Turn off", recommended: false, file: dynamic.fileName });
+    }
+    return limits;
+}
+
+/* On a Mac: Low Power Mode, or running on battery, both slow games down. -> [text] */
+async function powerIssues() {
+    if (process.platform !== "darwin") return null;
+    const issues = [];
+    try {
+        const { stdout } = await run("pmset", ["-g"], { timeout: 10000 });
+        if (/^\s*lowpowermode\s+1\b/m.test(stdout)) issues.push("Low Power Mode is on: turn it off in System Settings → Battery while you play.");
+    } catch {
+        // Unknown.
+    }
+    try {
+        const { stdout } = await run("pmset", ["-g", "batt"], { timeout: 10000 });
+        if (/'Battery Power'/.test(stdout)) issues.push("Your Mac is running on battery: plug it in, as it slows its graphics down on battery.");
+    } catch {
+        // Unknown.
+    }
+    return issues;
+}
+
 /* ---------------- shaders ---------------- */
 
 /* Shaders that are on through Iris (or Oculus, its NeoForge/Forge port): { mod, pack, file } or null. */
@@ -340,6 +423,24 @@ async function check(instance, folder, { running = false, globalJvmArgs = "" } =
         );
     }
 
+    // Frame rate limits, each with its own button.
+    const options = readOptions(folder);
+    const limits = frameRateLimits(folder, enabledMods, options?.values);
+    const recommended = limits.filter((limit) => limit.recommended);
+    items.push(
+        limits.length
+            ? {
+                  id: "fps",
+                  state: recommended.length ? "fix" : "tip",
+                  title: "Frame rate limits",
+                  detail: recommended.length
+                      ? `${recommended.length === 1 ? "One thing is" : `${recommended.length} things are`} holding your frame rate down. Turn off any of them here.`
+                      : "These only slow the game in the background or when you're away; turn them off if you'd rather they didn't.",
+                  fixes: limits.map(({ id, label, text, action, recommended: on }) => ({ id, label, text, action, recommended: on })),
+              }
+            : { id: "fps", state: "ok", title: "Frame rate limits", detail: "Nothing is holding the frame rate down." }
+    );
+
     // Shaders.
     const shaders = shadersOn(folder, enabledMods);
     items.push(
@@ -379,7 +480,6 @@ async function check(instance, folder, { running = false, globalJvmArgs = "" } =
     );
 
     // Graphics settings.
-    const options = readOptions(folder);
     const graphics = options ? graphicsChanges(options.values, hw) : [];
     items.push(
         !options
@@ -425,6 +525,17 @@ async function check(instance, folder, { running = false, globalJvmArgs = "" } =
             : { id: "packs", state: "ok", title: "Resource packs", detail: packs.length ? `${packs.length} small pack${packs.length === 1 ? "" : "s"} on.` : "None on." }
     );
 
+    // The Mac's power state: advice only, as it's a system setting.
+    const power = await powerIssues();
+    if (power) {
+        items.push(
+            power.length
+                ? { id: "power", state: "tip", title: "Your Mac", detail: "Two settings that slow games down:", list: power.map((text, index) => ({ label: index === 0 && /Low Power/.test(text) ? "Low Power Mode" : "Battery", text })) }
+                : { id: "power", state: "ok", title: "Your Mac", detail: "Plugged in, with Low Power Mode off." }
+        );
+        if (power.length === 1) items[items.length - 1].detail = "One setting that slows games down:";
+    }
+
     return { hardware: hw, running, items, undo: lastOptimise(folder) };
 }
 
@@ -451,7 +562,7 @@ function lastOptimise(folder) {
  */
 async function apply(instance, folder, ids, { globalJvmArgs = "", updateInstance, onProgress } = {}) {
     const hw = await hardware();
-    const backup = readBackup(folder) ?? { time: null, options: {}, iris: null, java: {}, modsAdded: [] };
+    const backup = { options: {}, iris: null, java: {}, modsAdded: [], modsDisabled: [], smartFps: null, ...(readBackup(folder) ?? {}), time: null };
     const done = [];
     const skipped = [];
     const save = () => {
@@ -467,6 +578,47 @@ async function apply(instance, folder, ids, { globalJvmArgs = "", updateInstance
             writeOptions(options, Object.fromEntries(changes.map((change) => [change.key, change.value])));
             save();
             done.push(`Changed ${changes.length} graphics setting${changes.length === 1 ? "" : "s"}.`);
+        }
+    }
+
+    const wantedLimits = ids.filter((id) => id === "fps" || id.startsWith("fps:"));
+    if (wantedLimits.length) {
+        const mods = await modsIn(instanceMods.modsDir(folder));
+        const options = readOptions(folder);
+        const chosen = frameRateLimits(folder, mods.filter((mod) => mod.enabled), options?.values).filter((limit) =>
+            wantedLimits.includes(`fps:${limit.id}`) || (wantedLimits.includes("fps") && limit.recommended)
+        );
+        const optionChanges = {};
+        for (const limit of chosen) {
+            if (limit.id === "maxFps") optionChanges.maxFps = "260";
+            if (limit.id === "vsync") optionChanges.enableVsync = "false";
+            if (limit.id === "afk") optionChanges.inactivityFpsLimit = '"minimized"';
+            if (limit.id === "smartfps") {
+                const file = path.join(gameDir(folder), "config", "smartfpsbooster.json");
+                const config = readJson(file);
+                backup.smartFps ??= config.profile;
+                fs.writeFileSync(file, JSON.stringify({ ...config, profile: "MAX_FPS" }, null, 2));
+            }
+            if (limit.file) {
+                instanceMods.setEnabled(folder, { type: "mod", fileName: limit.file }, false);
+                backup.modsDisabled.push(limit.file);
+            }
+        }
+        if (Object.keys(optionChanges).length && options) {
+            for (const key of Object.keys(optionChanges)) if (!(key in backup.options)) backup.options[key] = options.values[key];
+            writeOptions(options, optionChanges);
+        }
+        const said = {
+            maxFps: "Max Framerate is now Unlimited",
+            vsync: "VSync is off",
+            smartfps: "Smart FPS Booster is on its Max FPS profile",
+            fpsreducer: "FPS Reducer is turned off",
+            afk: "Minecraft only limits the frame rate when it's minimised",
+            dynamicfps: "Dynamic FPS is turned off",
+        };
+        if (chosen.length) {
+            save();
+            done.push(`${chosen.map((limit) => said[limit.id] ?? limit.label).join("; ")}.`);
         }
     }
 
@@ -598,7 +750,7 @@ function undo(folder, { updateInstance }) {
         const options = readOptions(folder);
         if (options) {
             writeOptions(options, backup.options);
-            restored.push(`${keys.length} graphics setting${keys.length === 1 ? "" : "s"}`);
+            restored.push(`${keys.length} game setting${keys.length === 1 ? "" : "s"}`);
         }
     }
 
@@ -617,6 +769,24 @@ function undo(folder, { updateInstance }) {
         updateInstance(Object.fromEntries(Object.entries(backup.java).map(([key, value]) => [key, key === "jvmArgs" ? value ?? "" : value])));
         restored.push("Java settings");
     }
+
+    if (backup.smartFps) {
+        const file = path.join(gameDir(folder), "config", "smartfpsbooster.json");
+        const config = readJson(file);
+        if (config) {
+            fs.writeFileSync(file, JSON.stringify({ ...config, profile: backup.smartFps }, null, 2));
+            restored.push("Smart FPS Booster's profile");
+        }
+    }
+
+    const turnedBackOn = [];
+    for (const fileName of backup.modsDisabled ?? []) {
+        if (fs.existsSync(path.join(instanceMods.modsDir(folder), `${fileName}.disabled`))) {
+            instanceMods.setEnabled(folder, { type: "mod", fileName }, true);
+            turnedBackOn.push(fileName);
+        }
+    }
+    if (turnedBackOn.length) restored.push(`turned ${turnedBackOn.length} mod${turnedBackOn.length === 1 ? "" : "s"} back on`);
 
     const removed = [];
     for (const fileName of backup.modsAdded ?? []) {

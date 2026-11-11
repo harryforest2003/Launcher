@@ -683,6 +683,19 @@ const instanceBridge = {
         list: [{ label: "retiNO", text: "Draws at normal resolution on the Retina screen instead of four times the pixels: slightly softer, much faster" }],
         action: "Add retiNO",
       },
+      {
+        id: "fps",
+        state: "fix",
+        title: "Frame rate limits",
+        detail: "3 things are holding your frame rate down. Turn off any of them here.",
+        fixes: [
+          { id: "maxFps", label: "Minecraft's Max Framerate", text: "75 FPS", action: "Set to Unlimited", recommended: true },
+          { id: "smartfps", label: "Smart FPS Booster", text: "Battery Saver profile, which aims for a steady 30 FPS", action: "Switch to Max FPS", recommended: true },
+          { id: "fpsreducer", label: "FPS Reducer", text: "drops to 30 FPS after 1 minute without input, to 10 after 10, and in menus", action: "Turn off", recommended: true },
+          { id: "afk", label: "Minecraft's inactivity limit", text: "drops the frame rate when you've not touched anything for a minute", action: "Only when minimised", recommended: false },
+          { id: "dynamicfps", label: "Dynamic FPS", text: "slows the game only while it's in the background or hidden, which keeps your computer cool", action: "Turn off", recommended: false },
+        ],
+      },
       { id: "shaders", state: "ok", title: "Shaders", detail: "Shaders are off." },
       {
         id: "java",

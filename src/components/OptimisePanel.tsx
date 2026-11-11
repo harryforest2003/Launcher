@@ -98,7 +98,7 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
     setBusy(null);
   }
 
-  const fixable = report?.items.filter((item) => item.state === "fix" && item.action) ?? [];
+  const fixable = report?.items.filter((item) => item.state === "fix" && (item.action || item.fixes?.some((f) => f.recommended))) ?? [];
   const hw = report?.hardware;
   const blocked = Boolean(busy) || Boolean(report?.running);
 
@@ -173,6 +173,29 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, color: "#ede9fe" }}>{item.title}</div>
                     <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{item.detail}</div>
+                    {item.fixes && item.fixes.length > 0 && (
+                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                        {item.fixes.map((one) => {
+                          const id = `${item.id}:${one.id}`;
+                          return (
+                            <div key={one.id} data-testid={`optimise-limit-${one.id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, background: "#17141f", border: "1px solid #231d31" }}>
+                              <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "#d4d4d8" }}>
+                                <span style={{ color: "#c4b5fd", fontWeight: 600 }}>{one.label}</span>: {one.text}
+                              </div>
+                              <button
+                                className="sidebar-button"
+                                data-testid={`optimise-fix-${id}`}
+                                disabled={blocked}
+                                onClick={() => fix([id], id)}
+                                style={{ padding: "5px 10px", fontSize: 12, whiteSpace: "nowrap", background: one.recommended ? "#7c3aed" : undefined }}
+                              >
+                                {busy === id ? "Working..." : one.action}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     {item.list && item.list.length > 0 && (
                       <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none" }}>
                         {item.list.map((entry) => (

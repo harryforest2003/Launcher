@@ -262,7 +262,7 @@ function registerInstanceIpc() {
 
     ipcMain.handle("instance:optimiseApply", async (event, name, ids) => {
         notWhileRunning(name);
-        const chosen = (Array.isArray(ids) ? ids : []).map(String).filter((id) => ["mods", "shaders", "java", "graphics"].includes(id));
+        const chosen = (Array.isArray(ids) ? ids : []).map(String).filter((id) => ["mods", "fps", "shaders", "java", "graphics"].includes(id) || /^fps:\w+$/.test(id));
         return optimise.apply(instanceManager.getInstance(name), instanceManager.instanceFolder(name), chosen, optimiseOptions(event, name));
     });
 
