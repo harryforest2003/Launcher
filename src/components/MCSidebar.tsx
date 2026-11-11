@@ -1,4 +1,5 @@
 import { useContext } from "react";
+import AccountSwitcher from "./AccountSwitcher";
 import { SkinBuilderNavContext } from "../skinBuilder/navContext";
 
 type Props = {
@@ -130,6 +131,10 @@ function MCSidebar({
         >
           Settings
         </button>
+      </div>
+
+      <div style={{ position: "absolute", bottom: "78px", left: "20px", width: "260px" }}>
+        <AccountSwitcher compact />
       </div>
 
       <button

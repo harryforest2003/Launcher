@@ -360,11 +360,7 @@ function registerInstanceIpc() {
                 source,
                 projectId,
                 iconUrl,
-            },
-            (percent) =>
-                send(event, "instance:modProgress", {
-                    name, projectId, percent,
-                })
+            }
         );
 
         /*
@@ -822,9 +818,27 @@ function registerInstanceIpc() {
     ipcMain.handle("skins:useSaved", (_e, { id, slim }) => skins.useSaved(id, slim));
     ipcMain.handle("skins:deleteSaved", (_e, id) => skins.deleteSaved(id));
 
+    // Pages showing who is signed in hear when that changes.
+    const accountsChanged = () => broadcast("account:changed", account.listAccounts());
+
     ipcMain.handle("account:clear", () => {
         account.clearAccount();
+        accountsChanged();
         return null;
+    });
+
+    ipcMain.handle("account:list", () => account.listAccounts());
+
+    ipcMain.handle("account:switch", (_e, uuid) => {
+        account.switchAccount(String(uuid));
+        accountsChanged();
+        return account.listAccounts();
+    });
+
+    ipcMain.handle("account:remove", (_e, uuid) => {
+        account.removeAccount(String(uuid));
+        accountsChanged();
+        return account.listAccounts();
     });
 }
 

@@ -135,18 +135,20 @@ contextBridge.exposeInMainWorld("instanceAPI", {
     // ----- account -----
     getAccount: () => ipcRenderer.invoke("account:get"),
     clearAccount: () => ipcRenderer.invoke("account:clear"),
+    listAccounts: () => ipcRenderer.invoke("account:list"),
+    switchAccount: (uuid) => ipcRenderer.invoke("account:switch", uuid),
+    removeAccount: (uuid) => ipcRenderer.invoke("account:remove", uuid),
+    onAccountsChanged: (cb) => {
+        const h = (_e, list) => cb(list);
+        ipcRenderer.on("account:changed", h);
+        return () => ipcRenderer.removeListener("account:changed", h);
+    },
 
     // ----- events (each returns an unsubscribe function) -----
     onProgress: (cb) => {
         const h = (_e, d) => cb(d);
         ipcRenderer.on("instance:progress", h);
         return () => ipcRenderer.removeListener("instance:progress", h);
-    },
-
-    onModProgress: (cb) => {
-        const h = (_e, d) => cb(d);
-        ipcRenderer.on("instance:modProgress", h);
-        return () => ipcRenderer.removeListener("instance:modProgress", h);
     },
 
     pickInstanceJava: (name) => ipcRenderer.invoke("instance:pickJava", name),

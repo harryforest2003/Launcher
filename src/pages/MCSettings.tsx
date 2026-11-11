@@ -1,5 +1,6 @@
 import logo from "../assets/logo.png";
 import { useCallback, useEffect, useState } from "react";
+import AccountSwitcher from "../components/AccountSwitcher";
 import Sidebar from "../components/MCSidebar";
 import StarterModsSettings from "../components/StarterModsSettings";
 
@@ -33,7 +34,9 @@ function MCSettings({
 }: Props) {
   const [settings, setSettings] = useState<LauncherSettings | null>(null);
   const [cloudFolders, setCloudFolders] = useState<CloudFolder[]>([]);
-  const [account, setAccount] = useState<{ name: string; uuid: string } | null>(null);
+  const [accounts, setAccounts] = useState<MinecraftAccount[]>([]);
+
+  useEffect(() => window.instanceAPI.onAccountsChanged(setAccounts), []);
   const [javaRuntimes, setJavaRuntimes] = useState<{ majorVersion: number; component: string }[]>([]);
 
   useEffect(() => {
@@ -49,12 +52,12 @@ function MCSettings({
       const [s, folders, acct] = await Promise.all([
         window.instanceAPI.getSettings(),
         window.instanceAPI.cloudDetect(),
-        window.instanceAPI.getAccount(),
+        window.instanceAPI.listAccounts(),
       ]);
 
       setSettings(s);
       setCloudFolders(folders);
-      setAccount(acct);
+      setAccounts(acct);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -341,30 +344,51 @@ function MCSettings({
               <div style={card}>
                 <h2 style={{ color: "#d8b4fe", marginBottom: 10 }}>Account</h2>
 
-                {account ? (
-                  <>
-                    <p style={{ color: "#86efac", marginBottom: 14 }}>
-                      Signed in as {account.name}
-                    </p>
+                <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 12 }}>
+                  The game launches as the account in use. Switch quickly from the bottom of the
+                  sidebar. Bedrock uses these same Microsoft accounts.
+                </p>
 
-                    <button
-                      className="sidebar-button"
-                      style={{ background: "#7f1d1d" }}
-                      onClick={async () => {
-                        await window.instanceAPI.clearAccount();
-                        await load();
-                        setNotice("Signed out.");
-                      }}
-                    >
-                      Sign out
-                    </button>
-                  </>
-                ) : (
-                  <p style={{ color: "#fcd34d" }}>
-                    Not signed in — instances launch in offline mode. Sign in
-                    from the Minecraft home screen.
+                {accounts.length === 0 ? (
+                  <p style={{ color: "#fcd34d", marginBottom: 12 }}>
+                    Not signed in, so instances launch in offline mode.
                   </p>
+                ) : (
+                  <div data-testid="accounts" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                    {accounts.map((entry) => (
+                      <div key={entry.uuid} data-testid="account-row" style={{ display: "flex", gap: 10, alignItems: "center", background: "#1b1b1b", borderRadius: 10, padding: "8px 10px" }}>
+                        <span style={{ flex: 1, color: entry.active ? "#86efac" : "#e4e4e7" }}>
+                          {entry.name}
+                          {entry.active && <span style={{ color: "#6b7280", fontSize: 12 }}> · in use</span>}
+                        </span>
+                        {!entry.active && (
+                          <button
+                            className="sidebar-button"
+                            style={{ padding: "4px 12px", fontSize: 12 }}
+                            onClick={async () => {
+                              setAccounts(await window.instanceAPI.switchAccount(entry.uuid));
+                              setNotice(`Now playing as ${entry.name}.`);
+                            }}
+                          >
+                            Use
+                          </button>
+                        )}
+                        <button
+                          className="sidebar-button"
+                          style={{ padding: "4px 12px", fontSize: 12, background: "#7f1d1d" }}
+                          onClick={async () => {
+                            setAccounts(await window.instanceAPI.removeAccount(entry.uuid));
+                            setNotice(`Signed ${entry.name} out.`);
+                          }}
+                        >
+                          Sign out
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
+
+                <AccountSwitcher />
               </div>
             </div>
           )}

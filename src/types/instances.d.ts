@@ -23,6 +23,8 @@ declare global {
         folder?: string;
     };
 
+    type MinecraftAccount = { name: string; uuid: string; skin: string | null; savedAt: string; active: boolean };
+
     type InstanceWorld = {
         /** The folder in saves/, which is how a world is named to the launcher. */
         folder: string;
@@ -498,11 +500,14 @@ declare global {
             } | null>;
 
             clearAccount(): Promise<null>;
+            /** Every signed-in account, without tokens; one is active. */
+            listAccounts(): Promise<MinecraftAccount[]>;
+            switchAccount(uuid: string): Promise<MinecraftAccount[]>;
+            /** Signs one account out. */
+            removeAccount(uuid: string): Promise<MinecraftAccount[]>;
+            onAccountsChanged(cb: (accounts: MinecraftAccount[]) => void): () => void;
 
             onProgress(cb: (p: InstallProgress) => void): () => void;
-            onModProgress(
-                cb: (p: { name: string; projectId: string; percent: number }) => void
-            ): () => void;
             /** Asks where to save it, then writes a Modrinth modpack (.mrpack). Null if cancelled. */
             exportModpack(name: string, options: { worlds?: boolean; options?: boolean }): Promise<{ file: string; bytes: number; linked: number; included: string[]; configFiles: number } | null>;
             /** Newer builds of its mods, resource packs and shaders, for its version and loader. */

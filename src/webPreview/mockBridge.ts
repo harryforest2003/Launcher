@@ -402,6 +402,10 @@ async function createInstance(
   return { ...created, starter };
 }
 
+function previewAccounts() {
+  return state.account ? [{ ...state.account, skin: null, savedAt: new Date().toISOString(), active: true }] : [];
+}
+
 async function signIn() {
   state.account = { name: PLAYER_NAME, uuid: "00000000000000000000000000000000" };
   persist();
@@ -633,9 +637,38 @@ const instanceBridge = {
     persist();
     return true;
   },
+  // The preview has at most the one simulated account.
+  listAccounts: async () => previewAccounts(),
+  switchAccount: async () => previewAccounts(),
+  removeAccount: async () => {
+    state.account = null;
+    persist();
+    return [];
+  },
+
+  // Files, logs, Java, updates and exports belong to the desktop app; the preview shows
+  // them empty.
+  worlds: async () => [],
+  screenshots: async () => [],
+  fileAction: async () => {
+    throw new Error("Files can only be opened in the desktop app.");
+  },
+  duplicate: async () => {
+    throw new Error("Copying an instance needs the desktop app.");
+  },
+  log: async () => ({ source: "none", running: false, startedAt: null, endedAt: null, exitCode: null, lines: [] }),
+  crashHelp: async () => ({ crashed: false }),
+  openLogFile: async () => {},
+  pickInstanceJava: async () => null,
+  javaInfo: async () => ({ component: "java-runtime-delta", majorVersion: 21, downloaded: false }),
+  javaRuntimes: async () => [],
+  checkUpdates: async () => ({ checked: 0, identified: 0, updates: [] }),
+  applyUpdates: async () => ({ updated: [], failed: [] }),
+  exportModpack: async () => {
+    throw new Error("Exporting a modpack needs the desktop app.");
+  },
 
   onProgress: (callback: Listener) => subscribe("instance:progress", callback),
-  onModProgress: (callback: Listener) => subscribe("instance:modProgress", callback),
   onLog: (callback: Listener) => subscribe("instance:log", callback),
   onExit: (callback: Listener) => subscribe("instance:exit", callback),
 };

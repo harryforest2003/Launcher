@@ -1,4 +1,5 @@
 import logo from "../assets/logo.png";
+import AccountSwitcher from "../components/AccountSwitcher";
 import Sidebar from "../components/MCSidebar";
 import { useEffect, useRef, useState } from "react";
 import SkinPreview from "../components/SkinPreview";
@@ -53,6 +54,12 @@ function MinecraftMenu({
         }
       })
       .catch(() => {});
+
+    // Switching accounts, from here or the sidebar, shows the one now active.
+    return window.instanceAPI.onAccountsChanged((accounts) => {
+      const active = accounts.find((entry) => entry.active);
+      setAccount(active ? { loggedIn: true, username: active.name, uuid: active.uuid, skin: active.skin ?? undefined } : null);
+    });
   }, []);
 
   async function loadInstances() {
@@ -283,20 +290,9 @@ function MinecraftMenu({
 
         {account?.loggedIn ? (
           <>
-            <select
-              style={{
-                width: "100%",
-                padding: "12px",
-                borderRadius: "10px",
-                background: "#232323",
-                color: "white",
-                border: "1px solid #6d28d9",
-                marginBottom: "25px",
-              }}
-            >
-              <option>{account.username}</option>
-              <option>Add Microsoft Account...</option>
-            </select>
+            <div style={{ marginBottom: "25px" }}>
+              <AccountSwitcher />
+            </div>
 
             <div
               style={{

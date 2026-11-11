@@ -224,6 +224,8 @@ const { loginMicrosoft } = require("./auth/index.cjs");
 ipcMain.handle("auth:login", async () => {
     const result = await loginMicrosoft();
     const account = saveAccount(result);
+    const { listAccounts } = require("./minecraft/account.cjs");
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send("account:changed", listAccounts());
 
     return { name: account.name, uuid: account.uuid, skin: account.skin };
 });
