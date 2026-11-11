@@ -4,17 +4,17 @@ import ModManager from "./ModManager";
 type Props = {
   onBack: () => void;
   onMinecraft: () => void;
+  onSettings: () => void;
 };
 
-export default function ModGames({ onBack, onMinecraft }: Props) {
+export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
   const [games, setGames] = useState<DetectedGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DetectedGame | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [nexusKey, setNexusKey] = useState("");
-  const [hasNexusKey, setHasNexusKey] = useState(false);
-  const [showKeyForm, setShowKeyForm] = useState(false);
+  // A Nexus Mods key is added in the launcher's Settings; this only says whether there is one.
+  const [hasNexusKey, setHasNexusKey] = useState(true);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -41,18 +41,6 @@ export default function ModGames({ onBack, onMinecraft }: Props) {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function saveKey() {
-    try {
-      const s = await window.modAPI.setNexusKey(nexusKey.trim() || null);
-      setHasNexusKey(s.hasNexusKey);
-      setNexusKey("");
-      setShowKeyForm(false);
-      await load(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
 
   const card: React.CSSProperties = {
     background: "#151515",
@@ -100,61 +88,17 @@ export default function ModGames({ onBack, onMinecraft }: Props) {
         <button className="sidebar-button" onClick={() => load(true)}>
           Rescan for Games
         </button>
-
-        <button
-          className="sidebar-button"
-          onClick={() => setShowKeyForm((v) => !v)}
-        >
-          {hasNexusKey ? "Nexus Key: set" : "Add Nexus API Key"}
-        </button>
       </div>
 
-      {showKeyForm && (
-        <div style={{ ...card, marginBottom: 20 }}>
-          <p style={{ color: "#d8b4fe", marginBottom: 10 }}>
-            Nexus Mods API key
+      {!hasNexusKey && (
+        <div style={{ ...card, marginBottom: 20, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+          <p style={{ color: "#9ca3af", fontSize: 13, flex: "1 1 300px", margin: 0 }}>
+            Browsing Nexus Mods needs your Nexus API key, which goes in Settings under Personal API
+            tokens.
           </p>
-
-          <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 10 }}>
-            From nexusmods.com → Account Settings → API Keys. Stored outside
-            this project folder. Note that Nexus has no public keyword-search
-            endpoint, and only Premium accounts can download through the API.
-          </p>
-
-          <div style={{ display: "flex", gap: 10 }}>
-            <input
-              type="password"
-              value={nexusKey}
-              onChange={(e) => setNexusKey(e.target.value)}
-              placeholder="Paste your API key"
-              style={{
-                flex: 1,
-                padding: 12,
-                borderRadius: 10,
-                background: "#1b1b1b",
-                color: "white",
-                border: "1px solid #6d28d9",
-              }}
-            />
-
-            <button className="sidebar-button" onClick={saveKey}>
-              Save
-            </button>
-
-            {hasNexusKey && (
-              <button
-                className="sidebar-button"
-                style={{ background: "#7f1d1d" }}
-                onClick={async () => {
-                  await window.modAPI.setNexusKey(null);
-                  setHasNexusKey(false);
-                  await load(true);
-                }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
+          <button className="sidebar-button" onClick={onSettings}>
+            Open Settings
+          </button>
         </div>
       )}
 

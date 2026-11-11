@@ -142,6 +142,8 @@ async function createInstance(config, { onProgress } = {}) {
         ram: Number(config.ram) > 0
             ? Number(config.ram)
             : launcherSettings.readSettings().defaultRam,
+        // Extra Java arguments typed when creating it; the instance's settings can change them.
+        ...(typeof config.jvmArgs === "string" && config.jvmArgs.trim() ? { jvmArgs: config.jvmArgs.trim() } : {}),
         created: new Date().toISOString(),
         gameDirectory: path.join(folder, ".minecraft"),
         installed: false,
@@ -318,6 +320,50 @@ function instanceExists(name) {
     }
 }
 
+/*
+ * A copy of an instance under a new name: its mods, worlds, settings and the rest, but
+ * not its logs or crash reports, and with a fresh play history.
+ */
+async function duplicateInstance(name, newName) {
+    const source = getInstance(name);
+    const copyName = safeName(newName);
+
+    if (isRunning(name)) throw new Error(`Stop ${name} before copying it.`);
+    if (instanceExists(copyName)) throw new Error(`An instance called "${copyName}" already exists.`);
+
+    const from = instanceFolder(name);
+    const to = instanceFolder(copyName);
+    const gameDir = path.resolve(source.gameDirectory ?? path.join(from, ".minecraft"));
+    const skipped = new Set(["logs", "crash-reports"].map((dir) => path.join(gameDir, dir)));
+
+    try {
+        await fs.promises.cp(from, to, {
+            recursive: true,
+            errorOnExist: true,
+            force: false,
+            filter: (src) => !skipped.has(path.resolve(src)),
+        });
+
+        // Its own name and game folder; a game folder kept elsewhere is shared as before.
+        const insideOld = gameDir.startsWith(path.resolve(from) + path.sep);
+        const copy = {
+            ...JSON.parse(fs.readFileSync(path.join(to, "instance.json"), "utf8")),
+            name: copyName,
+            gameDirectory: insideOld ? path.join(to, path.relative(from, gameDir)) : source.gameDirectory,
+            created: new Date().toISOString(),
+        };
+        delete copy.lastPlayed;
+        delete copy.playTime;
+        fs.writeFileSync(path.join(to, "instance.json"), JSON.stringify(copy, null, 4));
+    } catch (err) {
+        // Nothing half-copied is left behind.
+        await fs.promises.rm(to, { recursive: true, force: true }).catch(() => {});
+        throw err;
+    }
+
+    return getInstance(copyName);
+}
+
 // Turns "Fabric 1.21.4" into a name not already taken.
 function uniqueName(desired) {
     const base = String(desired ?? "Instance")
@@ -486,6 +532,7 @@ module.exports = {
     getInstance,
     createInstance,
     createInstanceFrom,
+    duplicateInstance,
     updateInstance,
     instanceExists,
     uniqueName,

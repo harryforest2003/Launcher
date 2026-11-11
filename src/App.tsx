@@ -1,11 +1,11 @@
 import { useState } from "react";
 
 import HomeScreen from "./pages/GameMenu";
+import LauncherSettings from "./pages/LauncherSettings";
 import MinecraftMenu from "./pages/MinecraftMenu";
 import DiscoverContent from "./pages/MCDiscover";
 import Library from "./pages/MCLibrary";
 import SkinSelector from "./pages/MCSkinSelector";
-import CreateInstance from "./pages/MCCreate";
 import Settings from "./pages/MCSettings";
 import ModDescription from "./pages/ModDescription";
 import ModGames from "./pages/ModGames";
@@ -20,8 +20,8 @@ export type Screen =
   | "library"
   | "skins"
   | "skinbuilder"
-  | "create"
   | "settings"
+  | "launcherSettings"
   | "modmanager";
 
 function App() {
@@ -48,7 +48,6 @@ function Screens({
     goDiscover: () => setScreen("discover"),
     goLibrary: () => setScreen("library"),
     goSkinSelector: () => setScreen("skins"),
-    goCreateInstance: () => setScreen("create"),
     goSettings: () => setScreen("settings"),
   };
 
@@ -99,14 +98,19 @@ function Screens({
         <HomeScreen
           onMinecraft={navigation.goMinecraft}
           onModManager={() => setScreen("modmanager")}
+          onSettings={() => setScreen("launcherSettings")}
         />
       );
+
+    case "launcherSettings":
+      return <LauncherSettings onHome={navigation.goHome} onModManager={() => setScreen("modmanager")} />;
 
     case "modmanager":
       return (
         <ModGames
           onBack={navigation.goHome}
           onMinecraft={navigation.goMinecraft}
+          onSettings={() => setScreen("launcherSettings")}
         />
       );
 
@@ -137,14 +141,6 @@ function Screens({
     case "skinbuilder":
       return (
         <SkinBuilder
-          {...navigation}
-          onBack={navigation.goMinecraft}
-        />
-      );
-
-    case "create":
-      return (
-        <CreateInstance
           {...navigation}
           onBack={navigation.goMinecraft}
         />

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GitHubInstall from "../components/GitHubInstall";
+import InstanceScreenshots from "../components/InstanceScreenshots";
+import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
 
@@ -8,7 +10,10 @@ type Props = {
   onBack: () => void;
 };
 
-type Tab = "mods" | "browse" | "settings";
+type Tab = "mods" | "browse" | "worlds" | "screenshots" | "settings";
+
+// What the instance folder opens in, by system.
+const FILE_MANAGER = navigator.userAgent.includes("Mac") ? "Finder" : navigator.userAgent.includes("Windows") ? "File Explorer" : "your file manager";
 
 const CONTENT_TABS: { type: ContentType; label: string; singular: string }[] = [
   { type: "mod", label: "Mods", singular: "mod" },
@@ -96,6 +101,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   /* ---------------- per-instance settings ---------------- */
   const [ramDraft, setRamDraft] = useState<number | null>(null);
   const [jvmDraft, setJvmDraft] = useState<string | null>(null);
+  // The name typed for a copy, or null for the suggested one.
+  const [copyName, setCopyName] = useState<string | null>(null);
   const [system, setSystem] = useState<LauncherSettings["system"] | null>(null);
 
   useEffect(() => {
@@ -471,6 +478,22 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
         <button
           className="sidebar-button"
+          onClick={() => setTab("worlds")}
+          style={{ opacity: tab === "worlds" ? 1 : 0.6 }}
+        >
+          Worlds
+        </button>
+
+        <button
+          className="sidebar-button"
+          onClick={() => setTab("screenshots")}
+          style={{ opacity: tab === "screenshots" ? 1 : 0.6 }}
+        >
+          Screenshots
+        </button>
+
+        <button
+          className="sidebar-button"
           onClick={() => setTab("settings")}
           style={{ opacity: tab === "settings" ? 1 : 0.6 }}
         >
@@ -505,14 +528,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           {busy === "repair" ? "Repairing..." : "Repair"}
         </button>
 
-        <button
-          className="sidebar-button"
-          onClick={() =>
-            window.instanceAPI.openFolder(instanceName).catch(() => {})
-          }
-        >
-          Open Folder
-        </button>
       </div>
 
       {/* ---------------- CONTENT ---------------- */}
@@ -615,9 +630,61 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </>
       )}
 
+      {tab === "worlds" && <InstanceWorlds instanceName={instanceName} />}
+
+      {tab === "screenshots" && <InstanceScreenshots instanceName={instanceName} />}
+
       {/* ---------------- SETTINGS ---------------- */}
       {tab === "settings" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
+          <div style={card} data-testid="instance-files">
+            <p style={{ color: "#d8b4fe", marginBottom: 10 }}>This instance</p>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+              <button
+                className="sidebar-button"
+                onClick={() => window.instanceAPI.openFolder(instanceName).catch((err) => setError(String(err)))}
+              >
+                Show Files
+              </button>
+              <span style={{ color: "#6b7280", fontSize: 12 }}>Opens its folder in {FILE_MANAGER}.</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <input
+                value={copyName ?? `${instance.name} (copy)`}
+                onChange={(e) => setCopyName(e.target.value)}
+                aria-label="Name for the copy"
+                style={{
+                  flex: "1 1 220px",
+                  padding: 10,
+                  borderRadius: 10,
+                  background: "#1b1b1b",
+                  color: "white",
+                  border: "1px solid #6d28d9",
+                }}
+              />
+              <button
+                className="sidebar-button"
+                disabled={busy === "duplicate" || instance.running}
+                title={instance.running ? "Stop it first" : undefined}
+                onClick={() =>
+                  run("duplicate", async () => {
+                    const copy = await window.instanceAPI.duplicate(instanceName, (copyName ?? `${instance.name} (copy)`).trim());
+                    setCopyName(null);
+                    setNotice(`Made a copy called "${copy.name}". It's in the Library.`);
+                  })
+                }
+              >
+                {busy === "duplicate" ? "Copying..." : "Duplicate"}
+              </button>
+            </div>
+            <p style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>
+              A copy with the same mods, worlds and settings, under a new name. Logs and play history
+              aren't copied.
+            </p>
+          </div>
+
           <div style={card}>
             <p style={{ color: "#d8b4fe", marginBottom: 6 }}>
               Allocated RAM: {ramDraft ?? instance.ram} GB

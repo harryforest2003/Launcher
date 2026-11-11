@@ -4,6 +4,7 @@ const { ipcMain, shell, dialog, BrowserWindow } = require("electron");
 
 const instanceManager = require("../instanceManager.cjs");
 const instanceMods = require("./instanceMods.cjs");
+const instanceFiles = require("./instanceFiles.cjs");
 const modSearch = require("./modSearch.cjs");
 const account = require("./account.cjs");
 const modpack = require("./modpack.cjs");
@@ -14,7 +15,6 @@ const github = require("./github.cjs");
 const starterMods = require("./starterMods.cjs");
 const curseforge = require("../curseforge.cjs");
 const launcherSettings = require("./settings.cjs");
-const { getLatestLoaderVersion } = require("./loaders.cjs");
 const { clearSecret, getSecret, isPersonal, secretStatus, setSecret } = require("../secrets.cjs");
 
 /*
@@ -157,9 +157,24 @@ function registerInstanceIpc() {
         return folder;
     });
 
-    ipcMain.handle("instance:latestLoader", (_e, { loader, mcVersion }) =>
-        getLatestLoaderVersion(loader, mcVersion)
+    /* ---------------- worlds, screenshots, copies ---------------- */
+
+    ipcMain.handle("instance:worlds", (_e, name) =>
+        instanceFiles.listWorlds(instanceManager.getInstance(name))
     );
+
+    ipcMain.handle("instance:screenshots", (_e, name) =>
+        instanceFiles.listScreenshots(instanceManager.getInstance(name))
+    );
+
+    ipcMain.handle("instance:fileAction", (_e, name, request) =>
+        instanceFiles.fileAction(instanceManager.getInstance(name), request)
+    );
+
+    ipcMain.handle("instance:duplicate", (_e, name, newName) =>
+        instanceManager.duplicateInstance(name, newName)
+    );
+
 
     /* ---------------- instance mods ---------------- */
 

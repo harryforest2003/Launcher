@@ -84,11 +84,6 @@ declare global {
                 provider?: string
             ): Promise<{ results: RemoteMod[]; warnings: string[] }>;
 
-            getFiles(
-                gameId: string,
-                provider: string,
-                projectId: string
-            ): Promise<ModFile[]>;
 
             install(payload: {
                 gameId: string;
@@ -111,11 +106,6 @@ declare global {
             openUrl(url: string): Promise<void>;
 
             getSettings(): Promise<{
-                hasNexusKey: boolean;
-                customGames: string[];
-            }>;
-
-            setNexusKey(key: string | null): Promise<{
                 hasNexusKey: boolean;
                 customGames: string[];
             }>;

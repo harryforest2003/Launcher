@@ -414,33 +414,10 @@ async function signIn() {
 }
 
 const launcherBridge = {
-  invoke: async (channel: string, data?: any) => {
-    switch (channel) {
-      case "instances:get":
-        return state.instances;
-      case "instances:save":
-        state.instances = data;
-        persist();
-        return true;
-      case "java:find":
-        return [];
-      case "minecraft:launch":
-        return launch(data);
-      default:
-        console.warn(`[web preview] channel not simulated: ${channel}`);
-        return undefined;
-    }
-  },
   loginMicrosoft: signIn,
   getInstances: async () => state.instances,
-  createInstance: async (instance: any) => {
-    await createInstance(instance);
-    return true;
-  },
   launchInstance: launch,
   getInstancesStorage: async () => 790 * 1024 * 1024,
-  getMinecraftDirectory: async () => "/preview/instances",
-  getVersions: () => getVersions(),
   getMinecraftVersions: () => getVersions(),
   getFabricVersions: (version: string) =>
     liveOr(`https://meta.fabricmc.net/v2/versions/loader/${version}`, [{ loader: { version: "0.19.3" } }]),
@@ -507,7 +484,6 @@ const instanceBridge = {
     return { stopped: name };
   },
   openFolder: async (name: string) => `/preview/instances/${name}`,
-  latestLoader: async () => "0.19.3",
 
   content: async (name: string) => {
     const items = (state.mods[name] ?? []).map((item) => ({ ...item, type: item.type ?? "mod" }));
@@ -705,7 +681,6 @@ const modBridge = {
   },
   openFolder: async (gameId: string) => `/preview/games/${gameId}`,
   search: async () => ({ results: [], warnings: ["Online search is off for sample games."] }),
-  getFiles: async () => [],
   install: async () => {
     throw new Error("Installing mods needs the desktop app.");
   },
@@ -717,12 +692,6 @@ const modBridge = {
     return true;
   },
   getSettings: async () => ({ hasNexusKey: state.hasNexusKey }),
-  setNexusKey: async (key: string | null) => {
-    // Only whether a key was entered is kept; the key itself is never stored.
-    state.hasNexusKey = Boolean(key);
-    persist();
-    return { hasNexusKey: state.hasNexusKey };
-  },
   onProgress: (callback: Listener) => subscribe("mods:progress", callback),
 };
 

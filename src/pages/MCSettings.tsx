@@ -1,6 +1,5 @@
 import logo from "../assets/logo.png";
 import { useCallback, useEffect, useState } from "react";
-import ApiKeyRow from "../components/ApiKeyRow";
 import Sidebar from "../components/MCSidebar";
 import StarterModsSettings from "../components/StarterModsSettings";
 
@@ -12,7 +11,6 @@ type Props = {
   goDiscover: () => void;
   goLibrary: () => void;
   goSkinSelector: () => void;
-  goCreateInstance: () => void;
   goSettings: () => void;
 };
 
@@ -31,11 +29,9 @@ function MCSettings({
   goDiscover,
   goLibrary,
   goSkinSelector,
-  goCreateInstance,
   goSettings,
 }: Props) {
   const [settings, setSettings] = useState<LauncherSettings | null>(null);
-  const [apiKeys, setApiKeys] = useState<Awaited<ReturnType<typeof window.instanceAPI.getApiKeys>> | null>(null);
   const [cloudFolders, setCloudFolders] = useState<CloudFolder[]>([]);
   const [account, setAccount] = useState<{ name: string; uuid: string } | null>(null);
 
@@ -50,8 +46,6 @@ function MCSettings({
         window.instanceAPI.cloudDetect(),
         window.instanceAPI.getAccount(),
       ]);
-
-      setApiKeys(await window.instanceAPI.getApiKeys());
 
       setSettings(s);
       setCloudFolders(folders);
@@ -99,7 +93,6 @@ function MCSettings({
         goDiscover={goDiscover}
         goLibrary={goLibrary}
         goSkinSelector={goSkinSelector}
-        goCreateInstance={goCreateInstance}
         goSettings={goSettings}
         showBack
         onBack={onBack}
@@ -334,50 +327,6 @@ function MCSettings({
               </div>
 
               <StarterModsSettings />
-
-              {/* ---------- API tokens ---------- */}
-              <div style={card} data-testid="personal-tokens">
-                <h2 style={{ color: "#d8b4fe", marginBottom: 6 }}>Personal API tokens</h2>
-
-                <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 4 }}>
-                  Tokens from your own accounts. The launcher works without them; each one adds
-                  something for you. They're encrypted with your system's keychain, and each is
-                  only ever sent to the service it belongs to.
-                </p>
-
-                <ApiKeyRow
-                  name="modrinth"
-                  label="Modrinth"
-                  environmentVariable="MODRINTH_TOKEN"
-                  status={apiKeys?.modrinth}
-                  onChange={setApiKeys}
-                >
-                  Lets the launcher see your own unlisted and draft projects. Browsing and installing
-                  don't need it. Create one at modrinth.com/settings/pats.
-                </ApiKeyRow>
-
-                <ApiKeyRow
-                  name="nexus"
-                  label="Nexus Mods"
-                  environmentVariable="NEXUS_API_KEY"
-                  status={apiKeys?.nexus}
-                  onChange={setApiKeys}
-                >
-                  Needed to browse Nexus Mods for the other games in the launcher. Find yours on
-                  nexusmods.com, in your account's API Keys settings.
-                </ApiKeyRow>
-
-                <ApiKeyRow
-                  name="github"
-                  label="GitHub"
-                  environmentVariable="GITHUB_TOKEN"
-                  status={apiKeys?.github}
-                  onChange={setApiKeys}
-                >
-                  Installs from GitHub allow 60 lookups an hour without one, and 5,000 with one. Create
-                  one at github.com/settings/tokens; it needs no permissions.
-                </ApiKeyRow>
-              </div>
 
               {/* ---------- Account ---------- */}
               <div style={card}>

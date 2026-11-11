@@ -1,12 +1,14 @@
 import logo from "../assets/logo.png";
 import { useEffect, useState } from "react";
+import LauncherSidebar from "../components/LauncherSidebar";
 
 type Props = {
   onMinecraft: () => void;
   onModManager: () => void;
+  onSettings: () => void;
 };
 
-function HomeScreen({ onMinecraft, onModManager }: Props) {
+function HomeScreen({ onMinecraft, onModManager, onSettings }: Props) {
   // Real games found on this machine, rather than a hardcoded list.
   const [detected, setDetected] = useState<DetectedGame[]>([]);
   const [scanning, setScanning] = useState(true);
@@ -29,45 +31,7 @@ function HomeScreen({ onMinecraft, onModManager }: Props) {
         fontFamily: "'Orbitron', sans-serif",
       }}
     >
-      {/* Sidebar */}
-      <div
-        style={{
-          width: "300px",
-          flexShrink: 0,
-          backgroundColor: "#161616",
-          borderRight: "1px solid #6d28d9",
-          padding: "20px",
-        }}
-      >
-        <h1
-          style={{
-            color: "#a855f7",
-            lineHeight: "1.1",
-            letterSpacing: "1px",
-            marginBottom: "60px",
-          }}
-        >
-          Unity
-          <br />
-          Launcher
-        </h1>
-
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "15px",
-          }}
-        >
-          <button className="sidebar-button">Home</button>
-          <button className="sidebar-button" onClick={onModManager}>
-            Mod Manager
-          </button>
-          <button className="sidebar-button">Cloud Profiles</button>
-          <button className="sidebar-button">Downloads</button>
-          <button className="sidebar-button">Settings</button>
-        </div>
-      </div>
+      <LauncherSidebar current="home" onHome={() => {}} onModManager={onModManager} onSettings={onSettings} />
 
       {/* Main Content */}
       <div

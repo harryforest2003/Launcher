@@ -11,7 +11,6 @@ type Props = {
   goDiscover: () => void;
   goLibrary: () => void;
   goSkinSelector: () => void;
-  goCreateInstance: () => void;
   goSettings: () => void;
 };
 
@@ -22,7 +21,6 @@ function MinecraftMenu({
   goDiscover,
   goLibrary,
   goSkinSelector,
-  goCreateInstance,
   goSettings,
 }: Props) {
   const [account, setAccount] = useState<{
@@ -118,7 +116,6 @@ function MinecraftMenu({
         goDiscover={goDiscover}
         goLibrary={goLibrary}
         goSkinSelector={goSkinSelector}
-        goCreateInstance={goCreateInstance}
         goSettings={goSettings}
         showBack
         onBack={onBack}

@@ -11,7 +11,6 @@ type Props = {
   goDiscover: () => void;
   goLibrary: () => void;
   goSkinSelector: () => void;
-  goCreateInstance: () => void;
   goSettings: () => void;
   openMod: (
     source: "modrinth" | "curseforge",
@@ -60,7 +59,6 @@ function MCDiscover({
   goDiscover,
   goLibrary,
   goSkinSelector,
-  goCreateInstance,
   goSettings,
   openMod,
 }: Props) {
@@ -220,7 +218,6 @@ function MCDiscover({
         goDiscover={goDiscover}
         goLibrary={goLibrary}
         goSkinSelector={goSkinSelector}
-        goCreateInstance={goCreateInstance}
         goSettings={goSettings}
         showBack
         onBack={onBack}

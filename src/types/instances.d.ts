@@ -23,6 +23,28 @@ declare global {
         folder?: string;
     };
 
+    type InstanceWorld = {
+        /** The folder in saves/, which is how a world is named to the launcher. */
+        folder: string;
+        name: string;
+        lastPlayed: string;
+        gameMode: string | null;
+        hardcore: boolean;
+        cheats: boolean;
+        version: string | null;
+        size: number;
+        icon: string | null;
+    };
+
+    type InstanceScreenshot = {
+        fileName: string;
+        taken: string;
+        size: number;
+        width: number;
+        height: number;
+        thumbnail: string | null;
+    };
+
     type ContentType = "mod" | "resourcepack" | "shader" | "datapack";
 
     /** Which item a change applies to. A data pack can be in a world, or in none yet. */
@@ -261,6 +283,7 @@ declare global {
                 loader?: string;
                 loaderVersion?: string;
                 ram?: number;
+                jvmArgs?: string;
                 // Defaults to true.
                 starterMods?: boolean;
             }): Promise<Instance & { starter: StarterSummary | null }>;
@@ -283,11 +306,15 @@ declare global {
 
             stop(name: string): Promise<{ stopped: string }>;
             openFolder(name: string): Promise<string>;
+            /** Worlds in the instance, most recently played first. */
+            worlds(name: string): Promise<InstanceWorld[]>;
+            /** Screenshots, newest first, with small previews. */
+            screenshots(name: string): Promise<InstanceScreenshot[]>;
+            /** open, show (in Finder or the file manager), trash (to the Bin), or folder (all of that kind). */
+            fileAction(name: string, request: { kind: "world" | "screenshot"; name?: string; action: "open" | "show" | "trash" | "folder" }): Promise<void>;
+            /** A copy under a new name, without its logs or play history. */
+            duplicate(name: string, newName: string): Promise<Instance>;
 
-            latestLoader(
-                loader: string,
-                mcVersion: string
-            ): Promise<string | null>;
 
             content(name: string): Promise<InstanceContent>;
 

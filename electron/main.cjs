@@ -7,12 +7,10 @@ const { registerBlockbenchIpc } = require("./blockbench/index.cjs");
 
 const {
     getInstances,
-    createInstance,
     launchInstance,
     getInstancesStorage
 } = require("./instanceManager.cjs");
 
-const { getMinecraftDirectory } = require("./minecraft/mnecraftDir.cjs");
 const { registerModIpc } = require("./mods/index.cjs");
 const { registerInstanceIpc, saveAccount } = require("./minecraft/ipc.cjs");
 const { accountForLaunch } = require("./minecraft/account.cjs");
@@ -211,18 +209,12 @@ ipcMain.handle("minecraft:getLoaders", () => [
 ipcMain.handle("instances:get", () => getInstances());
 ipcMain.handle("instances:storage", () => getInstancesStorage());
 
-ipcMain.handle("instances:create", async (_, instance) => {
-    await createInstance(instance);
-    return true;
-});
-
 // Exposed in preload.cjs but previously unhandled, so the Launch button
 // rejected with "No handler registered for 'minecraft:launch'".
 ipcMain.handle("minecraft:launch", async (_, name) => {
     return launchInstance(name, await accountForLaunch(name));
 });
 
-ipcMain.handle("minecraft:getDirectory", () => getMinecraftDirectory());
 
 // ---------------- MICROSOFT LOGIN (FIXED FLOW) ----------------
 

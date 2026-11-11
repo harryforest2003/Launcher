@@ -14,21 +14,15 @@ declare global {
 
         launcherAPI: {
 
-            // ---------- Generic ----------
-            invoke(channel: string, data?: any): Promise<any>;
-
             // ---------- Authentication ----------
             loginMicrosoft(): Promise<{ name: string; uuid: string; skin: string | null }>;
 
             // ---------- Instances ----------
             getInstances(): Promise<any[]>;
-            createInstance(instance: any): Promise<boolean>;
             launchInstance(instance: any): Promise<any>;
             getInstancesStorage(): Promise<number>;
 
             // ---------- Minecraft ----------
-            getMinecraftDirectory(): Promise<string>;
-            getVersions(): Promise<any[]>;
             getMinecraftVersions(): Promise<any[]>;
             getFabricVersions(version: string): Promise<any[]>;
             getQuiltVersions(version: string): Promise<any[]>;

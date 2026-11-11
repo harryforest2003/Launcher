@@ -15,7 +15,6 @@ type Props = {
   goDiscover: () => void;
   goLibrary: () => void;
   goSkinSelector: () => void;
-  goCreateInstance: () => void;
   goSettings: () => void;
 };
 
@@ -37,7 +36,6 @@ function ModDescription({
   goDiscover,
   goLibrary,
   goSkinSelector,
-  goCreateInstance,
   goSettings,
 }: Props) {
   const [mod, setMod] = useState<any>(null);
@@ -132,7 +130,6 @@ function ModDescription({
         goDiscover={goDiscover}
         goLibrary={goLibrary}
         goSkinSelector={goSkinSelector}
-        goCreateInstance={goCreateInstance}
         goSettings={goSettings}
         showBack
         onBack={onBack}

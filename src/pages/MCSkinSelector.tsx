@@ -24,7 +24,6 @@ type Props = {
   goDiscover: () => void;
   goLibrary: () => void;
   goSkinSelector: () => void;
-  goCreateInstance: () => void;
   goSettings: () => void;
 };
 
@@ -121,7 +120,6 @@ function SkinSelector({
   goDiscover,
   goLibrary,
   goSkinSelector,
-  goCreateInstance,
   goSettings,
 }: Props) {
   const [search, setSearch] = useState("");
@@ -437,7 +435,6 @@ function SkinSelector({
         goDiscover={leaving(goDiscover)}
         goLibrary={leaving(goLibrary)}
         goSkinSelector={leaving(goSkinSelector)}
-        goCreateInstance={leaving(goCreateInstance)}
         goSettings={leaving(goSettings)}
         showBack
         onBack={leaving(onBack)}

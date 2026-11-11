@@ -27,7 +27,6 @@ type Props = {
   goDiscover: () => void;
   goLibrary: () => void;
   goSkinSelector: () => void;
-  goCreateInstance: () => void;
   goSettings: () => void;
 };
 
@@ -49,7 +48,6 @@ export default function SkinBuilder({
   goDiscover,
   goLibrary,
   goSkinSelector,
-  goCreateInstance,
   goSettings,
 }: Props) {
   const [step, setStep] = useState<Step>("library");
@@ -223,7 +221,6 @@ export default function SkinBuilder({
         goDiscover={leaving(goDiscover)}
         goLibrary={leaving(goLibrary)}
         goSkinSelector={leaving(goSkinSelector)}
-        goCreateInstance={leaving(goCreateInstance)}
         goSettings={leaving(goSettings)}
         showBack
         onBack={leaving(onBack)}

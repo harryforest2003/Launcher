@@ -1,11 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-console.log("🔥 PRELOAD LOADED");
 
 contextBridge.exposeInMainWorld("launcherAPI", {
-    // ---------- Generic IPC ----------
-    invoke: (channel, data) => ipcRenderer.invoke(channel, data),
-
     // ---------- Authentication ----------
     loginMicrosoft: () =>
         ipcRenderer.invoke("auth:login"),
@@ -14,9 +10,6 @@ contextBridge.exposeInMainWorld("launcherAPI", {
     getInstances: () =>
         ipcRenderer.invoke("instances:get"),
 
-    createInstance: (instance) =>
-        ipcRenderer.invoke("instances:create", instance),
-
     launchInstance: (instance) =>
         ipcRenderer.invoke("minecraft:launch", instance),
 
@@ -24,12 +17,6 @@ contextBridge.exposeInMainWorld("launcherAPI", {
         ipcRenderer.invoke("instances:storage"),
 
     // ---------- Minecraft ----------
-    getMinecraftDirectory: () =>
-        ipcRenderer.invoke("minecraft:getDirectory"),
-
-    getVersions: () =>
-        ipcRenderer.invoke("minecraft:getVersions"),
-
     getMinecraftVersions: () =>
         ipcRenderer.invoke("minecraft:getVersions"),
 
@@ -83,9 +70,11 @@ contextBridge.exposeInMainWorld("instanceAPI", {
     stop: (name) => ipcRenderer.invoke("instance:stop", name),
 
     openFolder: (name) => ipcRenderer.invoke("instance:openFolder", name),
+    worlds: (name) => ipcRenderer.invoke("instance:worlds", name),
+    screenshots: (name) => ipcRenderer.invoke("instance:screenshots", name),
+    fileAction: (name, request) => ipcRenderer.invoke("instance:fileAction", name, request),
+    duplicate: (name, newName) => ipcRenderer.invoke("instance:duplicate", name, newName),
 
-    latestLoader: (loader, mcVersion) =>
-        ipcRenderer.invoke("instance:latestLoader", { loader, mcVersion }),
 
     // ----- mods, resource packs, shaders and data packs for one instance -----
     content: (name) => ipcRenderer.invoke("instance:content", name),
@@ -246,9 +235,6 @@ contextBridge.exposeInMainWorld("modAPI", {
     search: (gameId, query, provider) =>
         ipcRenderer.invoke("mods:search", { gameId, query, provider }),
 
-    getFiles: (gameId, provider, projectId) =>
-        ipcRenderer.invoke("mods:getFiles", { gameId, provider, projectId }),
-
     install: (payload) => ipcRenderer.invoke("mods:install", payload),
 
     installFromFile: (gameId, filePaths) =>
@@ -258,7 +244,6 @@ contextBridge.exposeInMainWorld("modAPI", {
 
     // Settings
     getSettings: () => ipcRenderer.invoke("mods:getSettings"),
-    setNexusKey: (key) => ipcRenderer.invoke("mods:setNexusKey", key),
 
     // Download progress. Returns an unsubscribe function.
     onProgress: (callback) => {

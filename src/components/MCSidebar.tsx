@@ -8,7 +8,6 @@ type Props = {
     | "library"
     | "skins"
     | "skinbuilder"
-    | "create"
     | "settings";
 
   goHome: () => void;
@@ -16,7 +15,6 @@ type Props = {
   goDiscover: () => void;
   goLibrary: () => void;
   goSkinSelector: () => void;
-  goCreateInstance: () => void;
   goSettings: () => void;
 
   showBack?: boolean;
@@ -30,7 +28,6 @@ function MCSidebar({
   goDiscover,
   goLibrary,
   goSkinSelector,
-  goCreateInstance,
   goSettings,
   showBack = false,
   onBack,
@@ -125,13 +122,6 @@ function MCSidebar({
           onClick={goLibrary}
         >
           Library
-        </button>
-
-        <button
-          style={buttonStyle(currentPage === "create")}
-          onClick={goCreateInstance}
-        >
-          Create New Instance
         </button>
 
         <button

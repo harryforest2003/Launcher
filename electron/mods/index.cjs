@@ -10,7 +10,7 @@ const settings = require("./settings.cjs");
 
 const curseforge = require("./providers/curseforge.cjs");
 const nexus = require("./providers/nexus.cjs");
-const { clearSecret, getSecret, setSecret } = require("../secrets.cjs");
+const { getSecret, setSecret } = require("../secrets.cjs");
 const curseforgeAccess = require("../curseforge.cjs");
 
 const PROVIDERS = [curseforge, nexus];
@@ -167,15 +167,6 @@ function registerModIpc() {
         return { results, warnings };
     });
 
-    ipcMain.handle("mods:getFiles", async (_e, { gameId, provider, projectId }) => {
-        const { definition } = findDetected(gameId);
-
-        if (provider === "curseforge") return curseforge.getFiles(projectId);
-        if (provider === "nexus") return nexus.getFiles(definition, projectId);
-
-        throw new Error(`Unknown provider "${provider}".`);
-    });
-
     /* ----- install ----- */
 
     ipcMain.handle("mods:install", async (event, payload) => {
@@ -275,16 +266,6 @@ function registerModIpc() {
     /* ----- settings ----- */
 
     ipcMain.handle("mods:getSettings", () => settings.publicSettings());
-
-    ipcMain.handle("mods:setNexusKey", (_e, key) => {
-        if (key) setSecret("nexus", key);
-        else clearSecret("nexus");
-
-        settings.writeSettings({ nexusApiKey: undefined });
-        nexus.setApiKey(getSecret("nexus"));
-
-        return settings.publicSettings();
-    });
 }
 
 module.exports = { registerModIpc };
