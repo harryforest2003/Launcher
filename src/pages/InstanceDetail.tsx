@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GitHubInstall from "../components/GitHubInstall";
+import InstanceLog from "../components/InstanceLog";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
@@ -10,7 +11,7 @@ type Props = {
   onBack: () => void;
 };
 
-type Tab = "mods" | "browse" | "worlds" | "screenshots" | "settings";
+type Tab = "mods" | "browse" | "worlds" | "screenshots" | "log" | "settings";
 
 // What the instance folder opens in, by system.
 const FILE_MANAGER = navigator.userAgent.includes("Mac") ? "Finder" : navigator.userAgent.includes("Windows") ? "File Explorer" : "your file manager";
@@ -104,11 +105,21 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   // The name typed for a copy, or null for the suggested one.
   const [copyName, setCopyName] = useState<string | null>(null);
   const [system, setSystem] = useState<LauncherSettings["system"] | null>(null);
+  // The Java chosen in Settings for every instance, if any, and what automatic would use here.
+  const [globalJava, setGlobalJava] = useState("");
+  const [javaInfo, setJavaInfo] = useState<{ majorVersion: number; downloaded: boolean } | null>(null);
+
+  useEffect(() => {
+    window.instanceAPI.javaInfo(instanceName).then(setJavaInfo).catch(() => setJavaInfo(null));
+  }, [instanceName, instance?.versionId]);
 
   useEffect(() => {
     window.instanceAPI
       .getSettings()
-      .then((s) => setSystem(s.system))
+      .then((s) => {
+        setSystem(s.system);
+        setGlobalJava(s.javaPath ?? "");
+      })
       .catch(() => setSystem(null));
   }, []);
 
@@ -127,8 +138,10 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   }, [instanceName]);
 
   useEffect(() => {
-    return window.instanceAPI.onExit(({ name }) => {
-      if (name === instanceName) refresh();
+    return window.instanceAPI.onExit(({ name, code }) => {
+      if (name !== instanceName) return;
+      refresh();
+      if (code !== 0) setTab("log");
     });
   }, [instanceName, refresh]);
 
@@ -155,6 +168,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     setNotice(null);
 
     try {
+      setProgress(null);
+      setTab("log");
       const result = await window.instanceAPI.launch(instanceName);
 
       setNotice(
@@ -387,7 +402,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
       )}
 
-      {progress && progress.stage !== "done" && (busy === "repair" || busy === "cloud") && (
+      {progress && progress.stage !== "done" && (busy === "repair" || busy === "cloud" || (busy === "launch" && progress.stage === "java")) && (
         <div style={{ ...card, marginBottom: 16 }}>
           <div style={{ color: "#d8b4fe", marginBottom: 8 }}>
             {progress.detail ?? progress.stage} ({progress.percent}%)
@@ -490,6 +505,14 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           style={{ opacity: tab === "screenshots" ? 1 : 0.6 }}
         >
           Screenshots
+        </button>
+
+        <button
+          className="sidebar-button"
+          onClick={() => setTab("log")}
+          style={{ opacity: tab === "log" ? 1 : 0.6 }}
+        >
+          Log
         </button>
 
         <button
@@ -634,6 +657,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
       {tab === "screenshots" && <InstanceScreenshots instanceName={instanceName} />}
 
+      {tab === "log" && <InstanceLog instanceName={instanceName} />}
+
       {/* ---------------- SETTINGS ---------------- */}
       {tab === "settings" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
@@ -683,6 +708,47 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               A copy with the same mods, worlds and settings, under a new name. Logs and play history
               aren't copied.
             </p>
+          </div>
+
+          <div style={card} data-testid="instance-java">
+            <p style={{ color: "#d8b4fe", marginBottom: 6 }}>Java</p>
+            <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 12 }}>
+              {instance.javaPath
+                ? `Uses its own Java: ${instance.javaPath}`
+                : globalJava
+                  ? `Uses the Java chosen in Settings for every instance: ${globalJava}`
+                  : javaInfo
+                    ? `Automatic: Java ${javaInfo.majorVersion}, which Minecraft ${instance.version} needs${javaInfo.downloaded ? "." : ". It's downloaded the first time this launches."}`
+                    : "Automatic: the Java this version needs, downloaded the first time it launches."}
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className="sidebar-button"
+                disabled={busy === "java"}
+                onClick={() =>
+                  run("java", async () => {
+                    const picked = await window.instanceAPI.pickInstanceJava(instanceName);
+                    if (picked) setNotice(`${instance.name} now uses ${picked}.`);
+                  })
+                }
+              >
+                Choose a Java...
+              </button>
+              {instance.javaPath && (
+                <button
+                  className="sidebar-button"
+                  disabled={busy === "java"}
+                  onClick={() =>
+                    run("java", async () => {
+                      await window.instanceAPI.update(instanceName, { javaPath: "" });
+                      setNotice("Back to automatic Java.");
+                    })
+                  }
+                >
+                  Use Automatic
+                </button>
+              )}
+            </div>
           </div>
 
           <div style={card}>

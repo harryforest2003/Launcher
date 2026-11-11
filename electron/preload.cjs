@@ -128,6 +128,7 @@ contextBridge.exposeInMainWorld("instanceAPI", {
     getSettings: () => ipcRenderer.invoke("settings:get"),
     setSettings: (patch) => ipcRenderer.invoke("settings:set", patch),
     pickJava: () => ipcRenderer.invoke("settings:pickJava"),
+    javaRuntimes: () => ipcRenderer.invoke("settings:javaRuntimes"),
     getApiKeys: () => ipcRenderer.invoke("settings:apiKeys"),
     setApiKey: (name, value) => ipcRenderer.invoke("settings:setApiKey", { name, value }),
 
@@ -147,6 +148,12 @@ contextBridge.exposeInMainWorld("instanceAPI", {
         ipcRenderer.on("instance:modProgress", h);
         return () => ipcRenderer.removeListener("instance:modProgress", h);
     },
+
+    pickInstanceJava: (name) => ipcRenderer.invoke("instance:pickJava", name),
+    javaInfo: (name) => ipcRenderer.invoke("instance:javaInfo", name),
+    log: (name) => ipcRenderer.invoke("instance:log", name),
+    crashHelp: (name) => ipcRenderer.invoke("instance:crashHelp", name),
+    openLogFile: (name, file) => ipcRenderer.invoke("instance:openLogFile", name, file),
 
     onLog: (cb) => {
         const h = (_e, d) => cb(d);

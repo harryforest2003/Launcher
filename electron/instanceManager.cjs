@@ -1,3 +1,4 @@
+const EventEmitter = require("events");
 const fs = require("fs");
 const path = require("path");
 
@@ -5,6 +6,8 @@ const { installInstance } = require("./minecraft/install.cjs");
 const { launch } = require("./minecraft/launch.cjs");
 const { getLatestLoaderVersion } = require("./minecraft/loaders.cjs");
 const launcherSettings = require("./minecraft/settings.cjs");
+const { analyzeCrash } = require("./minecraft/crashHelp.cjs");
+const { ensureRuntime, requiredJava } = require("./minecraft/javaRuntime.cjs");
 
 const { instancesDir } = require("./paths.cjs");
 
@@ -409,7 +412,52 @@ function pruneDead(name) {
     }
 }
 
-function launchInstance(name, account, { onLog, onExit } = {}) {
+/*
+ * Each run's output, so the instance's Log tab shows it whichever button started the
+ * game, and crash help can read it. Events go to every window as they happen.
+ */
+const instanceEvents = new EventEmitter();
+const runs = new Map();
+const MAX_LOG_LINES = 5000;
+
+function recordLog(name, text) {
+    const run = runs.get(name);
+    if (!run) return;
+    const parts = (run.partial + text).split(/\r?\n/);
+    run.partial = parts.pop();
+    run.lines.push(...parts);
+    if (run.lines.length > MAX_LOG_LINES) run.lines.splice(0, run.lines.length - MAX_LOG_LINES);
+    instanceEvents.emit("log", { name, text });
+}
+
+/* The Java to launch with: the instance's own, the one chosen in Settings, or automatic. */
+async function chooseJava(instance, folder, { onProgress, note }) {
+    if (instance.javaPath && fs.existsSync(instance.javaPath)) {
+        note(`Using this instance's Java: ${instance.javaPath}`);
+        return instance.javaPath;
+    }
+
+    const chosen = launcherSettings.readSettings().javaPath?.trim();
+    if (chosen && fs.existsSync(chosen)) {
+        note(`Using the Java chosen in Settings: ${chosen}`);
+        return chosen;
+    }
+
+    const need = requiredJava(folder, instance);
+    try {
+        const javaPath = await ensureRuntime(need, { onProgress });
+        note(`Using Java ${need.majorVersion}, downloaded automatically for Minecraft ${instance.version}.`);
+        return javaPath;
+    } catch (err) {
+        note(`Couldn't get Java ${need.majorVersion} (${err.message}), so trying this computer's own java.`);
+        return "java";
+    }
+}
+
+// Instances between pressing Launch and Minecraft starting (Java may be downloading).
+const starting = new Set();
+
+async function launchInstance(name, account, { onProgress } = {}) {
     const instance = getInstance(name);
     const folder = instanceFolder(name);
 
@@ -419,7 +467,7 @@ function launchInstance(name, account, { onLog, onExit } = {}) {
         );
     }
 
-    if (pruneDead(name)) {
+    if (pruneDead(name) || starting.has(name)) {
         throw new Error(`"${name}" is already running.`);
     }
 
@@ -437,19 +485,25 @@ function launchInstance(name, account, { onLog, onExit } = {}) {
 
     const global = launcherSettings.readSettings();
 
-    /*
-     * Per-instance overrides win; otherwise the launcher-wide settings
-     * apply. Both are now actually consumed at launch — previously the
-     * Settings page wrote to React state that nothing ever read.
-     */
+    // Per-instance overrides win; otherwise the launcher-wide settings apply.
     const extraJvmArgs = launcherSettings.parseJvmArgs(
         instance.jvmArgs || global.jvmArgs
     );
 
-    const javaPath =
-        (instance.javaPath && fs.existsSync(instance.javaPath))
-            ? instance.javaPath
-            : launcherSettings.resolveJavaPath();
+    runs.set(name, { lines: [], partial: "", running: true, startedAt: Date.now(), endedAt: null, exitCode: null });
+    const note = (text) => recordLog(name, `[Unity Launcher] ${text}\n`);
+
+    starting.add(name);
+    let javaPath;
+    try {
+        const progress = (update) => {
+            instanceEvents.emit("progress", { name, ...update });
+            onProgress?.(update);
+        };
+        javaPath = await chooseJava(instance, folder, { onProgress: progress, note });
+    } finally {
+        starting.delete(name);
+    }
 
     const proc = launch({
         versionJson,
@@ -459,10 +513,15 @@ function launchInstance(name, account, { onLog, onExit } = {}) {
         ram: instance.ram,
         javaPath,
         extraJvmArgs,
-        onLog,
+        onLog: (text) => recordLog(name, text),
         onExit: (code) => {
             running.delete(name);
-            onExit?.(code);
+            const run = runs.get(name);
+            if (run) {
+                if (run.partial) run.lines.push(run.partial);
+                Object.assign(run, { partial: "", running: false, endedAt: Date.now(), exitCode: code });
+            }
+            instanceEvents.emit("exit", { name, code });
         },
     });
 
@@ -483,6 +542,51 @@ function launchInstance(name, account, { onLog, onExit } = {}) {
     }
 
     return { launched: true, name, pid: proc.pid };
+}
+
+/*
+ * The latest run's output: this session's if the game was started since the launcher
+ * opened, otherwise the log Minecraft wrote last time.
+ */
+function getLog(name) {
+    const instance = getInstance(name);
+    const run = runs.get(name);
+
+    if (run) {
+        return {
+            source: "live",
+            running: run.running,
+            startedAt: run.startedAt,
+            endedAt: run.endedAt,
+            exitCode: run.exitCode,
+            lines: run.partial ? [...run.lines, run.partial] : [...run.lines],
+        };
+    }
+
+    const file = path.join(instance.gameDirectory ?? path.join(instanceFolder(name), ".minecraft"), "logs", "latest.log");
+    try {
+        const stat = fs.statSync(file);
+        const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+        return { source: "file", running: false, startedAt: null, endedAt: stat.mtimeMs, exitCode: null, lines: lines.slice(-MAX_LOG_LINES) };
+    } catch {
+        return { source: "none", running: false, startedAt: null, endedAt: null, exitCode: null, lines: [] };
+    }
+}
+
+/* Why the latest run crashed, and which mods may be to blame. */
+async function crashHelp(name) {
+    const instance = getInstance(name);
+    const log = getLog(name);
+    if (log.running) return { crashed: false };
+
+    return analyzeCrash({
+        gameDir: instance.gameDirectory ?? path.join(instanceFolder(name), ".minecraft"),
+        ram: instance.ram,
+        lines: log.lines,
+        exitCode: log.exitCode,
+        // Without this session's run, the crash files written around the last log.
+        startedAt: log.startedAt ?? (log.endedAt ? log.endedAt - 10 * 60 * 1000 : 0),
+    });
 }
 
 function isRunning(name) {
@@ -539,6 +643,9 @@ module.exports = {
     repairInstance,
     deleteInstance,
     launchInstance,
+    getLog,
+    crashHelp,
+    instanceEvents,
     stopInstance,
     isRunning,
     getInstancesStorage,

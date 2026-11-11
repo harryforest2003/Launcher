@@ -34,6 +34,11 @@ function MCSettings({
   const [settings, setSettings] = useState<LauncherSettings | null>(null);
   const [cloudFolders, setCloudFolders] = useState<CloudFolder[]>([]);
   const [account, setAccount] = useState<{ name: string; uuid: string } | null>(null);
+  const [javaRuntimes, setJavaRuntimes] = useState<{ majorVersion: number; component: string }[]>([]);
+
+  useEffect(() => {
+    window.instanceAPI.javaRuntimes().then(setJavaRuntimes).catch(() => {});
+  }, []);
 
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -208,7 +213,11 @@ function MCSettings({
                 <h2 style={{ color: "#d8b4fe", marginBottom: 10 }}>Java</h2>
 
                 <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 14 }}>
-                  Leave blank to use whichever <code>java</code> is on your PATH.
+                  Leave blank for automatic: each instance gets the Java its Minecraft version needs,
+                  downloaded from Mojang the first time. Or choose one Java for every instance; an
+                  instance can still choose its own in its settings.
+                  {javaRuntimes.length > 0 &&
+                    ` Downloaded so far: ${javaRuntimes.map((runtime) => `Java ${runtime.majorVersion}`).join(", ")}.`}
                 </p>
 
                 <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
@@ -218,7 +227,7 @@ function MCSettings({
                       setSettings({ ...settings, javaPath: e.target.value })
                     }
                     onBlur={() => patch({ javaPath: settings.javaPath })}
-                    placeholder="java"
+                    placeholder="Automatic"
                     style={{
                       flex: 1,
                       padding: 12,

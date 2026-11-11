@@ -5,6 +5,7 @@ const { ipcMain, shell, dialog, BrowserWindow } = require("electron");
 const instanceManager = require("../instanceManager.cjs");
 const instanceMods = require("./instanceMods.cjs");
 const instanceFiles = require("./instanceFiles.cjs");
+const javaRuntime = require("./javaRuntime.cjs");
 const modSearch = require("./modSearch.cjs");
 const account = require("./account.cjs");
 const modpack = require("./modpack.cjs");
@@ -131,20 +132,61 @@ function registerInstanceIpc() {
         instanceManager.deleteInstance(name)
     );
 
-    ipcMain.handle("instance:launch", async (event, name) => {
+    // The game's output, exit and Java download progress, to every window, however it
+    // was launched.
+    const broadcast = (channel, payload) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+            if (!win.isDestroyed()) win.webContents.send(channel, payload);
+        }
+    };
+    instanceManager.instanceEvents.on("log", (payload) => broadcast("instance:log", payload));
+    instanceManager.instanceEvents.on("exit", (payload) => broadcast("instance:exit", payload));
+    instanceManager.instanceEvents.on("progress", (payload) => broadcast("instance:progress", payload));
+
+    ipcMain.handle("instance:launch", async (_event, name) => {
         const instance = instanceManager.getInstance(name);
 
         const acct = await account.accountForLaunch(instance.name);
 
-        const result = instanceManager.launchInstance(name, acct, {
-            onLog: (text) =>
-                send(event, "instance:log", { name, text }),
-
-            onExit: (code) =>
-                send(event, "instance:exit", { name, code }),
-        });
+        const result = await instanceManager.launchInstance(name, acct);
 
         return { ...result, online: acct.online, playerName: acct.name };
+    });
+
+    // A Java for this instance alone, chosen in a file dialog. Null if cancelled.
+    ipcMain.handle("instance:pickJava", async (event, name) => {
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: `Choose a Java for ${name}`,
+            properties: ["openFile"],
+        });
+        if (picked.canceled) return null;
+        instanceManager.updateInstance(name, { javaPath: picked.filePaths[0] });
+        return picked.filePaths[0];
+    });
+
+    // Which Java automatic would use for this instance, and whether it's downloaded yet.
+    ipcMain.handle("instance:javaInfo", (_e, name) => {
+        const instance = instanceManager.getInstance(name);
+        const need = javaRuntime.requiredJava(instanceManager.instanceFolder(name), instance);
+        const downloaded = javaRuntime.installedRuntimes().some((runtime) => runtime.component === need.component);
+        return { ...need, downloaded };
+    });
+
+    ipcMain.handle("instance:log", (_e, name) => instanceManager.getLog(name));
+
+    ipcMain.handle("instance:crashHelp", (_e, name) => instanceManager.crashHelp(name));
+
+    // A crash report or Java crash file in its default app, or the logs folder.
+    ipcMain.handle("instance:openLogFile", async (_e, name, file) => {
+        const instance = instanceManager.getInstance(name);
+        const gameDir = instanceFiles.gameDirectory(instance);
+        const target = file
+            ? path.resolve(gameDir, /^hs_err_pid\d+\.log$/.test(file) ? "" : "crash-reports", path.basename(String(file)))
+            : path.join(gameDir, "logs");
+        if (!target.startsWith(path.resolve(gameDir) + path.sep)) throw new Error("That isn't part of this instance.");
+        if (!file) fs.mkdirSync(target, { recursive: true });
+        const failed = await shell.openPath(target);
+        if (failed) throw new Error(failed);
     });
 
     ipcMain.handle("instance:stop", (_e, name) =>
@@ -708,6 +750,8 @@ function registerInstanceIpc() {
         ...launcherSettings.writeSettings(patch),
         system: launcherSettings.systemInfo(),
     }));
+
+    ipcMain.handle("settings:javaRuntimes", () => javaRuntime.installedRuntimes());
 
     ipcMain.handle("settings:pickJava", async () => {
         const picked = await dialog.showOpenDialog({

@@ -14,7 +14,7 @@ const { app } = require("electron");
 
 const DEFAULTS = {
     defaultRam: 4,
-    javaPath: "",              // "" means "java" from PATH
+    javaPath: "",              // "" means automatic: the right Java for each version
     jvmArgs: "",
     closeOnLaunch: false,
     showSnapshots: false,
@@ -65,14 +65,6 @@ function systemInfo() {
     };
 }
 
-function resolveJavaPath() {
-    const configured = readSettings().javaPath?.trim();
-
-    if (configured && fs.existsSync(configured)) return configured;
-
-    return "java";
-}
-
 /*
  * Split a user-entered JVM argument string into argv entries, keeping
  * quoted values together.
@@ -93,7 +85,6 @@ module.exports = {
     readSettings,
     writeSettings,
     systemInfo,
-    resolveJavaPath,
     parseJvmArgs,
     DEFAULTS,
 };

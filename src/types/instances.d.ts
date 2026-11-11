@@ -47,6 +47,35 @@ declare global {
 
     type ContentType = "mod" | "resourcepack" | "shader" | "datapack";
 
+    type InstanceLog = {
+        source: "live" | "file" | "none";
+        running: boolean;
+        startedAt: number | null;
+        endedAt: number | null;
+        exitCode: number | null;
+        lines: string[];
+    };
+
+    type CrashCause = {
+        kind: string;
+        title: string;
+        detail: string;
+        fix: string | null;
+        mods: { fileName: string; name: string; enabled: boolean }[];
+    };
+
+    type CrashHelp =
+        | { crashed: false }
+        | {
+              crashed: true;
+              summary: string;
+              causes: CrashCause[];
+              exitCode: number | null;
+              description: string | null;
+              reportFile: string | null;
+              jvmCrashFile: string | null;
+          };
+
     /** Which item a change applies to. A data pack can be in a world, or in none yet. */
     type ContentRef = {
         type: ContentType;
@@ -441,6 +470,8 @@ declare global {
             getSettings(): Promise<LauncherSettings>;
             setSettings(patch: Partial<LauncherSettings>): Promise<LauncherSettings>;
             pickJava(): Promise<string | null>;
+            /** The Java versions automatic Java has downloaded. */
+            javaRuntimes(): Promise<{ component: string; majorVersion: number; version: string | null }[]>;
 
             getApiKeys(): Promise<ApiKeyStatuses>;
             setApiKey(name: ApiKeyName, value: string | null): Promise<ApiKeyStatuses>;
@@ -458,6 +489,16 @@ declare global {
             onModProgress(
                 cb: (p: { name: string; projectId: string; percent: number }) => void
             ): () => void;
+            /** Chooses a Java for this instance alone. Null if cancelled. */
+            pickInstanceJava(name: string): Promise<string | null>;
+            /** The Java automatic would use, and whether it has been downloaded. */
+            javaInfo(name: string): Promise<{ component: string; majorVersion: number; downloaded: boolean }>;
+            /** The latest run: this session's output, or the log Minecraft wrote last time. */
+            log(name: string): Promise<InstanceLog>;
+            /** Why the latest run crashed, and which mods may be to blame. */
+            crashHelp(name: string): Promise<CrashHelp>;
+            /** A crash report or Java crash file in its default app, or the logs folder if none. */
+            openLogFile(name: string, file?: string): Promise<void>;
             onLog(cb: (d: { name: string; text: string }) => void): () => void;
             onExit(cb: (d: { name: string; code: number }) => void): () => void;
         };
