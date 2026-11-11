@@ -11,6 +11,7 @@ const loaderUpdates = require("./loaderUpdates.cjs");
 const modpackExport = require("./modpackExport.cjs");
 const modSearch = require("./modSearch.cjs");
 const modDependencies = require("./modDependencies.cjs");
+const optimise = require("./optimise.cjs");
 const { contentDetails } = require("./contentDetails.cjs");
 const account = require("./account.cjs");
 const modpack = require("./modpack.cjs");
@@ -240,6 +241,36 @@ function registerInstanceIpc() {
     ipcMain.handle("instance:lastUpdate", (_e, name) => modUpdates.lastUpdate(instanceManager.instanceFolder(name)));
 
     // Puts back the latest change's files, and the loader it had if the change updated it.
+    // Optimise: what's slowing an instance down, the fixes for it, and putting them back.
+    const optimiseOptions = (event, name) => ({
+        globalJvmArgs: launcherSettings.readSettings().jvmArgs,
+        updateInstance: (patch) => instanceManager.updateInstance(name, patch),
+        onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
+    });
+    const notWhileRunning = (name) => {
+        if (instanceManager.isRunning(name)) {
+            throw new Error("Close Minecraft first: it saves its own settings when it quits, over any changed while it's open.");
+        }
+    };
+
+    ipcMain.handle("instance:optimiseCheck", (_e, name) =>
+        optimise.check(instanceManager.getInstance(name), instanceManager.instanceFolder(name), {
+            running: instanceManager.isRunning(name),
+            globalJvmArgs: launcherSettings.readSettings().jvmArgs,
+        })
+    );
+
+    ipcMain.handle("instance:optimiseApply", async (event, name, ids) => {
+        notWhileRunning(name);
+        const chosen = (Array.isArray(ids) ? ids : []).map(String).filter((id) => ["mods", "shaders", "java", "graphics"].includes(id));
+        return optimise.apply(instanceManager.getInstance(name), instanceManager.instanceFolder(name), chosen, optimiseOptions(event, name));
+    });
+
+    ipcMain.handle("instance:optimiseUndo", (event, name) => {
+        notWhileRunning(name);
+        return optimise.undo(instanceManager.instanceFolder(name), optimiseOptions(event, name));
+    });
+
     ipcMain.handle("instance:undoUpdate", async (event, name) => {
         const done = modUpdates.undoLastUpdate(instanceManager.instanceFolder(name));
         if (done.loader) {

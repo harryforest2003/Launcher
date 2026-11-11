@@ -670,6 +670,53 @@ const instanceBridge = {
   installVersion: async () => ({ updated: [], skipped: [], failed: [], batch: null, dependencies: [], missingDependencies: [], disabledDependencies: [] }),
   lastUpdate: async () => null,
   undoUpdate: async () => ({ restored: [] }),
+  optimiseCheck: async () => ({
+    hardware: { gpu: "Intel Iris Plus Graphics", builtIn: true, weak: true, retina: true, memoryGb: 16, cores: 8 },
+    running: false,
+    undo: null,
+    items: [
+      {
+        id: "mods",
+        state: "fix",
+        title: "Speed mods",
+        detail: "One speed mod is missing. Each is checked against your other mods before it goes in.",
+        list: [{ label: "retiNO", text: "Draws at normal resolution on the Retina screen instead of four times the pixels: slightly softer, much faster" }],
+        action: "Add retiNO",
+      },
+      { id: "shaders", state: "ok", title: "Shaders", detail: "Shaders are off." },
+      {
+        id: "java",
+        state: "fix",
+        title: "Java settings",
+        detail: "How much memory Minecraft has, and how it cleans up after itself. The default cleaning causes stutters.",
+        list: [{ label: "Garbage collection", text: "Java's default → Minecraft Launcher's (fewer stutters)" }],
+        action: "Use these",
+      },
+      { id: "graphics", state: "ok", title: "Graphics settings", detail: "Already set for speed." },
+      {
+        id: "heavy",
+        state: "tip",
+        title: "Heavy mods",
+        detail: "These cost the most speed. Turn off any you're not using in the Content tab: a mod that's off keeps its settings for when you turn it back on.",
+        list: [
+          { label: "Essential", text: "runs cosmetics, friends and its own menus in the background" },
+          { label: "Axiom", text: "a building editor that's always running; turn it off when you're not building" },
+        ],
+      },
+      {
+        id: "packs",
+        state: "tip",
+        title: "Resource packs",
+        detail: "7 packs are on. Large ones take memory and can cause stutters; turn off any you don't need in Options → Resource Packs.",
+        list: [
+          { label: "lf skins", text: "89 MB" },
+          { label: "Cyber Arsenal", text: "19 MB" },
+        ],
+      },
+    ],
+  }),
+  optimiseApply: async () => ({ done: ["Simulated in the web preview."], skipped: [] }),
+  optimiseUndo: async () => ({ restored: [] }),
   loaderVersions: async () => ({ loaderName: "Fabric Loader", current: "", newest: null, versions: [] }),
   planLoader: async (_name: string, version: string) => ({
     loaderName: "Fabric Loader",

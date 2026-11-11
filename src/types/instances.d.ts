@@ -83,6 +83,25 @@ declare global {
         latest: string;
     };
 
+    /** One thing Optimise looked at: "fix" has a change that should help, "tip" is advice, "ok" needs nothing. */
+    type OptimiseItem = {
+        id: "mods" | "shaders" | "java" | "graphics" | "heavy" | "packs";
+        state: "fix" | "tip" | "ok";
+        title: string;
+        detail: string;
+        list?: { label: string; text: string }[];
+        /** The button that fixes it, when there's something to do. */
+        action?: string;
+    };
+
+    type OptimiseReport = {
+        hardware: { gpu: string | null; builtIn: boolean; weak: boolean; retina: boolean; memoryGb: number; cores: number };
+        running: boolean;
+        items: OptimiseItem[];
+        /** The latest Optimise that can be undone. */
+        undo: { time: string } | null;
+    };
+
     type UpdateResult = {
         updated: { name: string; from: string; to: string }[];
         /** Left as they were, because the new version wouldn't work with the rest. */
@@ -610,6 +629,12 @@ declare global {
             /** The latest change to the instance's content that can be undone. */
             lastUpdate(name: string): Promise<{ id: string; time: string; names: string[] } | null>;
             undoUpdate(name: string): Promise<{ restored: { name: string; version: string }[] }>;
+            /** What's slowing an instance down. */
+            optimiseCheck(name: string): Promise<OptimiseReport>;
+            /** Applies the chosen fixes ("mods", "shaders", "java", "graphics"). */
+            optimiseApply(name: string, ids: string[]): Promise<{ done: string[]; skipped: { name: string; reason: string }[] }>;
+            /** Puts back what Optimise changed. */
+            optimiseUndo(name: string): Promise<{ restored: string[] }>;
             /** The builds of the instance's loader for its Minecraft version. */
             loaderVersions(name: string): Promise<LoaderVersions>;
             /** Checks every mod against that loader build, looking for mod updates that would make them fit. */

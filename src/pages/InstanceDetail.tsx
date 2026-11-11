@@ -9,7 +9,8 @@ import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
-import { Cloud, Folder, Hammer, Play, Settings, Square } from "lucide-react";
+import { Cloud, Folder, Gauge, Hammer, Play, Settings, Square } from "lucide-react";
+import OptimisePanel from "../components/OptimisePanel";
 
 const LOADER_NAMES: Record<string, string> = { fabric: "Fabric Loader", quilt: "Quilt Loader", forge: "Forge", neoforge: "NeoForge" };
 
@@ -98,6 +99,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   /* ---------------- repair progress ---------------- */
 
   const [progress, setProgress] = useState<InstallProgress | null>(null);
+  // The Optimise panel is open.
+  const [optimising, setOptimising] = useState(false);
   const [lastBackup, setLastBackup] = useState<string | null>(null);
 
   const loadLastBackup = useCallback(async () => {
@@ -466,6 +469,17 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
       )}
 
+      {optimising && (
+        <OptimisePanel
+          instanceName={instanceName}
+          onChanged={() => {
+            refresh();
+            updates.recheck();
+          }}
+          onClose={() => setOptimising(false)}
+        />
+      )}
+
       {/* One line: the tabs on the left, the instance's own buttons on the right */}
       <div
         style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #2e2640" }}
@@ -537,6 +551,17 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             }
           >
             <Cloud size={18} aria-hidden="true" />
+          </button>
+
+          <button
+            className="sidebar-button"
+            data-testid="optimise"
+            aria-label="Optimise"
+            data-tip="Optimise: find what's slowing this instance down, and fix it"
+            style={iconStyle}
+            onClick={() => setOptimising(true)}
+          >
+            <Gauge size={18} aria-hidden="true" />
           </button>
 
           {instance.running && (
