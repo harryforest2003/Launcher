@@ -8,6 +8,7 @@ const { getLatestLoaderVersion } = require("./minecraft/loaders.cjs");
 const launcherSettings = require("./minecraft/settings.cjs");
 const { analyzeCrash } = require("./minecraft/crashHelp.cjs");
 const { ensureRuntime, requiredJava } = require("./minecraft/javaRuntime.cjs");
+const { restoreVanillaLibraries } = require("./minecraft/versionData.cjs");
 
 const { instancesDir } = require("./paths.cjs");
 
@@ -493,7 +494,20 @@ async function launchInstance(name, account, { onProgress } = {}) {
         );
     }
 
-    const versionJson = JSON.parse(fs.readFileSync(versionPath, "utf8"));
+    let versionJson = JSON.parse(fs.readFileSync(versionPath, "utf8"));
+
+    // Instances with a loader merged before libraryKey counted classifiers lack some
+    // of Minecraft's own libraries (on 26.2, LWJGL's classes). Put them back, once.
+    let restored = 0;
+    if (instance.vanillaId && instance.vanillaId !== instance.versionId) {
+        try {
+            const vanilla = JSON.parse(fs.readFileSync(path.join(folder, "versions", instance.vanillaId, `${instance.vanillaId}.json`), "utf8"));
+            ({ versionJson, restored } = restoreVanillaLibraries(versionJson, vanilla));
+            if (restored) fs.writeFileSync(versionPath, JSON.stringify(versionJson, null, 2));
+        } catch {
+            // No vanilla file to compare with; launch as it is.
+        }
+    }
 
     const global = launcherSettings.readSettings();
 
@@ -504,6 +518,7 @@ async function launchInstance(name, account, { onProgress } = {}) {
 
     runs.set(name, { lines: [], partial: "", running: true, startedAt: Date.now(), endedAt: null, exitCode: null });
     const note = (text) => recordLog(name, `[Unity Launcher] ${text}\n`);
+    if (restored) note(`Put back ${restored} of Minecraft's own libraries that an earlier install left out.`);
 
     starting.add(name);
     let javaPath;
@@ -594,6 +609,7 @@ async function crashHelp(name) {
     return analyzeCrash({
         gameDir: instance.gameDirectory ?? path.join(instanceFolder(name), ".minecraft"),
         ram: instance.ram,
+        mcVersion: instance.version,
         lines: log.lines,
         exitCode: log.exitCode,
         // Without this session's run, the crash files written around the last log.

@@ -4,6 +4,7 @@ const { app } = require("electron");
 
 const modSearch = require("./modSearch.cjs");
 const instanceMods = require("./instanceMods.cjs");
+const { ensureDependencies } = require("./modDependencies.cjs");
 const { pool } = require("./net.cjs");
 
 /*
@@ -203,6 +204,10 @@ async function installStarterMods(instance, folder, { onProgress } = {}) {
         },
         { concurrency: 4 }
     );
+
+    // Then what the jars themselves say they need, which a site's page can miss.
+    const check = await ensureDependencies(instance, folder, { onProgress });
+    for (const name of check.added) if (!summary.dependencies.includes(name)) summary.dependencies.push(name);
 
     for (const list of [summary.added, summary.dependencies, summary.unavailable]) {
         list.sort((a, b) => a.localeCompare(b));

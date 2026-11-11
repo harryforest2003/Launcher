@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import GitHubInstall from "../components/GitHubInstall";
 import InstanceLog from "../components/InstanceLog";
+import { dependencyNote } from "../utils/dependencyNote";
 import ModUpdatesPanel from "../components/ModUpdatesPanel";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
@@ -297,12 +298,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     try {
       const result = await tryInstall(mod.sources.filter((entry) => entry.installable));
 
-      setNotice(
-        `Installed ${result.name} in ${result.folder}.` +
-          (result.dependencies.length
-            ? ` Also added what it needs: ${result.dependencies.join(", ")}.`
-            : "")
-      );
+      setNotice(`Installed ${result.name} in ${result.folder}. ${dependencyNote(result)}`.trim());
 
       await refresh();
       // A data pack sold as a mod lands with the mods, so show where it really went.
@@ -663,7 +659,13 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
       {tab === "screenshots" && <InstanceScreenshots instanceName={instanceName} />}
 
-      {tab === "log" && <InstanceLog instanceName={instanceName} />}
+      {tab === "log" && (
+        <InstanceLog
+          instanceName={instanceName}
+          onRepair={() => run("repair", () => window.instanceAPI.repair(instanceName))}
+          onOpenTab={setTab}
+        />
+      )}
 
       {/* ---------------- SETTINGS ---------------- */}
       {tab === "settings" && (
@@ -949,7 +951,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               contentType={contentType}
               world={contentType === "datapack" ? targetWorld || undefined : undefined}
               onInstalled={async (result) => {
-                setNotice(`Installed ${result.name} from GitHub, in ${result.folder}.`);
+                setNotice(`Installed ${result.name} from GitHub, in ${result.folder}. ${dependencyNote(result)}`.trim());
                 await refresh();
                 setContentType(result.type);
                 setTab("mods");

@@ -9,6 +9,7 @@ const javaRuntime = require("./javaRuntime.cjs");
 const modUpdates = require("./modUpdates.cjs");
 const modpackExport = require("./modpackExport.cjs");
 const modSearch = require("./modSearch.cjs");
+const modDependencies = require("./modDependencies.cjs");
 const account = require("./account.cjs");
 const modpack = require("./modpack.cjs");
 const importer = require("./importer.cjs");
@@ -319,14 +320,15 @@ function registerInstanceIpc() {
 
     ipcMain.handle("github:releases", (_e, { input, type }) => github.listReleases(input, type));
 
-    ipcMain.handle("github:install", (_e, request) => {
+    ipcMain.handle("github:install", async (_e, request) => {
         const instance = instanceManager.getInstance(request.name);
-        return github.installAsset(
-            instance,
-            instanceManager.instanceFolder(request.name),
-            instanceMods.installContent,
-            request
-        );
+        const folder = instanceManager.instanceFolder(request.name);
+        const result = await github.installAsset(instance, folder, instanceMods.installContent, request);
+        if (!result.installed || result.installed.type !== "mod") return result;
+
+        // A GitHub release has no page listing what it needs, so the jar is the only guide.
+        const check = await modDependencies.ensureDependencies(instance, folder, { only: [result.installed.fileName] });
+        return { installed: { ...result.installed, dependencies: check.added, missingDependencies: check.notFound, disabledDependencies: check.disabled } };
     });
 
     ipcMain.handle("instance:modInstall", async (event, payload) => {
@@ -370,6 +372,7 @@ function registerInstanceIpc() {
          * Modrinth and CurseForge.
          */
         const installedDeps = [];
+        const depFiles = [];
 
         try {
             const deps = await modSearch.collectDependencies(
@@ -378,7 +381,7 @@ function registerInstanceIpc() {
 
             for (const dep of deps) {
                 try {
-                    await instanceMods.installContent(folder, {
+                    const added = await instanceMods.installContent(folder, {
                         ...dep.file,
                         type: dep.file.targetType,
                         world,
@@ -389,6 +392,7 @@ function registerInstanceIpc() {
                     });
 
                     installedDeps.push(dep.info.name);
+                    depFiles.push(added.fileName);
 
                 } catch (err) {
                     console.warn(
@@ -401,7 +405,13 @@ function registerInstanceIpc() {
             console.warn("Dependency resolution failed:", err.message);
         }
 
-        return { ...result, dependencies: installedDeps };
+        // Then what the jars themselves say they need, which a site's page can miss.
+        const check = result.type === "mod"
+            ? await modDependencies.ensureDependencies(instance, folder, { only: [result.fileName, ...depFiles] })
+            : { added: [], notFound: [], disabled: [] };
+        for (const name of check.added) if (!installedDeps.includes(name)) installedDeps.push(name);
+
+        return { ...result, dependencies: installedDeps, missingDependencies: check.notFound, disabledDependencies: check.disabled };
     });
 
     ipcMain.handle("instance:update", (_e, { name, patch }) =>

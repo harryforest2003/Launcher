@@ -153,8 +153,8 @@ function launch({
 
     if (missing.length) {
         throw new Error(
-            `Instance is incomplete — ${missing.length} file(s) missing, ` +
-            `starting with ${path.basename(missing[0])}. Reinstall the instance.`
+            `This instance is missing ${missing.length} game file(s), ` +
+            `starting with ${path.basename(missing[0])}. Use Repair on the instance's page to download them again.`
         );
     }
 

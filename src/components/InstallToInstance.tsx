@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { dependencyNote } from "../utils/dependencyNote";
 
 type Props = {
   source: "modrinth" | "curseforge";
@@ -107,8 +108,8 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
           world: world || undefined,
         });
 
-        const extras = result.dependencies.length ? ` Also added: ${result.dependencies.join(", ")}.` : "";
-        setDone(`Added to ${chosen}, in ${result.folder}, from ${attempt.source === "modrinth" ? "Modrinth" : "CurseForge"}.${extras}`);
+        const extras = dependencyNote(result);
+        setDone(`Added to ${chosen}, in ${result.folder}, from ${attempt.source === "modrinth" ? "Modrinth" : "CurseForge"}.${extras ? ` ${extras}` : ""}`);
         setBusy(false);
         return;
       } catch (err) {

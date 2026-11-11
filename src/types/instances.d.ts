@@ -72,12 +72,26 @@ declare global {
         latest: string;
     };
 
+    /** What adding a mod also added, and what it needs that couldn't be added. */
+    type DependencyCheck = {
+        dependencies: string[];
+        missingDependencies: { id: string; neededBy: string[] }[];
+        disabledDependencies: { name: string; neededBy: string }[];
+    };
+
     type CrashCause = {
         kind: string;
+        /** What went wrong, in plain words. */
         title: string;
         detail: string;
+        /** Only when the evidence points to one. */
         fix: string | null;
+        /** The button that does the fix, if there is one. */
+        action: "repair" | "settings" | "add-content" | null;
+        /** The mods to blame (empty when it isn't a mod's fault). */
         mods: { fileName: string; name: string; enabled: boolean }[];
+        /** The exact line that shows it, and where: the log (index into its lines), the crash report, or Java's crash file. */
+        evidence: { text: string; source: "log" | "report" | "java"; index: number } | null;
     };
 
     type CrashHelp =
@@ -395,7 +409,9 @@ declare global {
                 force?: boolean;
             }): Promise<
                 | { needsConfirm: true; reason: string }
-                | { installed: { fileName: string; name: string; type: ContentType; world: string | null; folder: string } }
+                | {
+                      installed: { fileName: string; name: string; type: ContentType; world: string | null; folder: string } & Partial<DependencyCheck>;
+                  }
             >;
 
             modSearch(
@@ -417,8 +433,7 @@ declare global {
                 type: ContentType;
                 world: string | null;
                 folder: string;
-                dependencies: string[];
-            }>;
+            } & DependencyCheck>;
 
             update(
                 name: string,

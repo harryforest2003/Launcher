@@ -97,10 +97,27 @@ async function resolveModrinthFile(projectId, mcVersion, loader, type = "mod") {
         sha1: file.hashes?.sha1 ?? null,
         versionNumber: release.version_number,
         targetType: targetTypeFor(contentType, file.filename),
-        dependencies: (release.dependencies ?? [])
-            .filter(d => d.dependency_type === "required" && d.project_id)
-            .map(d => d.project_id),
+        dependencies: await requiredProjects(release.dependencies),
     };
+}
+
+/*
+ * The projects a Modrinth version requires. Some name only the exact version they need,
+ * not the project, so those are looked up.
+ */
+async function requiredProjects(dependencies = []) {
+    const required = dependencies.filter(d => d.dependency_type === "required" && (d.project_id || d.version_id));
+    const ids = await Promise.all(
+        required.map(async d => {
+            if (d.project_id) return d.project_id;
+            try {
+                return (await fetchJson(`${MODRINTH}/version/${d.version_id}`))?.project_id ?? null;
+            } catch {
+                return null;
+            }
+        })
+    );
+    return [...new Set(ids.filter(Boolean))];
 }
 
 async function resolveCurseForgeFile(projectId, mcVersion, loader, type = "mod") {

@@ -123,6 +123,33 @@ function nativeArtifact(library) {
 /* ---------------- merging ---------------- */
 
 /*
+ * What makes two library entries the same library: group, artifact and classifier,
+ * but not the version. The classifier matters: Minecraft 26.2 ships LWJGL's classes
+ * as "org.lwjgl:lwjgl:3.4.1:unsafe" next to "...:natives-linux" and the rest, and
+ * treating those as one library dropped the classes and stopped the game starting.
+ */
+function libraryKey(name) {
+    const [group, artifact, , classifier = ""] = name.split("@")[0].split(":");
+    return `${group}:${artifact}:${classifier}`;
+}
+
+/*
+ * Instances merged before that was fixed lack some of vanilla's libraries. Returns the
+ * version JSON with them put back (at the end, after the loader's), and how many.
+ */
+function restoreVanillaLibraries(merged, vanilla) {
+    const have = new Set((merged.libraries ?? []).filter(lib => lib?.name).map(lib => libraryKey(lib.name)));
+    const missing = (vanilla.libraries ?? []).filter(lib => lib?.name && !have.has(libraryKey(lib.name)));
+
+    if (!missing.length) return { versionJson: merged, restored: 0 };
+
+    return {
+        versionJson: { ...merged, libraries: [...(merged.libraries ?? []), ...missing] },
+        restored: missing.length,
+    };
+}
+
+/*
  * A loader profile (Fabric, Quilt, Forge) is a partial version JSON that
  * inherits from the vanilla one. Loader libraries must come FIRST on the
  * classpath so their patched classes win over vanilla's.
@@ -159,14 +186,14 @@ function mergeVersions(vanilla, loader) {
         merged.minecraftArguments = loader.minecraftArguments;
     }
 
-    // Keep the first occurrence of each group:artifact, so a loader's
-    // newer version of a shared library replaces vanilla's.
+    // Keep the first occurrence of each library, so a loader's newer version
+    // of a shared library replaces vanilla's.
     const seen = new Set();
 
     merged.libraries = merged.libraries.filter(lib => {
         if (!lib?.name) return true;
 
-        const key = lib.name.split(":").slice(0, 2).join(":");
+        const key = libraryKey(lib.name);
 
         if (seen.has(key)) return false;
         seen.add(key);
@@ -216,6 +243,7 @@ module.exports = {
     nativeArtifact,
     nativeClassifier,
     mergeVersions,
+    restoreVanillaLibraries,
     buildClasspath,
     OS_NAME,
     OS_ARCH,

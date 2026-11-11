@@ -4,7 +4,7 @@ type Props = {
   instanceName: string;
   contentType: ContentType;
   world?: string;
-  onInstalled: (result: { name: string; folder: string; type: ContentType }) => void;
+  onInstalled: (result: { name: string; folder: string; type: ContentType } & Partial<DependencyCheck>) => void;
 };
 
 const fieldStyle: React.CSSProperties = {
