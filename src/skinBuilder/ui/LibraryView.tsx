@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, TextCursorInput } from "lucide-react";
+import blockbenchLogo from "../../assets/blockbench-logo.svg";
 import BackgroundLogo from "../../components/BackgroundLogo";
+import { BinIcon } from "../../components/Icons";
 import SearchDropdown from "../../components/SearchDropdown";
 import { findItem } from "../catalog";
 import { ATLAS_PIXELS, buildPack, type BuiltPack, type PackSkin } from "../pack";
@@ -15,6 +18,9 @@ type Props = {
   onEditInBlockbench: (skin: SkinMeta) => void;
   notice: string | null;
 };
+
+// The size of the square buttons on each skin's card, like the instance page's.
+const squareButton = { width: 38, height: 38, boxSizing: "border-box" as const, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" };
 
 const ALL = "__all__";
 const SINGLES = "__singles__";
@@ -321,17 +327,26 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
                   ))}
                 </select>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                  <Button onClick={() => onEdit(skin)} style={{ padding: "6px 8px", fontSize: 12 }}>Edit</Button>
-                  <Button onClick={() => renameSkin(skin)} style={{ padding: "6px 8px", fontSize: 12 }}>Rename</Button>
-                  <Button
+                {/* Square buttons with the app's usual symbols; what each does comes up on hover. */}
+                <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                  <button className="sidebar-button" aria-label="Edit" data-tip="Edit: change the selection, item and thickness" style={squareButton} onClick={() => onEdit(skin)}>
+                    <Pencil size={18} aria-hidden="true" />
+                  </button>
+                  <button className="sidebar-button" aria-label="Rename" data-tip="Rename this skin" style={squareButton} onClick={() => renameSkin(skin)}>
+                    <TextCursorInput size={18} aria-hidden="true" />
+                  </button>
+                  <button
+                    className="sidebar-button"
+                    aria-label="Edit in Blockbench"
+                    data-tip="Edit in Blockbench: change the model or paint it, then save it back here"
+                    style={squareButton}
                     onClick={() => onEditInBlockbench(skin)}
-                    style={{ padding: "6px 8px", fontSize: 12 }}
-                    title="Change the model or paint it in Blockbench, then save it back here"
                   >
-                    Blockbench
-                  </Button>
-                  <Button danger onClick={() => deleteSkin(skin)} style={{ padding: "6px 8px", fontSize: 12 }}>Delete</Button>
+                    <img src={blockbenchLogo} alt="" style={{ width: 19, height: 19 }} />
+                  </button>
+                  <button className="bin-button" aria-label="Delete" data-tip="Delete this skin" style={{ width: 38, height: 38, borderRadius: 10 }} onClick={() => deleteSkin(skin)}>
+                    <BinIcon size={18} />
+                  </button>
                 </div>
               </div>
             ))}

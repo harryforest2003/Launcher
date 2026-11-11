@@ -438,16 +438,28 @@ function MCDiscover({
             </div>
           ) : (
             items.map((item) => (
+              // Clicking anywhere on the card, other than its buttons, opens the project's page.
               <div
                 key={`${item.source}-${item.id}`}
                 className="game-card"
                 data-testid="discover-card"
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${item.name}`}
+                onClick={() => openMod(item.source, item.id)}
+                onKeyDown={(event) => {
+                  if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    openMod(item.source, item.id);
+                  }
+                }}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 14,
                   minHeight: 100,
                   padding: 12,
+                  cursor: "pointer",
                 }}
               >
                 {/* ICON */}
@@ -489,8 +501,12 @@ function MCDiscover({
                   </div>
                 </div>
 
-                {/* BUTTONS */}
-                <div style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-start" }}>
+                {/* BUTTONS: using these (or what they open) doesn't open the card */}
+                <div
+                  style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-start", cursor: "default" }}
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
                   {item.type !== "modpack" && (
                     <InstallToInstance
                       source={item.source}
@@ -527,15 +543,6 @@ function MCDiscover({
                     </button>
                   )}
 
-                  <button
-                    className="sidebar-button"
-                    style={{ padding: "8px 12px" }}
-                    onClick={() =>
-                      openMod(item.source, item.id)
-                    }
-                  >
-                    View
-                  </button>
                 </div>
               </div>
             ))
