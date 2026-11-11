@@ -6,6 +6,7 @@ const instanceMods = require("./instanceMods.cjs");
 const modSearch = require("./modSearch.cjs");
 const { modInfo, modsIn } = require("./modInfo.cjs");
 const { problemsWith } = require("./compat.cjs");
+const { addonProblems } = require("./mixinCheck.cjs");
 const { findProject, BUILT_IN } = require("./modDependencies.cjs");
 const { requiredJava } = require("./javaRuntime.cjs");
 const { CF_LOADER_TYPES, usesLoader } = require("./contentTypes.cjs");
@@ -309,6 +310,15 @@ async function runUpdates(instance, folder, updates, { mode = "skip", requireAll
                     mods,
                     instance
                 )));
+                // Add-ons that change the code of a mod being updated (or are updated themselves).
+                problems.push(...(await addonCheck(folder, current, candidates.filter((c) => c.info).map((c) => ({
+                    fileName: c.newName,
+                    file: c.file,
+                    name: c.update.name,
+                    version: c.update.latest,
+                    enabled: c.update.enabled,
+                    replacesFileName: c.update.fileName,
+                })))));
                 if (!problems.length) break;
                 if (mode === "ask") return { needsConfirm: true, problems: problems.map((p) => `${p.name} ${p.text}.`) };
 
@@ -600,6 +610,26 @@ async function missingDependencies(newMods, mods, instance) {
     return problems;
 }
 
+/*
+ * Problems add-ons would have once new files are in: current is what's installed (modsIn),
+ * incoming the new files ({ fileName, file, name, version, enabled, replacesFileName }).
+ * -> [{ fileName, name, text }], each on a new file. See mixinCheck.cjs.
+ */
+async function addonCheck(folder, current, incoming) {
+    const dir = instanceMods.modsDir(folder);
+    const replaced = new Set(incoming.map((mod) => mod.replacesFileName));
+    return addonProblems([
+        ...current
+            .filter((mod) => !replaced.has(mod.fileName.replace(/\.disabled$/, "")))
+            .map((mod) => ({ fileName: mod.fileName, file: path.join(dir, mod.fileName), name: mod.name, version: mod.version, enabled: mod.enabled })),
+        ...incoming.map((mod) => ({
+            ...mod,
+            changed: true,
+            replaces: mod.replacesFileName ? path.join(dir, mod.replacesFileName + (mod.enabled ? "" : ".disabled")) : null,
+        })),
+    ]).catch(() => []);
+}
+
 /* What the latest check saw for an instance: each file ("mod/sodium.jar" -> item), and the updates it found. */
 const checkedItems = (name) => lastItems.get(name) ?? null;
 const pendingUpdates = (name) => lastCheck.get(name) ?? null;
@@ -616,6 +646,7 @@ module.exports = {
     runUpdates,
     updateTo,
     missingDependencies,
+    addonCheck,
     checkedItems,
     pendingUpdates,
 };

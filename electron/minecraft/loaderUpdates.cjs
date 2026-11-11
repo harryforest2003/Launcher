@@ -116,6 +116,7 @@ async function findFix(name, instance, folder, item, mods, target, staging) {
             const after = [...mods.filter((m) => withoutDisabled(m.fileName) !== item.fileName), mod];
             const problems = problemsAt(instance, folder, after, target, new Set([mod.fileName])).filter((p) => p.fileName === mod.fileName);
             problems.push(...(await modUpdates.missingDependencies([mod], after, instance)));
+            problems.push(...(await modUpdates.addonCheck(folder, mods, [{ fileName: mod.fileName, file, name: mod.name, version: update.latest, enabled: mod.enabled, replacesFileName: item.fileName }])));
             if (!problems.length) return { update, mod };
         } catch {
             // This one couldn't be read or downloaded; try the next.
