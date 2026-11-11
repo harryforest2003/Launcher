@@ -1,7 +1,8 @@
 import type { CSSProperties } from "react";
 
 export const panelStyle: CSSProperties = {
-  background: "#161616",
+  // A little see-through, like the cards on other pages, so the logo shows faintly behind.
+  background: "rgba(22, 22, 22, 0.85)",
   border: "1px solid #2b2140",
   borderRadius: 14,
   padding: 18,

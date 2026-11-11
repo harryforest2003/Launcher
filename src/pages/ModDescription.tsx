@@ -1,3 +1,4 @@
+import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useMemo, useState } from "react";
 import InstallToInstance from "../components/InstallToInstance";
 import Sidebar from "../components/MCSidebar";
@@ -136,10 +137,11 @@ function ModDescription({
       />
 
       {/* MAIN CONTENT */}
-      <div style={{ flex: 1, display: "flex", padding: 25, gap: 20 }}>
-
-        {/* LEFT CONTENT */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: "auto", overflowX: "hidden"}}>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", padding: 25, gap: 20, boxSizing: "border-box" }}>
+        {/* LEFT CONTENT, with the logo centred behind it */}
+        <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex" }}>
+        <BackgroundLogo />
+        <div style={{ flex: 1, minWidth: 0, overflowY: "auto", overflowX: "hidden", position: "relative" }}>
 
 	  {/* SUMMARY */}
 	  <div
@@ -284,14 +286,16 @@ function ModDescription({
 
           </div>
         </div>
+        </div>
 
         {/* RIGHT SIDEBAR */}
 
 	<div
 	  style={{
+	    position: "relative",
 	    width: 320,
 	    flexShrink: 0,
-	    background: "#151515",
+	    background: "rgba(21, 21, 21, 0.85)",
 	    borderRadius: 12,
 	    padding: 20,
 	    border: "1px solid #333",

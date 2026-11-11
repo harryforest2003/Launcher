@@ -1,4 +1,4 @@
-import logo from "../assets/logo.png";
+import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useState } from "react";
 import LauncherSidebar from "../components/LauncherSidebar";
 
@@ -42,23 +42,7 @@ function HomeScreen({ onMinecraft, onModManager, onSettings }: Props) {
         }}
       >
         {/* Background Logo */}
-        <img
-          src={logo}
-          alt="Unity Launcher"
-          style={{
-            position: "absolute",
-            top: "45%",
-            left: "55%",
-            transform: "translate(-50%, -50%) rotate(-18deg)",
-            width: "90%",
-            maxWidth: "1400px",
-            opacity: 0.12,
-            filter:
-              "drop-shadow(0 0 40px rgba(168,85,247,0.3))",
-            pointerEvents: "none",
-            zIndex: 0,
-          }}
-        />
+        <BackgroundLogo />
 
         {/* Foreground, scrolling when the games don't all fit */}
         <div

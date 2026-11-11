@@ -1,3 +1,4 @@
+import BackgroundLogo from "../components/BackgroundLogo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BlockbenchFrame from "../components/BlockbenchFrame";
 import Sidebar from "../components/MCSidebar";
@@ -226,7 +227,8 @@ export default function SkinBuilder({
         onBack={leaving(onBack)}
       />
 
-      <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex" }}>
+      <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex", overflow: "hidden" }}>
+      {inWizard && <BackgroundLogo />}
       {inBlockbench && <BlockbenchFrame title={`Editing ${inBlockbench.name}`} />}
 
       {/* The library fits the window and only its models scroll; the wizard steps scroll as a page. */}
@@ -237,6 +239,7 @@ export default function SkinBuilder({
           overflow: "auto",
           padding: 26,
           boxSizing: "border-box",
+          position: "relative",
           ...(inWizard ? {} : { display: "flex", flexDirection: "column" }),
         }}
       >

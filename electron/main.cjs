@@ -17,6 +17,7 @@ const { accountForLaunch } = require("./minecraft/account.cjs");
 const { registerSkinBuilderIpc } = require("./skinBuilder/ipc.cjs");
 
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const fs = require("fs");
 const path = require("path");
 
 const minecraftAPI = require("./minecraftApi.cjs");
@@ -283,6 +284,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    // Run from source, the Dock would show Electron's icon; the installed app has its own.
+    const devIcon = path.join(__dirname, "..", "build", "icon.png");
+    if (process.platform === "darwin" && !app.isPackaged && fs.existsSync(devIcon)) app.dock?.setIcon(devIcon);
+
     // Both need app.getPath("userData"), so they can't run at module load.
     registerModIpc();
     registerInstanceIpc();

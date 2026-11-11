@@ -1,3 +1,4 @@
+import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useRef, useState } from "react";
 import InstallToInstance from "../components/InstallToInstance";
 import Sidebar from "../components/MCSidebar";
@@ -223,7 +224,9 @@ function MCDiscover({
         onBack={onBack}
       />
 
-      <div style={{ flex: 1, padding: 30, overflowY: "auto" }}>
+      <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
+      <BackgroundLogo />
+      <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", position: "relative" }}>
         <h1 style={{ color: "#c084fc" }}>Discover Content</h1>
 
         {/* SEARCH */}
@@ -544,6 +547,7 @@ function MCDiscover({
             <Pagination page={result.page} pageCount={result.pageCount} onChange={goToPage} />
           </div>
         )}
+      </div>
       </div>
     </div>
   );

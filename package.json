@@ -65,6 +65,7 @@
     "electronVersion": "42.5.0",
     "npmRebuild": false,
     "mac": {
+      "icon": "build/icon.icns",
       "target": [
         "dir"
       ],
@@ -73,6 +74,7 @@
       "category": "public.app-category.games"
     },
     "win": {
+      "icon": "build/icon.png",
       "target": [
         "nsis"
       ]
@@ -82,6 +84,7 @@
       "perMachine": false
     },
     "linux": {
+      "icon": "build/icon.png",
       "target": [
         "AppImage"
       ],

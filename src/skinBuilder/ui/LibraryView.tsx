@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import BackgroundLogo from "../../components/BackgroundLogo";
 import SearchDropdown from "../../components/SearchDropdown";
 import { findItem } from "../catalog";
 import { ATLAS_PIXELS, buildPack, type BuiltPack, type PackSkin } from "../pack";
@@ -253,12 +254,14 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
     <div style={{ display: "flex", gap: 18, flex: 1, minHeight: 0, minWidth: 0, alignItems: "stretch" }}>
       <div
         data-testid="skin-list"
-        style={{ ...panelStyle, flex: 1, minWidth: 300, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box" }}
+        // No panel of its own: just the skin cards, with the page (and its logo) behind them.
+        style={{ flex: 1, minWidth: 300, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", position: "relative" }}
       >
-        {notice && <div style={{ color: "#86efac", fontSize: 14, marginBottom: 12, flexShrink: 0 }}>{notice}</div>}
-        {error && <div style={{ marginBottom: 12, flexShrink: 0 }}><ErrorNote>{error}</ErrorNote></div>}
+        <BackgroundLogo />
+        {notice && <div style={{ color: "#86efac", fontSize: 14, marginBottom: 12, flexShrink: 0, position: "relative" }}>{notice}</div>}
+        {error && <div style={{ marginBottom: 12, flexShrink: 0, position: "relative" }}><ErrorNote>{error}</ErrorNote></div>}
 
-        <div data-testid="skin-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "-4px", padding: 4 }}>
+        <div data-testid="skin-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "-4px", padding: 4, position: "relative" }}>
         {visible.length === 0 ? (
           <div style={{ color: "#999", padding: "50px 10px", textAlign: "center", fontSize: 14 }}>
             No skins here yet.

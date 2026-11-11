@@ -1,4 +1,4 @@
-import logo from "../assets/logo.png";
+import BackgroundLogo from "../components/BackgroundLogo";
 import blockbenchLogo from "../assets/blockbench-logo.svg";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/MCSidebar";
@@ -460,32 +460,18 @@ function SkinSelector({
       >
         {busy === "blockbench" && preview && <BlockbenchFrame title={`Editing ${preview.label}`} />}
 
-        {/* Main Content */}
+        {/* Main Content, with the logo centred behind it and staying put while it scrolls */}
+        <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex" }}>
+        <BackgroundLogo />
         <div
           style={{
             flex: 1,
+            minWidth: 0,
             padding: "35px",
             overflowY: "auto",
             position: "relative",
           }}
         >
-          <img
-            src={logo}
-            alt=""
-            style={{
-              position: "absolute",
-              top: "45%",
-              left: "55%",
-              transform: "translate(-50%, -50%) rotate(-18deg)",
-              width: "90%",
-              maxWidth: "1400px",
-              opacity: 0.12,
-              filter: "drop-shadow(0 0 40px rgba(168, 85, 247, 0.3))",
-              pointerEvents: "none",
-              zIndex: 0,
-            }}
-          />
-
           <div style={{ position: "relative", zIndex: 1 }}>
             <h1
               style={{
@@ -784,6 +770,7 @@ function SkinSelector({
             </div>
             )}
           </div>
+        </div>
         </div>
 
         {/* Right Sidebar */}

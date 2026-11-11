@@ -30,7 +30,10 @@ node_modules/
 [Ll]ibrary/
 [Tt]emp/
 [Oo]bj/
-[Bb]uild/
+[Bb]uild/*
+# The app's icon, which electron-builder reads from build/.
+!build/icon.png
+!build/icon.icns
 [Bb]uilds/
 [Ll]ogs/
 UserSettings/

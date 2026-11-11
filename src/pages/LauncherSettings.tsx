@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import logo from "../assets/logo.png";
+import BackgroundLogo from "../components/BackgroundLogo";
 import ApiKeyRow from "../components/ApiKeyRow";
 import LauncherSidebar from "../components/LauncherSidebar";
 
@@ -41,22 +41,7 @@ export default function LauncherSettings({ onHome, onModManager }: Props) {
       <LauncherSidebar current="settings" onHome={onHome} onModManager={onModManager} onSettings={() => {}} />
 
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-        <img
-          src={logo}
-          alt=""
-          style={{
-            position: "absolute",
-            top: "45%",
-            left: "55%",
-            transform: "translate(-50%, -50%) rotate(-18deg)",
-            width: "90%",
-            maxWidth: "1400px",
-            opacity: 0.12,
-            filter: "drop-shadow(0 0 40px rgba(168,85,247,0.3))",
-            pointerEvents: "none",
-            zIndex: 0,
-          }}
-        />
+        <BackgroundLogo />
 
         <div style={{ position: "relative", zIndex: 1, padding: "35px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
           <h1 style={{ color: "#c084fc", marginBottom: 10 }}>Settings</h1>

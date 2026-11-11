@@ -1,4 +1,4 @@
-import logo from "../assets/logo.png";
+import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useState } from "react";
 import CreateInstancePanel from "../components/CreateInstancePanel";
 import Sidebar from "../components/MCSidebar";
@@ -109,13 +109,16 @@ function Library({
           onBack={onBack}
         />
 
-        <InstanceDetail
-          instanceName={selected}
-          onBack={() => {
-            setSelected(null);
-            loadInstances();
-          }}
-        />
+        <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
+          <BackgroundLogo />
+          <InstanceDetail
+            instanceName={selected}
+            onBack={() => {
+              setSelected(null);
+              loadInstances();
+            }}
+          />
+        </div>
       </div>
     );
   }
@@ -149,23 +152,7 @@ function Library({
         overflow: "hidden",
         }}
       >
-        <img
-          src={logo}
-          alt="Launcher Logo"
-          style={{
-          position: "absolute",
-          top: "45%",
-          left: "55%",
-          transform: "translate(-50%, -50%) rotate(-18deg)",
-          width: "90%",
-          maxWidth: "1400px",
-          opacity: 0.12,
-          filter:
-            "drop-shadow(0 0 40px rgba(168, 85, 247, 0.3))",
-          pointerEvents: "none",
-          zIndex: 0,
-        }}
-      />
+        <BackgroundLogo />
 
       <div
         style={{

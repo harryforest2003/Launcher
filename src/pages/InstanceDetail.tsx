@@ -323,7 +323,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
   if (!instance) {
     return (
-      <div style={{ flex: 1, padding: 30, color: "white" }}>
+      <div style={{ flex: 1, padding: 30, color: "white", position: "relative" }}>
         <button className="sidebar-button" onClick={onBack}>
           ← Back
         </button>
@@ -365,7 +365,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       : `${LOADER_NAMES[instance.loader] ?? instance.loader} ${instance.loaderVersion}`;
 
   return (
-    <div style={{ flex: 1, padding: 30, overflowY: "auto", color: "white" }}>
+    <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "white", position: "relative" }}>
       <button
         className="sidebar-button"
         onClick={onBack}

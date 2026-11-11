@@ -53,6 +53,10 @@ run("ditto", built, staging);
 fs.rmSync(target, { recursive: true, force: true });
 fs.renameSync(staging, target);
 
+// Tell Finder and the Dock the app changed, so they show its current icon.
+spawnSync("touch", [target]);
+spawnSync("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", ["-f", target]);
+
 // On a machine that already has instances here, the app keeps using them.
 const profile = path.join(os.homedir(), "Library/Application Support/unity");
 const pointer = path.join(profile, "instances-folder.txt");

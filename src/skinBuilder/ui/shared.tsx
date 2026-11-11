@@ -79,7 +79,7 @@ function PromptForm({ request }: { request: PromptRequest }) {
       onKeyDown={(event) => {
         if (event.key === "Escape") request.settle(null);
       }}
-      style={{ ...panelStyle, width: 360, maxWidth: "calc(100vw - 40px)", borderColor: "#6d28d9" }}
+      style={{ ...panelStyle, background: "#161616", width: 360, maxWidth: "calc(100vw - 40px)", borderColor: "#6d28d9" }}
     >
       <label style={{ display: "block", color: "#c084fc", fontSize: 15, marginBottom: 12 }}>
         {request.title}

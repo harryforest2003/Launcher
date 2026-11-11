@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import BackgroundLogo from "../components/BackgroundLogo";
 import ModManager from "./ModManager";
 
 type Props = {
@@ -51,19 +52,22 @@ export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
 
   if (selected) {
     return (
-      <div style={{ display: "flex", height: "100vh", background: "#0d0d0d", color: "white" }}>
+      <div style={{ display: "flex", height: "100vh", background: "#0d0d0d", color: "white", position: "relative", overflow: "hidden" }}>
+        <BackgroundLogo />
         <ModManager game={selected} onBack={() => setSelected(null)} />
       </div>
     );
   }
 
   return (
+    <div style={{ position: "relative", height: "100vh", overflow: "hidden", background: "#0d0d0d" }}>
+    <BackgroundLogo />
     <div
       style={{
+        position: "relative",
         display: "flex",
         flexDirection: "column",
         height: "100vh",
-        background: "#0d0d0d",
         color: "white",
         padding: 30,
         overflowY: "auto",
@@ -203,6 +207,7 @@ export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
           ))}
         </div>
       )}
+    </div>
     </div>
   );
 }

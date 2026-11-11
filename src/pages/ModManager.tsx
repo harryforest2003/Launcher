@@ -180,7 +180,7 @@ export default function ModManager({ game, onBack }: Props) {
   };
 
   return (
-    <div style={{ flex: 1, padding: 30, overflowY: "auto" }}>
+    <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", position: "relative" }}>
       <button
         className="sidebar-button"
         onClick={onBack}
