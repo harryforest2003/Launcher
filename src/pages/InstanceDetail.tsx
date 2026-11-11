@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import GitHubInstall from "../components/GitHubInstall";
 import InstanceLog from "../components/InstanceLog";
 import { dependencyNote } from "../utils/dependencyNote";
-import { ItemUpdateStatus, UpdatesBar } from "../components/UpdatesBar";
+import { ItemUpdateStatus, UpdatesControls, UpdatesMessages } from "../components/UpdatesBar";
+import Toggle from "../components/Toggle";
+import { BinIcon } from "../components/Icons";
 import { useContentUpdates } from "../components/useContentUpdates";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
@@ -336,8 +338,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   const currentTab = CONTENT_TABS.find(({ type }) => type === contentType) ?? CONTENT_TABS[0];
   const hasShaderMod = content.mod.some((m) => /iris|optifine/i.test(`${m.name} ${m.fileName}`));
 
-  const contentTabs = (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+  // The Mods / Resource Packs / ... tabs, with anything else for that row on the right.
+  const contentTabs = (extra?: React.ReactNode) => (
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
       {CONTENT_TABS.map(({ type, label }) => (
         <button
           key={type}
@@ -352,6 +355,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           {label} ({content[type].length})
         </button>
       ))}
+      {extra}
     </div>
   );
 
@@ -560,9 +564,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {/* ---------------- CONTENT ---------------- */}
       {tab === "mods" && (
         <>
-          <UpdatesBar updates={updates} />
-
-          {contentTabs}
+          {contentTabs(<UpdatesControls updates={updates} />)}
+          <UpdatesMessages updates={updates} />
 
           {items.length === 0 ? (
             <div style={{ ...card, color: "#9ca3af" }}>
@@ -586,6 +589,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                       alignItems: "center",
                       gap: 14,
                       opacity: item.enabled ? 1 : 0.55,
+                      // Turned off: the whole item goes grey.
+                      filter: item.enabled ? undefined : "grayscale(1)",
                       borderColor: item.enabled ? "#6d28d9" : "#3f3f46",
                     }}
                   >
@@ -629,6 +634,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                         className="sidebar-button"
                         disabled={busy === key}
                         onClick={() => addToWorld(item, targetWorld || content.worlds[0])}
+                        style={{ padding: "6px 10px", fontSize: 12 }}
                       >
                         Add to {targetWorld || content.worlds[0]}
                       </button>
@@ -637,26 +643,23 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                     <ItemUpdateStatus item={item} updates={updates} />
 
                     {item.kind === "file" && (
-                      <button
-                        className="sidebar-button"
+                      <Toggle
+                        on={item.enabled}
                         disabled={busy === key}
-                        onClick={() => toggleItem(item)}
-                        style={{
-                          minWidth: 100,
-                          background: item.enabled ? "#6d28d9" : "#3f3f46",
-                        }}
-                      >
-                        {busy === key ? "..." : item.enabled ? "Disable" : "Enable"}
-                      </button>
+                        onChange={() => toggleItem(item)}
+                        label={`${item.enabled ? "Turn off" : "Turn on"} ${status?.name ?? item.name}`}
+                      />
                     )}
 
                     <button
-                      className="sidebar-button"
+                      data-testid="item-delete"
+                      className="bin-button"
+                      title={`Delete ${status?.name ?? item.name}`}
+                      aria-label={`Delete ${status?.name ?? item.name}`}
                       disabled={busy === key}
                       onClick={() => deleteItem(item)}
-                      style={{ background: "#7f1d1d" }}
                     >
-                      Delete
+                      <BinIcon />
                     </button>
                   </div>
                 );
@@ -898,7 +901,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {/* ---------------- BROWSE ---------------- */}
       {tab === "browse" && (
         <>
-          {contentTabs}
+          {contentTabs()}
 
           <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 10 }}>
             Showing only {currentTab.label.toLowerCase()} that work on Minecraft{" "}
