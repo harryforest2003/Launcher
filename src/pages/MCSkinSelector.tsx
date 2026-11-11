@@ -1,5 +1,7 @@
 import BackgroundLogo from "../components/BackgroundLogo";
 import blockbenchLogo from "../assets/blockbench-logo.svg";
+import IconButton from "../components/IconButton";
+import { DownloadIcon, ResetIcon, SaveIcon, StarIcon } from "../components/Icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/MCSidebar";
 import BlockbenchFrame from "../components/BlockbenchFrame";
@@ -773,29 +775,26 @@ function SkinSelector({
         </div>
         </div>
 
-        {/* Right Sidebar */}
+        {/* Right Sidebar: fits the window, with the preview taking whatever height is left */}
         <div
           style={{
             width: "340px",
             borderLeft: "1px solid #6d28d9",
             background: "#161616",
-            padding: "25px",
-            overflowY: "auto",
+            padding: "20px 22px",
             boxSizing: "border-box",
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
           }}
         >
-          <h2
-            style={{
-              color: "#c084fc",
-              marginBottom: "20px",
-            }}
-          >
-            3D Preview
-          </h2>
+          <h2 style={{ color: "#c084fc", margin: "0 0 14px", flexShrink: 0 }}>3D Preview</h2>
 
           <div
+            data-testid="skin-preview-box"
             style={{
-              height: "420px",
+              flex: 1,
+              minHeight: 220,
               background: "#232323",
               border: "1px solid #6d28d9",
               borderRadius: "18px",
@@ -804,160 +803,176 @@ function SkinSelector({
               justifyContent: "center",
               alignItems: "center",
               color: "#777",
-              marginBottom: "12px",
               overflow: "hidden",
+              padding: preview ? 0 : 20,
             }}
           >
             {preview ? (
-              <SkinPreview skin={preview.skin} slim={slim} cape={previewCape} size={288} height={380} fullBody />
+              <SkinPreview skin={preview.skin} slim={slim} cape={previewCape} fill fullBody />
             ) : (
               "Search for a player, or import a skin, to preview it"
             )}
           </div>
 
-          {preview && (
-            <div data-testid="preview-label" style={{ color: "#c084fc", marginBottom: 20, fontSize: 13 }}>
-              {preview.label}
-              {unsaved ? " • not saved yet" : ""}
-            </div>
-          )}
-
-          <h3
-            style={{
-              color: "#d8b4fe",
-              marginBottom: "15px",
-            }}
+          <div
+            data-testid={preview ? "preview-label" : undefined}
+            style={{ color: "#c084fc", margin: "8px 0 14px", fontSize: 13, minHeight: 17, flexShrink: 0 }}
           >
-            Player Model
-          </h3>
+            {preview ? `${preview.label}${unsaved ? " • not saved yet" : ""}` : ""}
+          </div>
 
-          <select
-            className="sidebar-button"
-            aria-label="Player model"
-            value={slim ? "slim" : "normal"}
-            disabled={!preview}
-            onChange={(event) => setSlim(event.target.value === "slim")}
-            style={{
-              width: "100%",
-              marginBottom: "25px",
-            }}
-          >
-            <option value="normal">Normal</option>
-            <option value="slim">Slim</option>
-          </select>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", alignItems: "center", gap: "10px 12px", flexShrink: 0, textAlign: "left" }}>
+            <label htmlFor="skin-model" style={{ color: "#d8b4fe", fontSize: 14, fontWeight: 600 }}>
+              Player Model
+            </label>
+            <select
+              id="skin-model"
+              className="sidebar-button"
+              aria-label="Player model"
+              value={slim ? "slim" : "normal"}
+              disabled={!preview}
+              onChange={(event) => setSlim(event.target.value === "slim")}
+              style={{ width: "100%", padding: "8px 10px" }}
+            >
+              <option value="normal">Normal</option>
+              <option value="slim">Slim</option>
+            </select>
 
-          <h3
-            style={{
-              color: "#d8b4fe",
-              marginBottom: "15px",
-            }}
-          >
-            Cape
-          </h3>
-
-          <select
-            className="sidebar-button"
-            aria-label="Cape"
-            value={capeId}
-            disabled={!signedIn}
-            onChange={(event) => setCapeId(event.target.value)}
-            style={{
-              width: "100%",
-              marginBottom: "30px",
-            }}
-          >
-            <option value="">No Cape</option>
-            {profile?.capes.map((cape) => (
-              <option key={cape.id} value={cape.id}>
-                {cape.name}
-              </option>
-            ))}
-          </select>
+            <label htmlFor="skin-cape" style={{ color: "#d8b4fe", fontSize: 14, fontWeight: 600 }}>
+              Cape
+            </label>
+            <select
+              id="skin-cape"
+              className="sidebar-button"
+              aria-label="Cape"
+              value={capeId}
+              disabled={!signedIn}
+              onChange={(event) => setCapeId(event.target.value)}
+              style={{ width: "100%", padding: "8px 10px" }}
+            >
+              <option value="">No Cape</option>
+              {profile?.capes.map((cape) => (
+                <option key={cape.id} value={cape.id}>
+                  {cape.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
           {signedIn && profile?.capes.length === 0 && (
-            <p style={{ color: "#6b7280", fontSize: 12, marginTop: -20, marginBottom: 24 }}>
+            <p style={{ color: "#6b7280", fontSize: 12, margin: "8px 0 0", flexShrink: 0 }}>
               Your account doesn't have any capes.
             </p>
           )}
 
-          <button
-            className="sidebar-button"
-            disabled={!signedIn || !preview || !!busy}
-            onClick={saveChanges}
-            style={{
-              width: "100%",
-              marginBottom: "15px",
-              background: unsaved ? "#7c3aed" : undefined,
-            }}
-          >
-            {busy === "save" ? "Saving..." : "Save Changes"}
-          </button>
-
-          {preview && blockbenchReady && (
-            <button
-              className="sidebar-button"
-              data-testid="edit-in-blockbench"
-              disabled={!!busy}
+          {/* What each does comes up above the cursor (HoverTips). */}
+          <div data-testid="skin-actions" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 18, flexShrink: 0 }}>
+            <IconButton
+              testId="edit-in-blockbench"
+              label="Edit in Blockbench"
+              tip={
+                busy === "blockbench"
+                  ? "Editing in Blockbench..."
+                  : !preview
+                  ? "Edit in Blockbench (pick a skin first)"
+                  : !blockbenchReady
+                  ? "Edit in Blockbench (it's still getting ready)"
+                  : "Edit in Blockbench: paint or change this skin, then save it back here"
+              }
+              disabled={!preview || !blockbenchReady || !!busy}
               onClick={() => editInBlockbench()}
-              title="Paint or change this skin in Blockbench, then save it back here"
-              style={{
-                width: "100%",
-                marginBottom: "15px",
-              }}
             >
-              {busy === "blockbench" ? "Editing in Blockbench..." : "Edit in Blockbench"}
-            </button>
-          )}
+              <img src={blockbenchLogo} alt="" style={{ width: 24, height: 24 }} />
+            </IconButton>
 
-          {preview && preview.source !== "saved" && (
-            <button
-              className="sidebar-button"
-              disabled={!!busy}
+            <IconButton
+              testId="save-changes"
+              label="Save changes"
+              variant={unsaved ? "ready" : ""}
+              tip={
+                busy === "save"
+                  ? "Saving..."
+                  : !signedIn
+                  ? "Save changes (sign in with Microsoft first)"
+                  : !preview
+                  ? "Save changes (pick a skin first)"
+                  : "Save changes: make this your skin and cape in game"
+              }
+              disabled={!signedIn || !preview || !!busy}
+              onClick={saveChanges}
+            >
+              <SaveIcon size={21} />
+            </IconButton>
+
+            <IconButton
+              testId="download-skin"
+              label="Download this skin"
+              tip={
+                preview && (preview.source === "mine" || preview.source === "player")
+                  ? "Download this skin"
+                  : "Download this skin (your own or another player's)"
+              }
+              disabled={!preview || !(preview.source === "mine" || preview.source === "player") || !!busy}
+              onClick={() => preview && downloadSkin(preview.skin, preview.source === "mine" ? profile?.name ?? "skin" : preview.label)}
+            >
+              <DownloadIcon size={21} />
+            </IconButton>
+
+            <IconButton
+              testId="reset-skin"
+              label="Reset to default"
+              variant={confirmingReset ? "confirming" : ""}
+              tip={
+                busy === "reset"
+                  ? "Resetting..."
+                  : !signedIn
+                  ? "Reset to the default skin (sign in with Microsoft first)"
+                  : confirmingReset
+                  ? "Click again to reset your skin"
+                  : "Reset to the default skin. Mojang doesn't keep your old one, so download it first if you want it back"
+              }
+              disabled={!signedIn || !!busy}
+              onClick={resetToDefault}
+            >
+              <ResetIcon size={21} />
+            </IconButton>
+
+            <IconButton
+              testId="save-favourite"
+              label="Save to favourites"
+              variant={preview?.source === "saved" ? "on" : ""}
+              tip={
+                preview?.source === "saved"
+                  ? "Already in your favourites"
+                  : !preview
+                  ? "Save to favourites (pick a skin first)"
+                  : "Save to favourites"
+              }
+              disabled={!preview || preview.source === "saved" || !!busy}
               onClick={() =>
+                preview &&
+                preview.source !== "saved" &&
                 saveToMySkins(
                   preview,
                   preview.source === "mine" ? `My skin, ${new Date().toLocaleDateString()}` : preview.label.replace(/'s skin$/, "")
                 )
               }
-              style={{
-                width: "100%",
-                marginBottom: "15px",
-              }}
             >
-              Save to favourites
-            </button>
-          )}
+              <StarIcon size={21} filled={preview?.source === "saved"} />
+            </IconButton>
+          </div>
 
-          {preview && (preview.source === "mine" || preview.source === "player") && (
-            <button
-              className="sidebar-button"
-              disabled={!!busy}
-              onClick={() => downloadSkin(preview.skin, preview.source === "mine" ? profile?.name ?? "skin" : preview.label)}
-              style={{
-                width: "100%",
-                marginBottom: "15px",
-              }}
-            >
-              Download this skin
-            </button>
-          )}
-
-          <button
-            className="sidebar-button"
-            disabled={!signedIn || !!busy}
-            onClick={resetToDefault}
-            title="Mojang doesn't keep your old skin, so download it first if you want it back later"
-            style={{
-              width: "100%",
-              background: confirmingReset ? "#7f1d1d" : undefined,
-            }}
-          >
-            {busy === "reset"
+          <div role="status" style={{ minHeight: 17, marginTop: 10, fontSize: 12, color: confirmingReset ? "#fca5a5" : "#c4b5fd", flexShrink: 0 }}>
+            {busy === "save"
+              ? "Saving..."
+              : busy === "blockbench"
+              ? "Editing in Blockbench..."
+              : busy === "reset"
               ? "Resetting..."
               : confirmingReset
-              ? "Click again to reset your skin"
-              : "Reset to Default"}
-          </button>
+              ? "Click reset again to put your skin back to the default."
+              : ""}
+          </div>
         </div>
       </div>
 

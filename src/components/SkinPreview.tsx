@@ -16,6 +16,8 @@ type Props = {
     cape?: string | null;
     /** Turns slowly round on its own. */
     spin?: boolean;
+    /** Fills the box it's in, and follows its size, instead of `size` by `height`. */
+    fill?: boolean;
 };
 
 // How far the player turns at most, in radians.
@@ -38,6 +40,7 @@ export default function SkinPreview({
     followCursor = false,
     cape = null,
     spin = false,
+    fill = false,
 }: Props) {
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -51,8 +54,8 @@ export default function SkinPreview({
 
         const viewer = new SkinViewer({
             canvas: document.createElement("canvas"),
-            width: size,
-            height,
+            width: fill ? Math.max(container.clientWidth, 1) : size,
+            height: fill ? Math.max(container.clientHeight, 1) : height,
             // Mojang's profile gives http addresses, and only https is certain to load.
             skin: skin.replace(/^http:\/\//, "https://"),
             // `playerObject.skin.slim` is private in skinview3d 3.x.
@@ -83,7 +86,23 @@ export default function SkinPreview({
 
         if (still) {
             viewer.controls.enabled = false;
+        } else {
+            // It can be spun round, and nothing else: no zooming, sliding or tipping over.
+            viewer.controls.enableZoom = false;
+            viewer.controls.enablePan = false;
+            viewer.controls.update();
+            const level = viewer.controls.getPolarAngle();
+            viewer.controls.minPolarAngle = level;
+            viewer.controls.maxPolarAngle = level;
         }
+
+        // Following the box's size, when it fills one.
+        const resized = fill
+            ? new ResizeObserver(() => {
+                  if (container.clientWidth && container.clientHeight) viewer.setSize(container.clientWidth, container.clientHeight);
+              })
+            : null;
+        resized?.observe(container);
 
         if (spin) {
             viewer.autoRotate = true;
@@ -121,20 +140,21 @@ export default function SkinPreview({
         }
 
         return () => {
+            resized?.disconnect();
             window.removeEventListener("mousemove", lookAt);
             cancelAnimationFrame(frame);
             viewer.dispose();
             viewer.canvas.remove();
         };
 
-    }, [skin, slim, size, height, fullBody, still, followCursor, cape, spin]);
+    }, [skin, slim, size, height, fullBody, still, followCursor, cape, spin, fill]);
 
     return (
         <div
             ref={containerRef}
             style={{
                 width: "100%",
-                height,
+                height: fill ? "100%" : height,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",

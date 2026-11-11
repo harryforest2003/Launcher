@@ -338,3 +338,54 @@ code {
   background: rgba(22, 163, 74, 0.12);
   border-color: #166534;
 }
+
+/* A square button showing only an icon; what it does comes up above the cursor (HoverTips). */
+.icon-button {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: #232323;
+  color: #e9d5ff;
+  border: 1px solid #6d28d9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.icon-button:hover:not(:disabled):not([aria-disabled="true"]) {
+  transform: scale(1.06);
+  background: rgba(109, 40, 217, 0.25);
+  border-color: #c084fc;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.4);
+}
+
+.icon-button:disabled,
+.icon-button[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Something waiting: unsaved changes to save. */
+.icon-button.ready:not(:disabled):not([aria-disabled="true"]) {
+  background: #7c3aed;
+  border-color: #a78bfa;
+  color: white;
+}
+
+/* Asking to be clicked again before it does something that can't be undone. */
+.icon-button.confirming:not(:disabled):not([aria-disabled="true"]) {
+  background: #7f1d1d;
+  border-color: #ef4444;
+  color: white;
+}
+
+/* Already done (a skin already in favourites): shown lit, though there's nothing to click. */
+.icon-button.on:disabled,
+.icon-button.on[aria-disabled="true"] {
+  opacity: 1;
+  color: #facc15;
+}
