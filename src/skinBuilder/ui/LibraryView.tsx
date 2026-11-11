@@ -238,6 +238,10 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
   );
 
   const small = { padding: "7px 10px", fontSize: 13 };
+  const groupCount = (id: string) => library.skins.filter((skin) => skin.groupId === id).length;
+  const groupOptions = library.groups
+    .map((group) => ({ value: group.id, label: `${group.name} (${groupCount(group.id)})` }))
+    .sort((a, b) => a.label.localeCompare(b.label));
   const fieldLabel = (text: string) => <div style={{ fontSize: 12, color: "#bbb", marginBottom: 4 }}>{text}</div>;
   const folderName = outputFolder.split(/[\\/]/).filter(Boolean).pop() ?? outputFolder;
 
@@ -344,10 +348,21 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {filterButton(ALL, "All skins", library.skins.length)}
             {filterButton(SINGLES, "Singles", library.skins.filter((skin) => !skin.groupId).length)}
-            {library.groups.map((group) =>
-              filterButton(group.id, group.name, library.skins.filter((skin) => skin.groupId === group.id).length)
-            )}
           </div>
+          {/* However many groups there are, they take one line: search for one and pick it. */}
+          {library.groups.length > 0 && (
+            <div data-testid="group-picker">
+              <SearchDropdown
+                compact
+                active={Boolean(activeGroup)}
+                label="Show a group"
+                options={groupOptions}
+                value={activeGroup ? `${activeGroup.name} (${groupCount(activeGroup.id)})` : ""}
+                placeholder={`Search ${library.groups.length} group${library.groups.length === 1 ? "" : "s"}...`}
+                onChange={setFilter}
+              />
+            </div>
+          )}
           {activeGroup && (
             <div style={{ display: "flex", gap: 6 }}>
               <Button onClick={renameGroup} style={{ ...small, flex: 1 }}>Rename group</Button>

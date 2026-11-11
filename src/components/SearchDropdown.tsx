@@ -12,6 +12,10 @@ type Props = {
   onChange: (value: string) => void;
   /** Smaller, to sit beside another field. */
   compact?: boolean;
+  /** Highlighted, when what it chose is in use. */
+  active?: boolean;
+  /** What the field is, for screen readers. */
+  label?: string;
 };
 
 function SearchDropdown({
@@ -20,6 +24,8 @@ function SearchDropdown({
   onChange,
   placeholder = "Search...",
   compact = false,
+  active = false,
+  label,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -54,6 +60,7 @@ function SearchDropdown({
       }}
     >
       <input
+        aria-label={label}
         value={open ? search : value}
         placeholder={placeholder}
         onFocus={() => {
@@ -68,8 +75,8 @@ function SearchDropdown({
           width: "100%",
           padding: compact ? "8px 10px" : "15px",
           borderRadius: "10px",
-          border: "1px solid #6d28d9",
-          background: "#1a1a1a",
+          border: `1px solid ${active ? "#c084fc" : "#6d28d9"}`,
+          background: active ? "#2b1d47" : "#1a1a1a",
           color: "white",
           fontSize: compact ? "14px" : "15px",
           boxSizing: "border-box",
