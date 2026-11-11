@@ -240,8 +240,11 @@ function MCSettings({
                   </button>
                 </div>
 
-                <p style={{ color: "#d8b4fe", marginBottom: 8 }}>
+                <p style={{ color: "#d8b4fe", marginBottom: 4 }}>
                   Default JVM arguments
+                </p>
+                <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>
+                  The Minecraft Launcher's garbage collection settings are used for fewer stutters, unless you choose a garbage collector here (such as -XX:+UseZGC).
                 </p>
 
                 <input

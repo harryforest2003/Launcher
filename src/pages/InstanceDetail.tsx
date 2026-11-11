@@ -783,8 +783,11 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           </div>
 
           <div style={card}>
-            <p style={{ color: "#d8b4fe", marginBottom: 10 }}>
+            <p style={{ color: "#d8b4fe", marginBottom: 4 }}>
               JVM arguments for this instance
+            </p>
+            <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 10 }}>
+              The Minecraft Launcher's garbage collection settings are used for fewer stutters, unless you choose a garbage collector here (such as -XX:+UseZGC).
             </p>
 
             <input

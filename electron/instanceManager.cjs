@@ -551,14 +551,15 @@ async function launchInstance(name, account, { onProgress } = {}) {
 
     const global = launcherSettings.readSettings();
 
-    // Per-instance overrides win; otherwise the launcher-wide settings apply.
-    const extraJvmArgs = launcherSettings.parseJvmArgs(
-        instance.jvmArgs || global.jvmArgs
-    );
+    // Per-instance overrides win; otherwise the launcher-wide settings apply. The Minecraft
+    // Launcher's garbage collection settings come first, unless they choose their own.
+    const ownJvmArgs = launcherSettings.parseJvmArgs(instance.jvmArgs || global.jvmArgs);
+    const extraJvmArgs = launcherSettings.withDefaultGc(ownJvmArgs);
 
     runs.set(name, { lines: [], partial: "", running: true, startedAt: Date.now(), endedAt: null, exitCode: null });
     const note = (text) => recordLog(name, `[Unity Launcher] ${text}\n`);
     if (restored) note(`Put back ${restored} of Minecraft's own libraries that an earlier install left out.`);
+    if (!launcherSettings.choosesGc(ownJvmArgs)) note("Using the Minecraft Launcher's garbage collection settings, for fewer stutters.");
 
     starting.add(name);
     let javaPath;

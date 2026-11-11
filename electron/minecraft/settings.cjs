@@ -81,10 +81,33 @@ function parseJvmArgs(raw) {
         .filter(Boolean);
 }
 
+/*
+ * The Minecraft Launcher's own garbage collection settings, used for every launch unless
+ * the instance (or Settings) chooses a garbage collector itself. Java's pauses are kept
+ * short (50 ms, rather than its usual 200), so fewer stutters. Java 8 to 25 all take them.
+ */
+const DEFAULT_GC_ARGS = [
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:+UseG1GC",
+    "-XX:G1NewSizePercent=20",
+    "-XX:G1ReservePercent=20",
+    "-XX:MaxGCPauseMillis=50",
+    "-XX:G1HeapRegionSize=32M",
+];
+
+/* Whether these Java arguments pick a garbage collector (-XX:+UseZGC and the like). */
+const choosesGc = (args) => args.some((arg) => /^-XX:[+-]Use\w*GC$/.test(arg));
+
+/* A launch's Java arguments: the default garbage collection first, so any of the person's own come after and win. */
+const withDefaultGc = (args) => (choosesGc(args) ? args : [...DEFAULT_GC_ARGS, ...args]);
+
 module.exports = {
     readSettings,
     writeSettings,
     systemInfo,
     parseJvmArgs,
+    choosesGc,
+    withDefaultGc,
+    DEFAULT_GC_ARGS,
     DEFAULTS,
 };

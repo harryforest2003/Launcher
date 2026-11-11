@@ -12,6 +12,7 @@ const { ensureDependencies } = require("./modDependencies.cjs");
 const { addonCheck, missingDependencies } = require("./modUpdates.cjs");
 const { requiredJava } = require("./javaRuntime.cjs");
 const { downloadFile } = require("./net.cjs");
+const { choosesGc, parseJvmArgs } = require("./settings.cjs");
 
 const run = promisify(execFile);
 
@@ -256,9 +257,6 @@ function shadersOn(folder, mods) {
 
 /* ---------------- Java ---------------- */
 
-// The Minecraft Launcher's own garbage collection settings: shorter pauses, so fewer stutters.
-const SMOOTH_GC = "-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1NewSizePercent=20 -XX:G1ReservePercent=20 -XX:MaxGCPauseMillis=50 -XX:G1HeapRegionSize=32M";
-
 /* Memory for this many mods, within half the computer's memory. */
 function memoryFor(modCount, hw) {
     const wanted = modCount < 40 ? 4 : modCount < 120 ? 6 : 8;
@@ -273,16 +271,8 @@ function javaChanges(instance, globalJvmArgs, modCount, hw) {
     if (ram > most) changes.push({ key: "ram", label: "Memory", from: `${ram} GB`, to: `${most} GB`, value: most, reason: `more than half your computer's ${hw.memoryGb} GB leaves too little for everything else` });
     else if (ram < wanted) changes.push({ key: "ram", label: "Memory", from: `${ram} GB`, to: `${wanted} GB`, value: wanted, reason: `${modCount} mods need more room` });
 
-    const args = String(instance.jvmArgs || globalJvmArgs || "").trim();
-    if (!/-XX:\+Use\w+GC/.test(args)) {
-        changes.push({
-            key: "jvmArgs",
-            label: "Garbage collection",
-            from: "Java's default",
-            to: "Minecraft Launcher's (fewer stutters)",
-            value: [args, SMOOTH_GC].filter(Boolean).join(" "),
-        });
-    }
+    // Garbage collection needs nothing: every launch uses the Minecraft Launcher's settings
+    // unless the instance chooses its own (settings.cjs withDefaultGc).
     return changes;
 }
 
@@ -374,11 +364,18 @@ async function check(instance, folder, { running = false, globalJvmArgs = "" } =
                   id: "java",
                   state: "fix",
                   title: "Java settings",
-                  detail: "How much memory Minecraft has, and how it cleans up after itself. The default cleaning causes stutters.",
+                  detail: "How much memory Minecraft has: too little and it stutters, too much and the rest of your computer slows down.",
                   list: java.map((change) => ({ label: change.label, text: `${change.from} → ${change.to}${change.reason ? ` (${change.reason})` : ""}` })),
                   action: "Use these",
               }
-            : { id: "java", state: "ok", title: "Java settings", detail: `${instance.ram} GB of memory with smooth garbage collection.` }
+            : {
+                  id: "java",
+                  state: "ok",
+                  title: "Java settings",
+                  detail: `${instance.ram} GB of memory, with ${
+                      choosesGc(parseJvmArgs(instance.jvmArgs || globalJvmArgs)) ? "your own garbage collection settings" : "the Minecraft Launcher's garbage collection, for fewer stutters"
+                  }.`,
+              }
     );
 
     // Graphics settings.
@@ -638,4 +635,4 @@ function undo(folder, { updateInstance }) {
     return { restored };
 }
 
-module.exports = { check, apply, undo, hardware, graphicsChanges, memoryFor, SMOOTH_GC };
+module.exports = { check, apply, undo, hardware, graphicsChanges, memoryFor };
