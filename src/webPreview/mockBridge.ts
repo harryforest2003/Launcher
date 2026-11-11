@@ -662,8 +662,8 @@ const instanceBridge = {
   pickInstanceJava: async () => null,
   javaInfo: async () => ({ component: "java-runtime-delta", majorVersion: 21, downloaded: false }),
   javaRuntimes: async () => [],
-  checkUpdates: async () => ({ checked: 0, identified: 0, updates: [] }),
-  applyUpdates: async () => ({ updated: [], failed: [] }),
+  checkUpdates: async () => ({ checked: 0, identified: 0, updates: [], status: {} }),
+  applyUpdates: async () => ({ updated: [], failed: [], dependencies: [], missingDependencies: [], disabledDependencies: [] }),
   exportModpack: async () => {
     throw new Error("Exporting a modpack needs the desktop app.");
   },

@@ -201,11 +201,19 @@ function registerInstanceIpc() {
     );
 
     // Installs updates from the latest check, by key; the page never sends download addresses.
-    ipcMain.handle("instance:applyUpdates", (event, name, keys) =>
-        modUpdates.applyUpdates(name, instanceManager.instanceFolder(name), Array.isArray(keys) ? keys.map(String) : [], {
+    ipcMain.handle("instance:applyUpdates", async (event, name, keys) => {
+        const folder = instanceManager.instanceFolder(name);
+        const done = await modUpdates.applyUpdates(name, folder, Array.isArray(keys) ? keys.map(String) : [], {
             onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
-        })
-    );
+        });
+
+        // A new version of a mod can need mods the old one didn't.
+        const mods = done.updated.filter((entry) => entry.type === "mod").map((entry) => entry.fileName);
+        const check = mods.length
+            ? await modDependencies.ensureDependencies(instanceManager.getInstance(name), folder, { only: mods })
+            : { added: [], notFound: [], disabled: [] };
+        return { ...done, dependencies: check.added, missingDependencies: check.notFound, disabledDependencies: check.disabled };
+    });
 
     ipcMain.handle("instance:log", (_e, name) => instanceManager.getLog(name));
 

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import GitHubInstall from "../components/GitHubInstall";
 import InstanceLog from "../components/InstanceLog";
 import { dependencyNote } from "../utils/dependencyNote";
-import ModUpdatesPanel from "../components/ModUpdatesPanel";
+import { ItemUpdateStatus, UpdatesBar } from "../components/UpdatesBar";
+import { useContentUpdates } from "../components/useContentUpdates";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
@@ -86,6 +87,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Checked for updates as soon as the page opens, like the Modrinth app.
+  const updates = useContentUpdates(instanceName, content, refresh);
 
   /* ---------------- repair progress ---------------- */
 
@@ -556,7 +560,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {/* ---------------- CONTENT ---------------- */}
       {tab === "mods" && (
         <>
-          <ModUpdatesPanel instanceName={instanceName} onUpdated={refresh} />
+          <UpdatesBar updates={updates} />
 
           {contentTabs}
 
@@ -569,6 +573,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {items.map((item) => {
                 const key = itemKey(item);
+                const status = updates.statusOf(item);
+                const iconUrl = item.iconUrl ?? status?.iconUrl ?? null;
 
                 return (
                   <div
@@ -583,9 +589,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                       borderColor: item.enabled ? "#6d28d9" : "#3f3f46",
                     }}
                   >
-                    {item.iconUrl && (
+                    {iconUrl && (
                       <img
-                        src={item.iconUrl}
+                        src={iconUrl}
                         alt=""
                         style={{
                           width: 48,
@@ -598,7 +604,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                     )}
 
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#c084fc", fontWeight: 600 }}>{item.name}</div>
+                      <div style={{ color: "#c084fc", fontWeight: 600 }}>{status?.name ?? item.name}</div>
 
                       <div style={{ fontSize: 12, color: "#888", wordBreak: "break-all" }}>
                         {item.fileName}
@@ -609,7 +615,10 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                         {item.type === "datapack"
                           ? ` • ${item.world ? `World: ${item.world}` : "Not in a world yet"}`
                           : ""}
-                        {item.versionNumber ? ` • ${item.versionNumber}` : ""}
+                        {item.versionNumber || status?.current ? ` • ${item.versionNumber ?? status?.current}` : ""}
+                        {status?.state === "update" && (
+                          <span style={{ color: "#86efac" }}> → {status.latest}</span>
+                        )}
                         {item.source ? ` • ${item.source}` : ""}
                         {item.enabled ? "" : " • disabled"}
                       </div>
@@ -624,6 +633,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                         Add to {targetWorld || content.worlds[0]}
                       </button>
                     )}
+
+                    <ItemUpdateStatus item={item} updates={updates} />
 
                     {item.kind === "file" && (
                       <button

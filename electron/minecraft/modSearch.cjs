@@ -96,6 +96,7 @@ async function resolveModrinthFile(projectId, mcVersion, loader, type = "mod") {
         fileName: file.filename,
         sha1: file.hashes?.sha1 ?? null,
         versionNumber: release.version_number,
+        published: release.date_published ?? null,
         targetType: targetTypeFor(contentType, file.filename),
         dependencies: await requiredProjects(release.dependencies),
     };
