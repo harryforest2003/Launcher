@@ -234,6 +234,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   const [showGitHub, setShowGitHub] = useState(false);
   const [searching, setSearching] = useState(false);
   const [installing, setInstalling] = useState<string | null>(null);
+  // What installing each result added, shown on its card.
+  const [added, setAdded] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query.trim()), 300);
@@ -302,12 +304,11 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     try {
       const result = await tryInstall(mod.sources.filter((entry) => entry.installable));
 
-      setNotice(`Installed ${result.name} in ${result.folder}. ${dependencyNote(result)}`.trim());
+      // Stays on Add Content: the result says it's installed, and what else came with it.
+      const note = `Installed in ${result.folder}. ${dependencyNote(result)}`.trim();
+      setAdded((current) => ({ ...current, [mod.id]: note }));
 
       await refresh();
-      // A data pack sold as a mod lands with the mods, so show where it really went.
-      setContentType(result.type);
-      setTab("mods");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -870,8 +871,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               onInstalled={async (result) => {
                 setNotice(`Installed ${result.name} from GitHub, in ${result.folder}. ${dependencyNote(result)}`.trim());
                 await refresh();
-                setContentType(result.type);
-                setTab("mods");
               }}
             />
           )}
@@ -982,6 +981,12 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                         {mod.author ? `${mod.author} • ` : ""}
                         <SourceDownloads sources={mod.sources} />
                       </div>
+
+                      {added[mod.id] && (
+                        <div data-testid="browse-added" style={{ fontSize: 12, color: "#86efac", marginTop: 4 }}>
+                          {added[mod.id]}
+                        </div>
+                      )}
                     </div>
 
                     {already ? (
