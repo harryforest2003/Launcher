@@ -229,8 +229,18 @@ export default function SkinBuilder({
       <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex" }}>
       {inBlockbench && <BlockbenchFrame title={`Editing ${inBlockbench.name}`} />}
 
-      <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: 26 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 18 }}>
+      {/* The library fits the window and only its models scroll; the wizard steps scroll as a page. */}
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: "auto",
+          padding: 26,
+          boxSizing: "border-box",
+          ...(inWizard ? {} : { display: "flex", flexDirection: "column" }),
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 18, flexShrink: 0 }}>
           <h2 style={{ color: "#c084fc", fontSize: "1.8rem", margin: 0, fontFamily: "'Orbitron', sans-serif" }}>
             Model Builder
           </h2>
@@ -276,7 +286,7 @@ export default function SkinBuilder({
 
         {step === "library" && (
           <>
-            {error && <div style={{ color: "#fda4af", marginBottom: 12 }}>{error}</div>}
+            {error && <div style={{ color: "#fda4af", marginBottom: 12, flexShrink: 0 }}>{error}</div>}
             <LibraryView
               key={libraryVersion}
               notice={notice}

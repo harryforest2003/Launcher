@@ -174,6 +174,8 @@ function Library({
           padding: "35px",
           height: "100%",
           overflowY: "auto",
+          // Padding inside the height, so the bottom of the page can be scrolled to.
+          boxSizing: "border-box",
         }}
       >
         <h1

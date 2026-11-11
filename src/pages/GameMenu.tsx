@@ -60,12 +60,15 @@ function HomeScreen({ onMinecraft, onModManager, onSettings }: Props) {
           }}
         />
 
-        {/* Foreground */}
+        {/* Foreground, scrolling when the games don't all fit */}
         <div
           style={{
             position: "relative",
             zIndex: 1,
             padding: "30px",
+            height: "100%",
+            overflowY: "auto",
+            boxSizing: "border-box",
           }}
         >
           <h2

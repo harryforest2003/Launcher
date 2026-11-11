@@ -131,6 +131,8 @@ function MCSettings({
             padding: "35px",
             height: "100%",
             overflowY: "auto",
+            // Padding inside the height, so the bottom of the page can be scrolled to.
+            boxSizing: "border-box",
           }}
         >
           <h1 style={{ color: "#c084fc", marginBottom: 10 }}>Settings</h1>

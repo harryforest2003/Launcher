@@ -10,13 +10,16 @@ type Props = {
   value: string;
   placeholder?: string;
   onChange: (value: string) => void;
+  /** Smaller, to sit beside another field. */
+  compact?: boolean;
 };
 
 function SearchDropdown({
   options,
   value,
   onChange,
-  placeholder = "Search..."
+  placeholder = "Search...",
+  compact = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -63,12 +66,12 @@ function SearchDropdown({
         }}
         style={{
           width: "100%",
-          padding: "15px",
+          padding: compact ? "8px 10px" : "15px",
           borderRadius: "10px",
           border: "1px solid #6d28d9",
           background: "#1a1a1a",
           color: "white",
-          fontSize: "15px",
+          fontSize: compact ? "14px" : "15px",
           boxSizing: "border-box",
         }}
       />

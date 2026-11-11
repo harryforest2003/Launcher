@@ -232,36 +232,29 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
     Boolean(maxVersion) && findVersion(maxVersion).order < findVersion(minVersion).order;
 
   const filterButton = (id: string, label: string, count: number) => (
-    <Button key={id} active={filter === id} onClick={() => setFilter(id)} style={{ textAlign: "left", width: "100%" }}>
+    <Button key={id} active={filter === id} onClick={() => setFilter(id)} style={{ padding: "6px 11px", fontSize: 13 }}>
       {label} ({count})
     </Button>
   );
 
+  const small = { padding: "7px 10px", fontSize: 13 };
+  const fieldLabel = (text: string) => <div style={{ fontSize: 12, color: "#bbb", marginBottom: 4 }}>{text}</div>;
+  const folderName = outputFolder.split(/[\\/]/).filter(Boolean).pop() ?? outputFolder;
+
+  /*
+   * The models fill the page and scroll on their own; on the right, choosing what to see
+   * sits above building a pack, both sized to fit the window.
+   */
   return (
-    <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
-      <div style={{ ...panelStyle, flex: "0 0 210px", display: "flex", flexDirection: "column", gap: 8 }}>
-        <Button primary onClick={onNewSkin} style={{ width: "100%", marginBottom: 8 }}>New skin</Button>
-        {filterButton(ALL, "All skins", library.skins.length)}
-        {filterButton(SINGLES, "Singles", library.skins.filter((skin) => !skin.groupId).length)}
-        <SectionTitle>Groups</SectionTitle>
-        {library.groups.map((group) =>
-          filterButton(group.id, group.name, library.skins.filter((skin) => skin.groupId === group.id).length)
-        )}
-        <Button onClick={createGroup} style={{ width: "100%" }}>
-          {selected.size > 0 ? "Group selected" : "New group"}
-        </Button>
-        {activeGroup && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button onClick={renameGroup} style={{ flex: 1 }}>Rename</Button>
-            <Button danger onClick={deleteGroup} style={{ flex: 1 }}>Delete</Button>
-          </div>
-        )}
-      </div>
+    <div style={{ display: "flex", gap: 18, flex: 1, minHeight: 0, minWidth: 0, alignItems: "stretch" }}>
+      <div
+        data-testid="skin-list"
+        style={{ ...panelStyle, flex: 1, minWidth: 300, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box" }}
+      >
+        {notice && <div style={{ color: "#86efac", fontSize: 14, marginBottom: 12, flexShrink: 0 }}>{notice}</div>}
+        {error && <div style={{ marginBottom: 12, flexShrink: 0 }}><ErrorNote>{error}</ErrorNote></div>}
 
-      <div style={{ ...panelStyle, flex: "1 1 360px", minWidth: 300 }}>
-        {notice && <div style={{ color: "#86efac", fontSize: 14, marginBottom: 12 }}>{notice}</div>}
-        {error && <div style={{ marginBottom: 12 }}><ErrorNote>{error}</ErrorNote></div>}
-
+        <div data-testid="skin-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "-4px", padding: 4 }}>
         {visible.length === 0 ? (
           <div style={{ color: "#999", padding: "50px 10px", textAlign: "center", fontSize: 14 }}>
             No skins here yet.
@@ -337,47 +330,82 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
             ))}
           </div>
         )}
+        </div>
       </div>
 
-      <div style={{ ...panelStyle, flex: "0 0 320px" }}>
-        <div style={{ color: "#c084fc", fontSize: 16, marginBottom: 6 }}>Build a resource pack</div>
-        <div style={{ color: "#aaa", fontSize: 13, marginBottom: 12 }}>{packSource}</div>
+      <div style={{ flex: "0 0 360px", minHeight: 0, display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
+        <div data-testid="skin-filters" style={{ ...panelStyle, padding: 14, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Button primary onClick={onNewSkin} style={{ flex: 1 }}>New skin</Button>
+            <Button onClick={createGroup} style={{ flex: 1 }}>
+              {selected.size > 0 ? "Group selected" : "New group"}
+            </Button>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {filterButton(ALL, "All skins", library.skins.length)}
+            {filterButton(SINGLES, "Singles", library.skins.filter((skin) => !skin.groupId).length)}
+            {library.groups.map((group) =>
+              filterButton(group.id, group.name, library.skins.filter((skin) => skin.groupId === group.id).length)
+            )}
+          </div>
+          {activeGroup && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <Button onClick={renameGroup} style={{ ...small, flex: 1 }}>Rename group</Button>
+              <Button danger onClick={deleteGroup} style={{ ...small, flex: 1 }}>Delete group</Button>
+            </div>
+          )}
+        </div>
 
-        <label style={{ display: "block", fontSize: 13, color: "#ccc", marginBottom: 10 }}>
-          Pack name
+        <div
+          data-testid="pack-builder"
+          // Never smaller than its form; a long result after building scrolls inside it instead.
+          style={{ ...panelStyle, padding: 16, flex: "0 1 auto", minHeight: result ? 0 : undefined, display: "flex", flexDirection: "column" }}
+        >
+        <div style={{ color: "#c084fc", fontSize: 16, marginBottom: 2 }}>Build a resource pack</div>
+        <div style={{ color: "#aaa", fontSize: 12, marginBottom: 10 }}>{packSource}</div>
+
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {fieldLabel("Pack name")}
           <input
             aria-label="Pack name"
             value={packName}
             maxLength={60}
             onChange={(event) => setPackName(event.target.value)}
-            style={{ ...fieldStyle, marginTop: 4 }}
+            style={{ ...fieldStyle, padding: "8px 10px" }}
           />
         </label>
 
-        <div style={{ fontSize: 13, color: "#ccc", marginBottom: 4 }}>Minecraft version</div>
-        <SearchDropdown options={VERSION_OPTIONS} value={minVersion} placeholder="Search versions..." onChange={setMinVersion} />
-        <div style={{ fontSize: 13, color: "#ccc", margin: "10px 0 4px" }}>Up to</div>
-        <SearchDropdown
-          options={UP_TO_OPTIONS}
-          value={maxVersion || "Only this version"}
-          placeholder="Search versions..."
-          onChange={setMaxVersion}
-        />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
+          <div>
+            {fieldLabel("Minecraft version")}
+            <SearchDropdown compact options={VERSION_OPTIONS} value={minVersion} placeholder="Search..." onChange={setMinVersion} />
+          </div>
+          <div>
+            {fieldLabel("Up to")}
+            <SearchDropdown
+              compact
+              options={UP_TO_OPTIONS}
+              value={maxVersion || "Only this version"}
+              placeholder="Search..."
+              onChange={setMaxVersion}
+            />
+          </div>
+        </div>
         {rangeBackwards && (
-          <div style={{ color: "#fda4af", fontSize: 13, marginTop: 6 }}>
+          <div style={{ color: "#fda4af", fontSize: 12, margin: "-4px 0 10px" }}>
             "Up to" must be the same as or newer than the first version.
           </div>
         )}
 
-        <label style={{ display: "block", fontSize: 13, color: "#ccc", margin: "10px 0" }}>
-          First custom model data number
+        <label style={{ display: "block", marginBottom: 8 }}>
+          {fieldLabel("First custom model data number")}
           <input
             type="number"
             aria-label="First custom model data number"
             min={1}
             value={firstCmd}
             onChange={(event) => setFirstCmd(Math.max(1, Math.floor(Number(event.target.value) || 1)))}
-            style={{ ...fieldStyle, marginTop: 4 }}
+            style={{ ...fieldStyle, padding: "8px 10px" }}
           />
         </label>
 
@@ -393,30 +421,33 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
         {packSkins.length > 0 && (
           <div
             data-testid="atlas-meter"
-            style={{ fontSize: 12, marginBottom: 12, color: packAtlasShare > atlasBudget ? "#fbbf24" : "#86efac" }}
+            style={{ fontSize: 12, margin: "-4px 0 10px", color: packAtlasShare > atlasBudget ? "#fbbf24" : "#86efac" }}
           >
             These skins take {packAtlasShare < 0.01 ? "under 0.01" : packAtlasShare.toFixed(2)}% of the atlas.
             {packAtlasShare > atlasBudget ? " Their largest textures will shrink to fit." : ""}
           </div>
         )}
 
-        <div style={{ fontSize: 13, color: "#ccc", marginBottom: 4 }}>Output folder</div>
-        <div
-          data-testid="output-folder"
-          style={{ fontSize: 12, color: outputFolder ? "#ddd" : "#888", wordBreak: "break-all", marginBottom: 6 }}
-        >
-          {outputFolder || "You'll choose this the first time you build."}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 12, color: "#bbb", flexShrink: 0 }}>Output folder</span>
+          <div
+            data-testid="output-folder"
+            title={outputFolder || undefined}
+            style={{ flex: 1, minWidth: 0, fontSize: 12, color: outputFolder ? "#ddd" : "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            {outputFolder ? folderName : "Not chosen yet"}
+          </div>
+          <Button onClick={chooseFolder} style={{ ...small, flexShrink: 0 }}>
+            {outputFolder ? "Change" : "Choose folder"}
+          </Button>
         </div>
-        <Button onClick={chooseFolder} style={{ width: "100%", marginBottom: 12 }}>
-          {outputFolder ? "Change folder" : "Choose folder"}
-        </Button>
 
-        <Button primary disabled={!canBuild || rangeBackwards} onClick={buildAndWrite} style={{ width: "100%" }}>
+        <Button primary disabled={!canBuild || rangeBackwards} onClick={buildAndWrite} style={{ width: "100%", flexShrink: 0 }}>
           {building ? "Building..." : "Build pack"}
         </Button>
 
         {result && (
-          <div data-testid="pack-result" style={{ marginTop: 14, fontSize: 13, color: "#ddd" }}>
+          <div data-testid="pack-result" style={{ marginTop: 12, fontSize: 13, color: "#ddd", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
             <div style={{ color: "#86efac", marginBottom: 6 }}>Pack written.</div>
             <div style={{ wordBreak: "break-all", color: "#aaa", fontSize: 12, marginBottom: 8 }}>{result.path}</div>
             <div style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>
@@ -470,6 +501,7 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
             ))}
           </div>
         )}
+        </div>
       </div>
 
       <PromptDialog request={request} />

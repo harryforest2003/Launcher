@@ -67,6 +67,7 @@ export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
         color: "white",
         padding: 30,
         overflowY: "auto",
+        boxSizing: "border-box",
       }}
     >
       <button

@@ -58,7 +58,7 @@ export default function LauncherSettings({ onHome, onModManager }: Props) {
           }}
         />
 
-        <div style={{ position: "relative", zIndex: 1, padding: "35px", height: "100%", overflowY: "auto" }}>
+        <div style={{ position: "relative", zIndex: 1, padding: "35px", height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
           <h1 style={{ color: "#c084fc", marginBottom: 10 }}>Settings</h1>
           <p style={{ color: "#9ca3af", marginBottom: 30 }}>For the launcher as a whole. Minecraft has its own settings.</p>
 
