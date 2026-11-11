@@ -9,6 +9,7 @@ import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
+import { Cloud, Hammer, Play, Settings, Square } from "lucide-react";
 
 const LOADER_NAMES: Record<string, string> = { fabric: "Fabric Loader", quilt: "Quilt Loader", forge: "Forge", neoforge: "NeoForge" };
 
@@ -359,6 +360,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     </div>
   );
 
+  const actionStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px" };
+
   const loaderLabel =
     instance.loader === "vanilla"
       ? "Vanilla"
@@ -366,14 +369,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
   return (
     <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "white", position: "relative" }}>
-      <button
-        className="sidebar-button"
-        onClick={onBack}
-        style={{ marginBottom: 20 }}
-      >
-        ← Library
-      </button>
-
       <h1 style={{ color: "#c084fc", marginBottom: 6 }}>{instance.name}</h1>
 
       <p style={{ color: "#9ca3af", marginBottom: 4 }}>
@@ -469,34 +464,47 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
       )}
 
-      {/* ACTIONS */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
-        <button
-          className="sidebar-button"
-          style={{ background: "#7c3aed" }}
-          disabled={busy === "launch" || instance.running}
-          onClick={launch}
-        >
-          {instance.running
-            ? "Running"
-            : busy === "launch"
-            ? "Launching..."
-            : "Launch"}
-        </button>
+      {/* One line: the tabs on the left, the instance's own buttons on the right */}
+      <div
+        style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #2e2640" }}
+      >
+        <div role="tablist" aria-label="Instance" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {(
+            [
+              ["mods", `Content (${allItems.length})`],
+              ["worlds", "Worlds"],
+              ["screenshots", "Screenshots"],
+              ["log", "Log"],
+            ] as const
+          ).map(([id, label]) => {
+            const open = tab === id || (id === "mods" && tab === "browse");
+            return (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={open}
+                className="sidebar-button"
+                onClick={() => setTab(id)}
+                style={{ padding: "8px 16px", background: open ? "#6d28d9" : undefined, borderColor: open ? "#c084fc" : undefined }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
 
-        {instance.running && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+          <button className="sidebar-button" style={actionStyle} disabled={busy === "repair"} onClick={() => run("repair", () => window.instanceAPI.repair(instanceName))}>
+            <Hammer size={16} aria-hidden="true" />
+            {busy === "repair" ? "Repairing..." : "Repair"}
+          </button>
+
           <button
             className="sidebar-button"
-            style={{ background: "#7f1d1d" }}
-            onClick={() => run("stop", () => window.instanceAPI.stop(instanceName))}
-          >
-            Stop
-          </button>
-        )}
-
-        <button
-          className="sidebar-button"
-          onClick={() =>
+            data-tip="Back up this instance to your cloud folder"
+            style={actionStyle}
+            disabled={busy === "cloud"}
+            onClick={() =>
             run("cloud", async () => {
               setProgress(null);
               const result = await window.instanceAPI.cloudExport(instanceName);
@@ -506,52 +514,41 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               );
               await loadLastBackup();
             })
-          }
-          disabled={busy === "cloud"}
-        >
-          {busy === "cloud" ? "Backing up..." : "Back up to cloud"}
-        </button>
+            }
+          >
+            <Cloud size={16} aria-hidden="true" />
+            {busy === "cloud" ? "Backing up..." : "Back up"}
+          </button>
 
-        <button
-          className="sidebar-button"
-          disabled={busy === "repair"}
-          onClick={() =>
-            run("repair", () => window.instanceAPI.repair(instanceName))
-          }
-        >
-          {busy === "repair" ? "Repairing..." : "Repair"}
-        </button>
-      </div>
-
-      {/* TABS: all alike, the open one filled in purple like the open page in the sidebar */}
-      <div
-        role="tablist"
-        aria-label="Instance"
-        style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #2e2640" }}
-      >
-        {(
-          [
-            ["mods", `Content (${allItems.length})`],
-            ["worlds", "Worlds"],
-            ["screenshots", "Screenshots"],
-            ["log", "Log"],
-            ["settings", "Settings"],
-          ] as const
-        ).map(([id, label]) => {
-          const open = tab === id || (id === "mods" && tab === "browse");
-          return (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={open}
-              className="sidebar-button"
-              onClick={() => setTab(id)}
-              style={{ padding: "8px 16px", background: open ? "#6d28d9" : undefined, borderColor: open ? "#c084fc" : undefined }}
-            >
-              {label}
+          {instance.running && (
+            <button className="sidebar-button" style={{ ...actionStyle, background: "#7f1d1d" }} onClick={() => run("stop", () => window.instanceAPI.stop(instanceName))}>
+              <Square size={14} fill="currentColor" aria-hidden="true" />
+              Stop
             </button>
-          );
-        })}
+          )}
+
+          <button
+            className="sidebar-button"
+            data-testid="play"
+            style={{ ...actionStyle, background: "#7c3aed", padding: "8px 18px" }}
+            disabled={busy === "launch" || instance.running}
+            onClick={launch}
+          >
+            <Play size={16} fill="currentColor" aria-hidden="true" />
+            {instance.running ? "Running" : busy === "launch" ? "Starting..." : "Play"}
+          </button>
+
+          <button
+            className="sidebar-button"
+            aria-label="Settings"
+            title="This instance's settings"
+            aria-pressed={tab === "settings"}
+            onClick={() => setTab("settings")}
+            style={{ ...actionStyle, padding: 9, background: tab === "settings" ? "#6d28d9" : undefined, borderColor: tab === "settings" ? "#c084fc" : undefined }}
+          >
+            <Settings size={18} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {/* ---------------- CONTENT ---------------- */}

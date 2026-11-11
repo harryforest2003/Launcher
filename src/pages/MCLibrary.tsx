@@ -87,6 +87,11 @@ function Library({
   // Managing one instance takes over the content area, keeping the
   // sidebar in place.
   if (selected) {
+    // The sidebar's Back and Library both lead back to the list of instances.
+    const backToList = () => {
+      setSelected(null);
+      loadInstances();
+    };
     return (
       <div
         style={{
@@ -102,22 +107,16 @@ function Library({
           goHome={goHome}
           goMinecraft={goMinecraft}
           goDiscover={goDiscover}
-          goLibrary={goLibrary}
+          goLibrary={backToList}
           goSkinSelector={goSkinSelector}
           goSettings={goSettings}
           showBack
-          onBack={onBack}
+          onBack={backToList}
         />
 
         <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
           <BackgroundLogo />
-          <InstanceDetail
-            instanceName={selected}
-            onBack={() => {
-              setSelected(null);
-              loadInstances();
-            }}
-          />
+          <InstanceDetail instanceName={selected} onBack={backToList} />
         </div>
       </div>
     );
