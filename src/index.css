@@ -324,3 +324,17 @@ code {
   border-color: #ef4444;
   color: white;
 }
+
+/* The up-to-date tick, which opens the version list. */
+.tick-button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.tick-button:hover:not(:disabled) {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: #166534;
+}

@@ -5,6 +5,7 @@ import { BinIcon, FilterIcon, PlusIcon, SearchIcon } from "./Icons";
 import Toggle from "./Toggle";
 import { ItemUpdateStatus, UpdatesControls, UpdatesMessages } from "./UpdatesBar";
 import type { ContentUpdates } from "./useContentUpdates";
+import VersionPicker from "./VersionPicker";
 
 type Props = {
   instanceName: string;
@@ -45,6 +46,8 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [showFilter, setShowFilter] = useState(false);
+  // The item whose versions are being chosen from.
+  const [picking, setPicking] = useState<{ key: string; name: string; icon: string | null; suggested?: string } | null>(null);
 
   // Icons and authors from inside the files; fetched again when files are added or removed.
   const files = ALL_TYPES.flatMap(({ type }) => content[type].map(contentKey)).sort().join("|");
@@ -241,7 +244,11 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
                 </button>
               )}
 
-              <ItemUpdateStatus item={item} updates={updates} />
+              <ItemUpdateStatus
+                item={item}
+                updates={updates}
+                onPick={() => setPicking({ key: `${item.type}/${item.fileName}`, name, icon, suggested: status?.state === "update" ? status.latest : undefined })}
+              />
 
               {item.kind === "file" && (
                 <Toggle on={item.enabled} disabled={busyKey === key} onChange={() => onToggle(item)} label={`${item.enabled ? "Turn off" : "Turn on"} ${name}`} />
@@ -260,6 +267,18 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
             </div>
           ))}
         </div>
+      )}
+
+      {picking && (
+        <VersionPicker
+          instanceName={instanceName}
+          itemKey={picking.key}
+          name={picking.name}
+          icon={picking.icon}
+          suggested={picking.suggested}
+          onDone={updates.finish}
+          onClose={() => setPicking(null)}
+        />
       )}
 
       {showFilter && <ContentFilter filters={filters} counts={counts} matching={shown.length} onChange={setFilters} onClose={() => setShowFilter(false)} />}

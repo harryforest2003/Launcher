@@ -204,19 +204,41 @@ function registerInstanceIpc() {
     );
 
     // Installs updates from the latest check, by key; the page never sends download addresses.
-    ipcMain.handle("instance:applyUpdates", async (event, name, keys) => {
-        const folder = instanceManager.instanceFolder(name);
-        const done = await modUpdates.applyUpdates(name, folder, Array.isArray(keys) ? keys.map(String) : [], {
-            onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
-        });
-
-        // A new version of a mod can need mods the old one didn't.
-        const mods = done.updated.filter((entry) => entry.type === "mod").map((entry) => entry.fileName);
+    // New versions of mods can need mods the old ones didn't: fetch those too.
+    const fetchNewDependencies = async (name, done) => {
+        const mods = (done.updated ?? []).filter((entry) => entry.type === "mod").map((entry) => entry.fileName);
         const check = mods.length
-            ? await modDependencies.ensureDependencies(instanceManager.getInstance(name), folder, { only: mods })
+            ? await modDependencies.ensureDependencies(instanceManager.getInstance(name), instanceManager.instanceFolder(name), { only: mods })
             : { added: [], notFound: [], disabled: [] };
         return { ...done, dependencies: check.added, missingDependencies: check.notFound, disabledDependencies: check.disabled };
+    };
+
+    ipcMain.handle("instance:applyUpdates", async (event, name, keys) => {
+        const done = await modUpdates.applyUpdates(
+            name,
+            instanceManager.getInstance(name),
+            instanceManager.instanceFolder(name),
+            Array.isArray(keys) ? keys.map(String) : [],
+            { onProgress: (progress) => send(event, "instance:progress", { name, ...progress }) }
+        );
+        return fetchNewDependencies(name, done);
     });
+
+    ipcMain.handle("instance:versions", (_e, name, key) => modUpdates.listVersions(name, instanceManager.getInstance(name), String(key)));
+
+    ipcMain.handle("instance:versionChangelog", (_e, name, key, versionId) => modUpdates.versionChangelog(name, String(key), String(versionId)));
+
+    ipcMain.handle("instance:installVersion", async (event, name, key, versionId, force) => {
+        const done = await modUpdates.installVersion(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name), String(key), String(versionId), {
+            force: force === true,
+            onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
+        });
+        return done.needsConfirm ? done : fetchNewDependencies(name, done);
+    });
+
+    ipcMain.handle("instance:lastUpdate", (_e, name) => modUpdates.lastUpdate(instanceManager.instanceFolder(name)));
+
+    ipcMain.handle("instance:undoUpdate", (_e, name) => modUpdates.undoLastUpdate(instanceManager.instanceFolder(name)));
 
     ipcMain.handle("instance:log", (_e, name) => instanceManager.getLog(name));
 

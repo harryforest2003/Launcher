@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const unzipper = require("unzipper");
+const { withZip } = require("./zipFile.cjs");
 const { nativeImage } = require("electron");
 const instanceMods = require("./instanceMods.cjs");
 const { modInfo } = require("./modInfo.cjs");
@@ -26,10 +26,11 @@ function thumbnail(buffer) {
     return scaled.toDataURL();
 }
 
-async function zipEntry(file, name) {
-    const directory = await unzipper.Open.file(file);
-    const entry = directory.files.find((e) => e.path === name.replace(/^\//, ""));
-    return entry ? entry.buffer() : null;
+function zipEntry(file, name) {
+    return withZip(file, (directory) => {
+        const entry = directory.files.find((e) => e.path === name.replace(/^\//, ""));
+        return entry ? entry.buffer() : null;
+    });
 }
 
 async function detailsFor(file, item) {

@@ -80,6 +80,20 @@ function manifestKey(type, world, fileName) {
     return type === "mod" ? fileName : `${type}/${world ?? ""}/${fileName}`;
 }
 
+/* What the launcher recorded about one item (its name, source, version), or null. */
+function manifestEntry(instanceFolder, { type, world, fileName }) {
+    return readManifest(instanceFolder)[manifestKey(type, world ?? null, fileName)] ?? null;
+}
+
+/* Puts back (or, with null, removes) what was recorded about one item. */
+function setManifestEntry(instanceFolder, { type, world, fileName }, entry) {
+    const manifest = readManifest(instanceFolder);
+    const key = manifestKey(type, world ?? null, fileName);
+    if (entry) manifest[key] = entry;
+    else delete manifest[key];
+    writeManifest(instanceFolder, manifest);
+}
+
 /* ---------------- listing ---------------- */
 
 function listFolder(instanceFolder, type, world, manifest) {
@@ -319,4 +333,6 @@ module.exports = {
     installContent,
     modsDir,
     resolveItem,
+    manifestEntry,
+    setManifestEntry,
 };

@@ -54,6 +54,35 @@ export function useContentUpdates(instanceName: string, content: InstanceContent
   const checking = Boolean(files) && check?.for !== wanted && checkError?.for !== wanted;
   const updates = check?.updates ?? [];
 
+  // The latest change that can be undone, looked up again whenever the files change.
+  const [lastBatch, setLastBatch] = useState<{ for: string; batch: Awaited<ReturnType<typeof window.instanceAPI.lastUpdate>> } | null>(null);
+  useEffect(() => {
+    let current = true;
+    window.instanceAPI
+      .lastUpdate(instanceName)
+      .then((batch) => current && setLastBatch({ for: wanted, batch }))
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [instanceName, wanted]);
+
+  /* After any change: what happened, then the list and the check refreshed. */
+  const finish = useCallback(
+    async (done: UpdateResult & DependencyCheck) => {
+      const parts: string[] = [];
+      if (done.updated.length === 1) parts.push(`${done.updated[0].name} is now ${done.updated[0].to}.`);
+      else if (done.updated.length) parts.push(`Updated ${done.updated.length} items.`);
+      for (const skip of done.skipped) parts.push(`Kept ${skip.name} at ${skip.from}: ${skip.to} ${skip.reasons.join("; ")}.`);
+      if (done.failed.length) parts.push(`Couldn't update ${done.failed.map((f) => `${f.name} (${f.reason})`).join("; ")}.`);
+      if (dependencyNote(done)) parts.push(dependencyNote(done));
+      setResult(parts.join(" ") || "Nothing needed changing.");
+      await onUpdated();
+      setRechecks((count) => count + 1);
+    },
+    [onUpdated]
+  );
+
   const install = useCallback(
     async (keys: string[]) => {
       if (!keys.length) return;
@@ -61,24 +90,29 @@ export function useContentUpdates(instanceName: string, content: InstanceContent
       setResult(null);
       setError(null);
       try {
-        const done = await window.instanceAPI.applyUpdates(instanceName, keys);
-        setResult(
-          (done.updated.length === 1
-            ? `Updated ${done.updated[0].name} to ${done.updated[0].to}.`
-            : `Updated ${done.updated.length} ${done.updated.length === 1 ? "item" : "items"}.`) +
-            (done.failed.length ? ` Couldn't update ${done.failed.map((f) => `${f.name} (${f.reason})`).join("; ")}.` : "") +
-            (dependencyNote(done) ? ` ${dependencyNote(done)}` : "")
-        );
-        await onUpdated();
+        await finish(await window.instanceAPI.applyUpdates(instanceName, keys));
       } catch (err) {
         setError(message(err));
+        setRechecks((count) => count + 1);
       }
       setInstalling([]);
       setProgress(null);
-      setRechecks((count) => count + 1);
     },
-    [instanceName, onUpdated]
+    [instanceName, finish]
   );
+
+  const undo = useCallback(async () => {
+    setResult(null);
+    setError(null);
+    try {
+      const done = await window.instanceAPI.undoUpdate(instanceName);
+      setResult(`Put back ${done.restored.map((r) => `${r.name} ${r.version}`).join(", ")}.`);
+      await onUpdated();
+    } catch (err) {
+      setError(message(err));
+    }
+    setRechecks((count) => count + 1);
+  }, [instanceName, onUpdated]);
 
   return {
     checking,
@@ -91,6 +125,11 @@ export function useContentUpdates(instanceName: string, content: InstanceContent
     error: error ?? (checkError?.for === wanted ? checkError.message : null),
     install,
     updateAll: () => install(updates.map((update) => update.key)),
+    /** Reports a change made elsewhere (a version picked by hand) and refreshes. */
+    finish,
+    /** The latest change that can be undone, if any. */
+    lastBatch: lastBatch?.batch ?? null,
+    undo,
     recheck: () => {
       setResult(null);
       setError(null);

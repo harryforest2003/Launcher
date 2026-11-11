@@ -141,6 +141,35 @@ async function ensureDependencies(instance, folder, { only = null, onProgress } 
     return result;
 }
 
+// Whether each mod ID can be found for a version and loader, so it's only asked once.
+const findable = new Map();
+
+/*
+ * Whether a mod with this ID can be found on Modrinth for the instance, without installing
+ * it: { name } or null. Updates use this to hold back a version that needs a mod that
+ * can't be fetched, which would stop the game starting.
+ */
+async function findProject(id, instance) {
+    const loader = String(instance.loader || "vanilla").toLowerCase();
+    const key = `${id}|${instance.version}|${loader}`;
+    if (!findable.has(key)) {
+        findable.set(key, (async () => {
+            for (const slug of projectsFor(id.toLowerCase())) {
+                try {
+                    const project = await modSearch.getModrinthProject(slug);
+                    if (project.type !== "mod") continue;
+                    await modSearch.resolveModFile("modrinth", project.id, instance.version, loader, "mod");
+                    return { name: project.name };
+                } catch {
+                    // Not this one.
+                }
+            }
+            return null;
+        })());
+    }
+    return findable.get(key);
+}
+
 /* Finds the mod with this ID on Modrinth and installs it, or null. */
 async function installById(id, instance, folder, loader, dir) {
     for (const slug of projectsFor(id)) {
@@ -185,4 +214,4 @@ async function installById(id, instance, folder, loader, dir) {
     return null;
 }
 
-module.exports = { ensureDependencies, projectsFor };
+module.exports = { ensureDependencies, findProject, projectsFor, BUILT_IN };

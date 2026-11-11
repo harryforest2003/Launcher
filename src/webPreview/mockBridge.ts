@@ -664,7 +664,12 @@ const instanceBridge = {
   javaRuntimes: async () => [],
   contentDetails: async () => ({}),
   checkUpdates: async () => ({ checked: 0, identified: 0, updates: [], status: {} }),
-  applyUpdates: async () => ({ updated: [], failed: [], dependencies: [], missingDependencies: [], disabledDependencies: [] }),
+  applyUpdates: async () => ({ updated: [], skipped: [], failed: [], batch: null, dependencies: [], missingDependencies: [], disabledDependencies: [] }),
+  versions: async () => ({ name: "", versions: [] }),
+  versionChangelog: async () => "",
+  installVersion: async () => ({ updated: [], skipped: [], failed: [], batch: null, dependencies: [], missingDependencies: [], disabledDependencies: [] }),
+  lastUpdate: async () => null,
+  undoUpdate: async () => ({ restored: [] }),
   exportModpack: async () => {
     throw new Error("Exporting a modpack needs the desktop app.");
   },

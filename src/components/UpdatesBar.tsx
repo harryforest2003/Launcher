@@ -64,15 +64,41 @@ export function UpdatesControls({ updates }: { updates: ContentUpdates }) {
   );
 }
 
-/* Under the tabs: what the last update did, or why it couldn't. */
+const ago = (time: string) => {
+  const minutes = Math.round((Date.now() - Date.parse(time)) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+};
+
+/* Under the toolbar: what the last update did or why it couldn't, and undoing it. */
 export function UpdatesMessages({ updates }: { updates: ContentUpdates }) {
-  if (!updates.result && !updates.error) return null;
+  const batch = updates.lastBatch;
+  if (!updates.result && !updates.error && !batch) return null;
   return (
-    <div style={{ marginBottom: 12, fontSize: 13 }}>
+    <div style={{ marginBottom: 12, fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
       {updates.result && <div style={{ color: "#86efac" }}>{updates.result}</div>}
       {updates.error && (
         <div role="alert" style={{ color: "#fca5a5" }}>
           {updates.error}
+        </div>
+      )}
+      {batch && (
+        <div data-testid="last-update" style={{ color: "#9ca3af", fontSize: 12, display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={batch.names.join("\n")}>
+            Last change, {ago(batch.time)}: {batch.names.length === 1 ? batch.names[0] : `${batch.names.length} items`}
+          </span>
+          <button
+            data-testid="undo-update"
+            disabled={updates.installing.length > 0}
+            onClick={updates.undo}
+            style={{ background: "none", border: "none", color: "#c4b5fd", cursor: "pointer", fontSize: 12, padding: 0, whiteSpace: "nowrap" }}
+          >
+            Undo
+          </button>
         </div>
       )}
     </div>
@@ -81,8 +107,11 @@ export function UpdatesMessages({ updates }: { updates: ContentUpdates }) {
 
 const SLOT: React.CSSProperties = { width: 32, height: 32, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" };
 
-/* On each item: an update button when there's a newer build, a tick when it's the newest. */
-export function ItemUpdateStatus({ item, updates }: { item: InstanceMod; updates: ContentUpdates }) {
+/*
+ * On each item: an update button when there's a newer build, a tick when it's the newest.
+ * Either opens the version list (onPick), to update or to go back to an older version.
+ */
+export function ItemUpdateStatus({ item, updates, onPick }: { item: InstanceMod; updates: ContentUpdates; onPick: (item: InstanceMod) => void }) {
   if (item.kind !== "file") return null;
   const status = updates.statusOf(item);
   const key = updateKey(item);
@@ -99,10 +128,10 @@ export function ItemUpdateStatus({ item, updates }: { item: InstanceMod; updates
     return (
       <button
         data-testid="item-update"
-        title={`Update${status.current ? ` from ${status.current}` : ""} to ${status.latest}`}
-        aria-label={`Update ${status.name ?? item.name} to ${status.latest}`}
+        title={`Update${status.current ? ` from ${status.current}` : ""} to ${status.latest}, or choose another version`}
+        aria-label={`Choose a version of ${status.name ?? item.name}`}
         disabled={updates.installing.length > 0}
-        onClick={() => updates.install([key])}
+        onClick={() => onPick(item)}
         style={{ ...SLOT, padding: 0, background: GREEN, color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}
       >
         <DownloadIcon size={16} />
@@ -112,9 +141,17 @@ export function ItemUpdateStatus({ item, updates }: { item: InstanceMod; updates
 
   if (status.state === "current") {
     return (
-      <span data-testid="item-current" title={`Up to date${status.current ? ` (${status.current})` : ""}`} style={{ ...SLOT, color: GREEN }}>
+      <button
+        data-testid="item-current"
+        title={`Up to date${status.current ? ` (${status.current})` : ""}. Click to choose another version.`}
+        aria-label={`Choose a version of ${status.name ?? item.name}`}
+        disabled={updates.installing.length > 0}
+        onClick={() => onPick(item)}
+        className="tick-button"
+        style={{ ...SLOT, padding: 0, color: GREEN }}
+      >
         <CheckIcon size={18} />
-      </span>
+      </button>
     );
   }
 

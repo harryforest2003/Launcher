@@ -83,6 +83,26 @@ declare global {
         latest: string;
     };
 
+    type UpdateResult = {
+        updated: { name: string; from: string; to: string }[];
+        /** Left as they were, because the new version wouldn't work with the rest. */
+        skipped: { name: string; from: string; to: string; reasons: string[] }[];
+        failed: { name: string; reason: string }[];
+        /** What can be undone, if anything changed. */
+        batch: { id: string; count: number } | null;
+    };
+
+    type ContentVersion = {
+        id: string;
+        number: string;
+        title: string;
+        channel: "release" | "beta" | "alpha";
+        published: string;
+        fileName: string;
+        size: number;
+        installed: boolean;
+    };
+
     /** What adding a mod also added, and what it needs that couldn't be added. */
     type DependencyCheck = {
         dependencies: string[];
@@ -542,10 +562,22 @@ declare global {
             /** Every mod, resource pack and shader checked for a newer build; status is keyed "mod/file.jar". */
             checkUpdates(name: string): Promise<{ checked: number; identified: number; updates: ModUpdate[]; status: Record<string, UpdateStatus> }>;
             /** Installs updates from the latest check, by their keys. */
-            applyUpdates(
+            /** Updates that wouldn't work with the rest of the instance are left out, in skipped. */
+            applyUpdates(name: string, keys: string[]): Promise<UpdateResult & DependencyCheck>;
+            /** Every version of one item ("mod/file.jar") that works on this instance, newest first. */
+            versions(name: string, key: string): Promise<{ name: string; versions: ContentVersion[] }>;
+            /** One version's changelog as plain text ("" if none). */
+            versionChangelog(name: string, key: string, versionId: string): Promise<string>;
+            /** Installs that version, newer or older; without force, says why it wouldn't work instead. */
+            installVersion(
                 name: string,
-                keys: string[]
-            ): Promise<{ updated: { name: string; from: string; to: string }[]; failed: { name: string; reason: string }[] } & DependencyCheck>;
+                key: string,
+                versionId: string,
+                force?: boolean
+            ): Promise<{ needsConfirm: true; problems: string[] } | (UpdateResult & DependencyCheck & { needsConfirm?: undefined })>;
+            /** The latest change to the instance's content that can be undone. */
+            lastUpdate(name: string): Promise<{ id: string; time: string; names: string[] } | null>;
+            undoUpdate(name: string): Promise<{ restored: { name: string; version: string }[] }>;
             /** Chooses a Java for this instance alone. Null if cancelled. */
             pickInstanceJava(name: string): Promise<string | null>;
             /** The Java automatic would use, and whether it has been downloaded. */

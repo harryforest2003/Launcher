@@ -71,12 +71,14 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
   const [jumps, setJumps] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The latest content change that can be undone, offered when the game crashes.
+  const [lastBatch, setLastBatch] = useState<Awaited<ReturnType<typeof window.instanceAPI.lastUpdate>>>(null);
   const view = useRef<HTMLDivElement>(null);
 
-  const fetchLatest = useCallback(
-    () => Promise.all([window.instanceAPI.log(instanceName), window.instanceAPI.crashHelp(instanceName)]),
-    [instanceName]
-  );
+  const fetchLatest = useCallback(() => {
+    window.instanceAPI.lastUpdate(instanceName).then(setLastBatch).catch(() => {});
+    return Promise.all([window.instanceAPI.log(instanceName), window.instanceAPI.crashHelp(instanceName)]);
+  }, [instanceName]);
 
   const load = useCallback(() => {
     fetchLatest()
@@ -144,6 +146,16 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
       await window.instanceAPI.contentToggle(instanceName, { type: "mod", fileName: mod.fileName }, false);
       setNotice(`Disabled ${mod.name}. Launch again to see if that fixed it.`);
       setHelp(await window.instanceAPI.crashHelp(instanceName));
+    } catch (err) {
+      setError(message(err));
+    }
+  };
+
+  const undoUpdate = async () => {
+    try {
+      const done = await window.instanceAPI.undoUpdate(instanceName);
+      setNotice(`Put back ${done.restored.map((r) => `${r.name} ${r.version}`).join(", ")}. Launch again to see if that fixed it.`);
+      setLastBatch(await window.instanceAPI.lastUpdate(instanceName));
     } catch (err) {
       setError(message(err));
     }
@@ -286,6 +298,18 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ color: "#9ca3af", fontSize: 12 }}>Also found:</div>
               {help.causes.slice(1).map((item) => cause(item, false))}
+            </div>
+          )}
+
+          {lastBatch && (
+            <div data-testid="crash-undo" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#151515", border: "1px solid #3b3150", borderRadius: 8, padding: "8px 10px" }}>
+              <span style={{ color: "#d4d4d8", fontSize: 13, flex: "1 1 260px" }}>
+                Did this start after the last update ({lastBatch.names.length === 1 ? lastBatch.names[0] : `${lastBatch.names.length} items`},{" "}
+                {new Date(lastBatch.time).toLocaleString()})? Undoing it puts the previous versions back.
+              </span>
+              <button className="sidebar-button" onClick={undoUpdate} style={{ padding: "4px 12px", fontSize: 12 }}>
+                Undo Last Update
+              </button>
             </div>
           )}
 

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const unzipper = require("unzipper");
+const { withZip } = require("./zipFile.cjs");
 
 /*
  * What a mod jar is, from inside it: its mod IDs, name and version (fabric.mod.json,
@@ -13,7 +14,7 @@ const unzipper = require("unzipper");
 const cache = new Map();
 
 // What a jar we can't read, or a file that isn't a mod, is known to contain.
-const EMPTY = { ids: [], name: null, version: null, packages: [], mixinConfigs: [], depends: [], provides: [], authors: [], icon: null };
+const EMPTY = { ids: [], name: null, version: null, packages: [], mixinConfigs: [], depends: [], provides: [], authors: [], icon: null, requires: {}, breaks: {}, flavour: null };
 
 // Packages that belong to Minecraft, Java or a loader, never to a mod.
 const NOT_A_MOD = /^(net\/minecraft|com\/mojang|java|javax|jdk|sun|org\/lwjgl|org\/spongepowered|net\/fabricmc|org\/quiltmc|cpw\/mods|net\/neoforged\/fml|net\/minecraftforge\/fml|io\/netty|com\/google|org\/apache|it\/unimi|org\/slf4j|kotlin|org\/objectweb)\//;
@@ -48,13 +49,36 @@ function fromToml(text) {
     const version = mods[0]?.values.version ?? null;
     const authors = (mods[0]?.values.authors ?? tables[0]?.values.authors ?? "").split(/,\s*|\s+and\s+/).map((a) => a.trim()).filter(Boolean);
     const icon = mods[0]?.values.logoFile ?? tables[0]?.values.logoFile ?? null;
+    // The versions each dependency must be, and mods it can't run with (NeoForge's type="incompatible").
+    const requires = {};
+    const breaks = {};
+    for (const { name: table, values } of tables) {
+        if (!table.startsWith("dependencies") || !values.modId || /^server$/i.test(values.side ?? "")) continue;
+        const required = values.type ? /^required$/i.test(values.type) : values.mandatory === "true";
+        if (required) requires[values.modId] = [values.versionRange ?? "*"];
+        else if (/^incompatible$/i.test(values.type ?? "")) breaks[values.modId] = [values.versionRange ?? "*"];
+    }
     // Required: NeoForge says type="required", Forge says mandatory=true. Server-only ones don't count.
     const depends = tables
         .filter((table) => table.name.startsWith("dependencies"))
         .filter(({ values }) => (values.type ? /^required$/i.test(values.type) : values.mandatory === "true") && !/^server$/i.test(values.side ?? ""))
         .map(({ values }) => values.modId)
         .filter(Boolean);
-    return { ids, name, version: version && !version.includes("${") ? version : null, depends, authors, icon };
+    return { ids, name, version: version && !version.includes("${") ? version : null, depends, authors, icon, requires, breaks };
+}
+
+/* { id: [version predicates] } from fabric.mod.json "depends"/"breaks" or quilt.mod.json's lists. */
+function fabricRanges(json, field) {
+    const out = {};
+    if (json.quilt_loader) {
+        for (const dep of [].concat(json.quilt_loader[field] ?? [])) {
+            if (typeof dep === "string") out[dep] = ["*"];
+            else if (dep && typeof dep === "object" && !Array.isArray(dep) && dep.id && !dep.optional && !dep.unless) out[dep.id] = [].concat(dep.versions ?? "*");
+        }
+        return out;
+    }
+    for (const [id, range] of Object.entries(json[field] ?? {})) out[id] = [].concat(range ?? "*").map(String);
+    return out;
 }
 
 /* People named in a fabric.mod.json / quilt.mod.json ("Alice", { name: "Bob" }, { Bob: "Owner" }). */
@@ -110,10 +134,12 @@ async function nestedIds(entries, paths) {
     return ids;
 }
 
-async function readJar(file) {
-    const directory = await unzipper.Open.file(file);
-    const entries = directory.files;
-    const info = { ...EMPTY, ids: [], packages: [], mixinConfigs: [], depends: [], provides: [], authors: [] };
+function readJar(file) {
+    return withZip(file, (directory) => readEntries(directory.files));
+}
+
+async function readEntries(entries) {
+    const info = { ...EMPTY, ids: [], packages: [], mixinConfigs: [], depends: [], provides: [], authors: [], requires: {}, breaks: {} };
     const nested = [];
 
     const fabric = (await readEntry(entries, "fabric.mod.json")) ?? (await readEntry(entries, "quilt.mod.json"));
@@ -134,6 +160,9 @@ async function readJar(file) {
             info.depends.push(...fabricDepends(json));
             info.authors.push(...fabricAuthors(json));
             info.icon = fabricIcon(json);
+            info.requires = fabricRanges(json, "depends");
+            info.breaks = fabricRanges(json, "breaks");
+            info.flavour = "fabric";
             nested.push(...[].concat(json.jars ?? meta.jars ?? []).map((jar) => (typeof jar === "string" ? jar : jar?.file)).filter(Boolean));
         } catch {
             // A broken fabric.mod.json: the jar is still known by its file name.
@@ -150,6 +179,7 @@ async function readJar(file) {
             info.depends.push(...found.depends);
             if (!info.authors.length) info.authors.push(...found.authors);
             info.icon ??= found.icon;
+            if (!info.flavour) Object.assign(info, { requires: found.requires, breaks: found.breaks, flavour: "forge" });
         }
     }
     // Forge and NeoForge bundle jars here.
