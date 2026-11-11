@@ -34,6 +34,8 @@ node_modules/
 # The app's icon, which electron-builder reads from build/.
 !build/icon.png
 !build/icon.icns
+!build/icon.ico
+!build/icons/
 [Bb]uilds/
 [Ll]ogs/
 UserSettings/

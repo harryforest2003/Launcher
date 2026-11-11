@@ -59,6 +59,7 @@
     "files": [
       "dist/**",
       "electron/**",
+      "build/icons/512x512.png",
       "package.json"
     ],
     "electronDist": "node_modules/electron/dist",
@@ -74,7 +75,7 @@
       "category": "public.app-category.games"
     },
     "win": {
-      "icon": "build/icon.png",
+      "icon": "build/icon.ico",
       "target": [
         "nsis"
       ]
@@ -84,7 +85,7 @@
       "perMachine": false
     },
     "linux": {
-      "icon": "build/icon.png",
+      "icon": "build/icons",
       "target": [
         "AppImage"
       ],

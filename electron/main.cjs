@@ -246,6 +246,8 @@ function createWindow() {
         minWidth: 1200,
         minHeight: 700,
         autoHideMenuBar: true,
+        // Windows and Linux show this in the title bar and taskbar; a Mac uses the app's own icon.
+        ...(process.platform === "darwin" ? {} : { icon: path.join(__dirname, "..", "build", "icons", "512x512.png") }),
         webPreferences: {
             preload: path.join(__dirname, "preload.cjs"),
             contextIsolation: true,
