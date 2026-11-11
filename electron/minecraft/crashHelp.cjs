@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { formatsUsed } = require("./mixinFormat.cjs");
 const path = require("path");
 const { modsIn } = require("./modInfo.cjs");
 
@@ -202,7 +203,7 @@ const dotted = (name) => name.replace(/\//g, ".");
  * source's lines, so the log view can jump to it), and action is the button that does
  * the fix: "repair", "settings", "add-content" or null.
  */
-async function analyzeCrash({ gameDir, ram, lines, exitCode = null, startedAt = 0, mcVersion = null }) {
+async function analyzeCrash({ gameDir, ram, lines, exitCode = null, startedAt = 0, mcVersion = null, loader = null, loaderVersion = null }) {
     const since = startedAt ? startedAt - 5000 : 0;
     const report = newestFile(path.join(gameDir, "crash-reports"), (name) => name.endsWith(".txt"), since);
     const jvmCrash = newestFile(gameDir, (name) => /^hs_err_pid\d+\.log$/.test(name), since);
@@ -260,6 +261,32 @@ async function analyzeCrash({ gameDir, ram, lines, exitCode = null, startedAt = 
         }
         return modForClass(enabled, frame.className);
     };
+
+    /* ---- 0. A mod patching the game in a way this loader can't read (definite, and other guesses mislead). ---- */
+
+    // MixinExtras before 0.5.5 reads @Redirect's `at` as one @At; a mod written with a list of
+    // them crashes it while patching, with nothing naming the mod (ViaFabricPlus 5.0.3 did this).
+    const formatCrash = firstMatch(/cannot be cast to (?:class )?org\.objectweb\.asm\.tree\.AnnotationNode/);
+    if (formatCrash && /mixinextras/i.test(logText + reportText)) {
+        const users = [];
+        for (const mod of enabled) {
+            const used = await formatsUsed(path.join(gameDir, "mods", mod.fileName)).catch(() => []);
+            if (used.length) users.push(mod);
+        }
+        const loaderName = loader === "quilt" ? "Quilt Loader" : "Fabric Loader";
+        const names = listNames(users.map((mod) => mod.name));
+        add({
+            kind: "mixin-format",
+            title: users.length ? `${names} ${users.length === 1 ? "is" : "are"} newer than this ${loaderName} can handle` : `A mod is newer than this ${loaderName} can handle`,
+            detail: `${users.length ? names : "A mod"} change${users.length === 1 ? "s" : ""} Minecraft's code in a newer way than ${loaderName}${loaderVersion ? ` ${loaderVersion}` : ""} can read, so the game crashed while loading. Nothing is wrong with your files.`,
+            evidence: formatCrash,
+            fix:
+                loader === "fabric"
+                    ? `Update Fabric Loader to 0.19.5 or newer: click "Fabric Loader${loaderVersion ? ` ${loaderVersion}` : ""}" at the top of this page. Or undo the update that brought ${users.length ? names : "the mod"} in.`
+                    : `Update ${loaderName}, or undo the update that brought ${users.length ? names : "the mod"} in.`,
+            mods: users,
+        });
+    }
 
     /* ---- 1. What the mod loader itself refused (definite, so first). ---- */
 
@@ -602,6 +629,12 @@ async function analyzeCrash({ gameDir, ram, lines, exitCode = null, startedAt = 
             detail: last === undefined ? "It didn't say why." : "This is the last error it logged.",
             evidence: last === undefined ? null : evidenceAt("log", last, logLines[last]),
         });
+    }
+
+    // When it's the loader not reading a mod's patches, guesses from the stack (which name
+    // whichever mod happened to be running) only mislead.
+    if (causes.some((cause) => cause.kind === "mixin-format")) {
+        for (let i = causes.length - 1; i >= 0; i--) if (["mod-code", "mixin", "unknown"].includes(causes[i].kind)) causes.splice(i, 1);
     }
 
     return {

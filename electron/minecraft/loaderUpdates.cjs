@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const instanceMods = require("./instanceMods.cjs");
 const modUpdates = require("./modUpdates.cjs");
+const { mixinFormatProblems } = require("./mixinFormat.cjs");
 const { modInfo, modsIn } = require("./modInfo.cjs");
 const { problemsWith, parseVersion, compare, LOADER_IDS } = require("./compat.cjs");
 const { listLoaderVersions } = require("./loaders.cjs");
@@ -182,6 +183,11 @@ async function planLoaderChange(name, instance, folder, target, { onProgress } =
     const after = [...mods.filter((m) => !replaced.has(withoutDisabled(m.fileName))), ...fixes.map((f) => f.mod)];
     const remaining = problemsAt(instance, folder, after, target, new Set(fixes.map((f) => f.mod.fileName)));
     remaining.push(...(await modUpdates.missingDependencies(fixes.map((f) => f.mod), after, instance)));
+    // Mods that patch the game in a way the target loader can't read (going back to an older one).
+    onProgress?.({ stage: "updates", percent: 95, detail: "Checking how your mods patch the game" });
+    const modsDir = instanceMods.modsDir(folder);
+    const staying = after.filter((m) => m.enabled && !fixes.some((f) => f.mod === m)).map((m) => ({ fileName: m.fileName, file: path.join(modsDir, m.fileName), name: m.name, enabled: true }));
+    remaining.push(...(await mixinFormatProblems({ folder, instance, loaderVersion: target, mods: staying, incoming: staying })));
 
     const blocking = [];
     for (const fileName of new Set(remaining.map((p) => p.fileName))) {

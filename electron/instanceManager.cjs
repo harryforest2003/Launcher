@@ -651,6 +651,8 @@ async function crashHelp(name) {
         gameDir: instance.gameDirectory ?? path.join(instanceFolder(name), ".minecraft"),
         ram: instance.ram,
         mcVersion: instance.version,
+        loader: String(instance.loader || "vanilla").toLowerCase(),
+        loaderVersion: instance.loaderVersion ?? null,
         lines: log.lines,
         exitCode: log.exitCode,
         // Without this session's run, the crash files written around the last log.

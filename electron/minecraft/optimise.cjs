@@ -10,6 +10,7 @@ const { modInfo, modsIn } = require("./modInfo.cjs");
 const { problemsWith } = require("./compat.cjs");
 const { ensureDependencies } = require("./modDependencies.cjs");
 const { addonCheck, missingDependencies } = require("./modUpdates.cjs");
+const { mixinFormatProblems } = require("./mixinFormat.cjs");
 const { requiredJava } = require("./javaRuntime.cjs");
 const { downloadFile } = require("./net.cjs");
 const { choosesGc, parseJvmArgs } = require("./settings.cjs");
@@ -695,6 +696,12 @@ async function addSpeedMods(instance, folder, hw, onProgress) {
                 ...problemsWith({ mods, changed: new Set(candidates.map((c) => c.info.fileName)), mcVersion: instance.version, loader, loaderVersion: instance.loaderVersion, javaMajor }),
                 ...(await missingDependencies(candidates.map((c) => c.info), mods, instance)),
                 ...(await addonCheck(folder, current, candidates.map((c) => ({ fileName: c.info.fileName, file: c.file, name: c.mod.name, version: c.info.version, enabled: true })))),
+                ...(await mixinFormatProblems({
+                    folder,
+                    instance,
+                    mods: [...current.map((mod) => ({ file: path.join(dir, mod.fileName), enabled: mod.enabled })), ...candidates.map((c) => ({ file: c.file, enabled: true }))],
+                    incoming: candidates.map((c) => ({ fileName: c.info.fileName, file: c.file, name: c.mod.name })),
+                })),
             ];
             const bad = new Set(problems.map((problem) => problem.fileName));
             if (!candidates.some((c) => bad.has(c.info.fileName))) break;

@@ -6,6 +6,7 @@ const instanceMods = require("./instanceMods.cjs");
 const modSearch = require("./modSearch.cjs");
 const { modInfo, modsIn } = require("./modInfo.cjs");
 const { problemsWith } = require("./compat.cjs");
+const { mixinFormatProblems } = require("./mixinFormat.cjs");
 const { addonProblems } = require("./mixinCheck.cjs");
 const { findProject, BUILT_IN } = require("./modDependencies.cjs");
 const { requiredJava } = require("./javaRuntime.cjs");
@@ -319,6 +320,17 @@ async function runUpdates(instance, folder, updates, { mode = "skip", requireAll
                     enabled: c.update.enabled,
                     replacesFileName: c.update.fileName,
                 })))));
+                // Patches written in a newer way than the instance's loader can read (no version says so).
+                const modsDir = instanceMods.modsDir(folder);
+                problems.push(...(await mixinFormatProblems({
+                    folder,
+                    instance,
+                    mods: [
+                        ...current.filter((mod) => !replaced.has(mod.fileName.replace(/\.disabled$/, ""))).map((mod) => ({ file: path.join(modsDir, mod.fileName), enabled: mod.enabled })),
+                        ...candidates.filter((c) => c.info).map((c) => ({ file: c.file, enabled: c.update.enabled })),
+                    ],
+                    incoming: candidates.filter((c) => c.info && c.update.enabled).map((c) => ({ fileName: c.newName, file: c.file, name: c.update.name })),
+                })));
                 if (!problems.length) break;
                 if (mode === "ask") return { needsConfirm: true, problems: problems.map((p) => `${p.name} ${p.text}.`) };
 
