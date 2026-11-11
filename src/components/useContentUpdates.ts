@@ -69,8 +69,9 @@ export function useContentUpdates(instanceName: string, content: InstanceContent
 
   /* After any change: what happened, then the list and the check refreshed. */
   const finish = useCallback(
-    async (done: UpdateResult & DependencyCheck) => {
+    async (done: UpdateResult & DependencyCheck & { loader?: { name: string; from: string; to: string } }) => {
       const parts: string[] = [];
+      if (done.loader) parts.push(`${done.loader.name} is now ${done.loader.to}.`);
       if (done.updated.length === 1) parts.push(`${done.updated[0].name} is now ${done.updated[0].to}.`);
       else if (done.updated.length) parts.push(`Updated ${done.updated.length} items.`);
       for (const skip of done.skipped) parts.push(`Kept ${skip.name} at ${skip.from}: ${skip.to} ${skip.reasons.join("; ")}.`);

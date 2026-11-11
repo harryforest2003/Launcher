@@ -119,13 +119,15 @@ function describe(predicates) {
 
 /*
  * Problems a set of mods would have. `mods` is what would be installed (modInfo of each,
- * with fileName, name, enabled); `changed` the file names that are new. Only problems that
- * involve a changed file are returned: what the new files need, and what other mods need
- * from them. Missing mods aren't problems here; they're fetched separately.
+ * with fileName, name, enabled); `changed` the file names that are new, and `changedIds`
+ * anything else that would change (the loader, when it's updated). Only problems that
+ * involve a change are returned: what the new files need, what other mods need from them,
+ * and what every mod needs from a changed loader. Missing mods aren't problems here;
+ * they're fetched separately.
  *
  * -> [{ fileName, name, text }]
  */
-function problemsWith({ mods, changed, mcVersion, loader, loaderVersion, javaMajor }) {
+function problemsWith({ mods, changed, changedIds = new Set(), mcVersion, loader, loaderVersion, javaMajor }) {
     const enabled = mods.filter((mod) => mod.enabled);
     const versionOf = new Map();
     const nameOf = new Map(Object.entries(BUILT_IN_NAMES));
@@ -140,7 +142,7 @@ function problemsWith({ mods, changed, mcVersion, loader, loaderVersion, javaMaj
     versionOf.set("minecraft", mcVersion);
     if (javaMajor) versionOf.set("java", String(javaMajor));
     const loaderPlain = String(loaderVersion ?? "").replace(/^\d+(\.\d+)*-/, ""); // Forge's "1.20.1-47.4.28"
-    const loaderIds = { fabric: ["fabricloader", "fabric-loader"], quilt: ["quilt_loader"], forge: ["forge"], neoforge: ["neoforge"] }[loader] ?? [];
+    const loaderIds = LOADER_IDS[loader] ?? [];
     for (const id of loaderIds) versionOf.set(id, loaderPlain);
 
     const problems = [];
@@ -153,22 +155,25 @@ function problemsWith({ mods, changed, mcVersion, loader, loaderVersion, javaMaj
         for (const [id, predicates] of Object.entries(mod.requires ?? {})) {
             const have = versionOf.get(id);
             if (!have) continue; // Not installed: fetched separately, or bundled.
+            const idChanged = changedIds.has(id);
             const otherIsNew = changed.has(fileOf.get(id));
-            if (!isNew && !otherIsNew) continue;
+            if (!isNew && !otherIsNew && !idChanged) continue;
             if (!satisfies(have, predicates, mod.flavour)) {
                 const who = nameOf.get(id) ?? id;
-                if (isNew) add(mod, `needs ${who} ${describe(predicates)}, and this instance has ${have}`);
+                if (idChanged) add(mod, `needs ${who} ${describe(predicates)}, not ${have}`);
+                else if (isNew) add(mod, `needs ${who} ${describe(predicates)}, and this instance has ${have}`);
                 else add({ fileName: fileOf.get(id), name: who }, `would break ${mod.name}, which needs ${who} ${describe(predicates)}`);
             }
         }
         for (const [id, predicates] of Object.entries(mod.breaks ?? {})) {
             const have = versionOf.get(id);
-            if (!have || !fileOf.has(id)) continue;
+            const idChanged = changedIds.has(id);
+            if (!have || !(fileOf.has(id) || idChanged)) continue;
             const otherIsNew = changed.has(fileOf.get(id));
-            if (!isNew && !otherIsNew) continue;
+            if (!isNew && !otherIsNew && !idChanged) continue;
             if (satisfies(have, predicates, mod.flavour)) {
                 const who = nameOf.get(id) ?? id;
-                if (isNew) add(mod, `doesn't work with ${who} ${have}`);
+                if (isNew || idChanged) add(mod, `doesn't work with ${who} ${have}`);
                 else add({ fileName: fileOf.get(id), name: who }, `doesn't work with ${mod.name}, which says it breaks with ${who} ${describe(predicates)}`);
             }
         }
@@ -176,4 +181,7 @@ function problemsWith({ mods, changed, mcVersion, loader, loaderVersion, javaMaj
     return problems;
 }
 
-module.exports = { satisfies, problemsWith, describe, parseVersion, compare };
+/* The ids mods use to ask for each loader. */
+const LOADER_IDS = { fabric: ["fabricloader", "fabric-loader"], quilt: ["quilt_loader"], forge: ["forge"], neoforge: ["neoforge"] };
+
+module.exports = { satisfies, problemsWith, describe, parseVersion, compare, LOADER_IDS, BUILT_IN_NAMES };

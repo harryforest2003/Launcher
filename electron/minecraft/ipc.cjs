@@ -7,6 +7,7 @@ const instanceMods = require("./instanceMods.cjs");
 const instanceFiles = require("./instanceFiles.cjs");
 const javaRuntime = require("./javaRuntime.cjs");
 const modUpdates = require("./modUpdates.cjs");
+const loaderUpdates = require("./loaderUpdates.cjs");
 const modpackExport = require("./modpackExport.cjs");
 const modSearch = require("./modSearch.cjs");
 const modDependencies = require("./modDependencies.cjs");
@@ -238,7 +239,39 @@ function registerInstanceIpc() {
 
     ipcMain.handle("instance:lastUpdate", (_e, name) => modUpdates.lastUpdate(instanceManager.instanceFolder(name)));
 
-    ipcMain.handle("instance:undoUpdate", (_e, name) => modUpdates.undoLastUpdate(instanceManager.instanceFolder(name)));
+    // Puts back the latest change's files, and the loader it had if the change updated it.
+    ipcMain.handle("instance:undoUpdate", async (event, name) => {
+        const done = modUpdates.undoLastUpdate(instanceManager.instanceFolder(name));
+        if (done.loader) {
+            await instanceManager.restoreLoader(name, done.loader, {
+                onProgress: (progress) => send(event, "instance:progress", { name, ...progress, stage: "updates" }),
+            });
+        }
+        return { restored: done.restored };
+    });
+
+    // The builds of the instance's loader, each with how many mods wouldn't accept it.
+    ipcMain.handle("instance:loaderVersions", (_e, name) =>
+        loaderUpdates.loaderVersions(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name))
+    );
+
+    // What changing the loader would take: mods to update with it, and what can't work.
+    ipcMain.handle("instance:planLoader", (event, name, version) =>
+        loaderUpdates.planLoaderChange(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name), String(version), {
+            onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
+        })
+    );
+
+    ipcMain.handle("instance:applyLoader", async (event, name, version, options) => {
+        const onProgress = (progress) => send(event, "instance:progress", { name, ...progress });
+        const done = await loaderUpdates.applyLoaderChange(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name), String(version), {
+            force: options?.force === true,
+            alsoUpdate: options?.alsoUpdate === true,
+            onProgress,
+            changeLoader: (target, onLoaderProgress) => instanceManager.changeLoaderVersion(name, target, { onProgress: onLoaderProgress }),
+        });
+        return done.needsConfirm ? done : fetchNewDependencies(name, done);
+    });
 
     ipcMain.handle("instance:log", (_e, name) => instanceManager.getLog(name));
 

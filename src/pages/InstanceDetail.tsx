@@ -4,10 +4,13 @@ import InstanceLog from "../components/InstanceLog";
 import { dependencyNote } from "../utils/dependencyNote";
 import InstanceContentList from "../components/InstanceContentList";
 import { useContentUpdates } from "../components/useContentUpdates";
+import LoaderUpdate from "../components/LoaderUpdate";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
+
+const LOADER_NAMES: Record<string, string> = { fabric: "Fabric Loader", quilt: "Quilt Loader", forge: "Forge", neoforge: "NeoForge" };
 
 type Props = {
   instanceName: string;
@@ -359,7 +362,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   const loaderLabel =
     instance.loader === "vanilla"
       ? "Vanilla"
-      : `${instance.loader} ${instance.loaderVersion}`;
+      : `${LOADER_NAMES[instance.loader] ?? instance.loader} ${instance.loaderVersion}`;
 
   return (
     <div style={{ flex: 1, padding: 30, overflowY: "auto", color: "white" }}>
@@ -374,7 +377,18 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       <h1 style={{ color: "#c084fc", marginBottom: 6 }}>{instance.name}</h1>
 
       <p style={{ color: "#9ca3af", marginBottom: 4 }}>
-        Minecraft {instance.version} • {loaderLabel} • {instance.ram} GB RAM
+        Minecraft {instance.version} • {loaderLabel}
+        {instance.loader !== "vanilla" && instance.installed && (
+          <LoaderUpdate
+            instanceName={instance.name}
+            loaderVersion={instance.loaderVersion}
+            onDone={(result) => {
+              setTab("mods");
+              void updates.finish(result);
+            }}
+          />
+        )}{" "}
+        • {instance.ram} GB RAM
       </p>
 
       <p style={{ color: "#6b7280", fontSize: 12, marginBottom: 18 }}>

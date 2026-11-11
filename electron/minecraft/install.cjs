@@ -209,7 +209,31 @@ async function installInstance(instance, instanceFolder, { onProgress, resolveJa
 
     report("assets", 100, `Assets ready (${assetResult.downloaded})`);
 
-    /* 5. loader */
+    /* 5. loader, and the merged version JSON */
+    const { versionId, loaderVersion } = await installLoaderOnto(vanilla, instance, instanceFolder, { report, resolveJava });
+
+    /* 6. game directory + mods folder */
+    const gameDir = path.join(instanceFolder, ".minecraft");
+
+    fs.mkdirSync(path.join(gameDir, "mods"), { recursive: true });
+
+    report("done", 100, "Instance ready");
+
+    return {
+        versionId,
+        vanillaId: vanilla.id,
+        loaderVersion,
+        assetIndex: vanilla.assetIndex?.id ?? "legacy",
+        gameDirectory: gameDir,
+    };
+}
+
+/*
+ * Puts the instance's loader (instance.loaderVersion, or the newest) over Minecraft's own
+ * version JSON, downloads the libraries it brings, and writes the merged JSON to
+ * versions/<id>/<id>.json. -> { versionId, loaderVersion }
+ */
+async function installLoaderOnto(vanilla, instance, instanceFolder, { report, resolveJava }) {
     let merged = vanilla;
     let loaderVersion = instance.loaderVersion || "";
 
@@ -274,23 +298,32 @@ async function installInstance(instance, instanceFolder, { onProgress, resolveJa
         fs.copyFileSync(vanillaJar, mergedJar);
     }
 
-    /* 6. game directory + mods folder */
-    const gameDir = path.join(instanceFolder, ".minecraft");
+    return { versionId: merged.id, loaderVersion };
+}
 
-    fs.mkdirSync(path.join(gameDir, "mods"), { recursive: true });
+/*
+ * Changes an installed instance's loader to instance.loaderVersion. Minecraft's own files
+ * are already there, so only the loader is fetched; an instance missing them gets the
+ * full install. -> { versionId, vanillaId, loaderVersion }
+ */
+async function switchLoader(instance, instanceFolder, { onProgress, resolveJava } = {}) {
+    const report = reporter(onProgress);
+    const vanillaId = instance.vanillaId || instance.version;
+    const vanillaFile = path.join(instanceFolder, "versions", vanillaId, `${vanillaId}.json`);
+    const vanillaJar = path.join(instanceFolder, "versions", vanillaId, `${vanillaId}.jar`);
 
-    report("done", 100, "Instance ready");
+    if (!fs.existsSync(vanillaFile) || !fs.existsSync(vanillaJar)) {
+        const result = await installInstance(instance, instanceFolder, { onProgress, resolveJava });
+        return { versionId: result.versionId, vanillaId: result.vanillaId, loaderVersion: result.loaderVersion };
+    }
 
-    return {
-        versionId: merged.id,
-        vanillaId: vanilla.id,
-        loaderVersion,
-        assetIndex: vanilla.assetIndex?.id ?? "legacy",
-        gameDirectory: gameDir,
-    };
+    const vanilla = JSON.parse(fs.readFileSync(vanillaFile, "utf8"));
+    const { versionId, loaderVersion } = await installLoaderOnto(vanilla, instance, instanceFolder, { report, resolveJava });
+    return { versionId, vanillaId: vanilla.id, loaderVersion };
 }
 
 module.exports = {
     installInstance,
+    switchLoader,
     getVersionMeta,
 };

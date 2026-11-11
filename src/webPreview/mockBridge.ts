@@ -670,6 +670,26 @@ const instanceBridge = {
   installVersion: async () => ({ updated: [], skipped: [], failed: [], batch: null, dependencies: [], missingDependencies: [], disabledDependencies: [] }),
   lastUpdate: async () => null,
   undoUpdate: async () => ({ restored: [] }),
+  loaderVersions: async () => ({ loaderName: "Fabric Loader", current: "", newest: null, versions: [] }),
+  planLoader: async (_name: string, version: string) => ({
+    loaderName: "Fabric Loader",
+    current: "",
+    target: version,
+    upgrade: true,
+    fixes: [],
+    blocking: [],
+    otherUpdates: 0,
+  }),
+  applyLoader: async (_name: string, version: string) => ({
+    loader: { name: "Fabric Loader", from: "", to: version },
+    updated: [],
+    skipped: [],
+    failed: [],
+    batch: null,
+    dependencies: [],
+    missingDependencies: [],
+    disabledDependencies: [],
+  }),
   exportModpack: async () => {
     throw new Error("Exporting a modpack needs the desktop app.");
   },

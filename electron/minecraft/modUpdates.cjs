@@ -250,11 +250,15 @@ const KEEP_BATCHES = 5;
  *
  * mode: "skip" leaves out builds that wouldn't fit (Update All); "ask" changes nothing
  * if any wouldn't, and says why (a version picked by hand); "force" puts them in anyway.
+ * requireAll: a build that can't be downloaded stops everything, before anything changes.
+ * beforeSwap: runs once the builds are downloaded and checked, before any file changes
+ *   (a loader update installs the loader here); what it returns goes first in the batch.
+ * batchId: adds these changes to that batch, so one Undo puts back both.
  *
  * -> { updated, skipped: [{ name, from, to, reasons }], failed, batch } or, for "ask",
  *    { needsConfirm: true, problems: [text] }
  */
-async function runUpdates(instance, folder, updates, { mode = "skip", onProgress } = {}) {
+async function runUpdates(instance, folder, updates, { mode = "skip", requireAll = false, beforeSwap, batchId: intoBatch, onProgress } = {}) {
     const loader = String(instance.loader || "vanilla").toLowerCase();
     const staging = path.join(folder, STAGING, String(Date.now()));
     const updated = [];
@@ -275,6 +279,9 @@ async function runUpdates(instance, folder, updates, { mode = "skip", onProgress
             } catch (err) {
                 failed.push({ name: update.name, reason: err.message });
             }
+        }
+        if (requireAll && failed.length) {
+            throw new Error(`Couldn't download ${failed.map((f) => `${f.name} (${f.reason})`).join(", ")}, so nothing was changed.`);
         }
 
         // 2. Check the mods they'd leave together; leave out builds that wouldn't fit.
@@ -297,18 +304,11 @@ async function runUpdates(instance, folder, updates, { mode = "skip", onProgress
                     javaMajor,
                 });
 
-                // A mod the new version needs that isn't installed is fetched afterwards,
-                // but only if it can be found; if not, the game wouldn't start.
-                const provided = new Set(mods.filter((mod) => mod.enabled).flatMap((mod) => [...mod.ids, ...(mod.provides ?? [])]).map((id) => id.toLowerCase()));
-                for (const c of candidates.filter((c) => c.info && c.update.enabled)) {
-                    for (const id of c.info.depends ?? []) {
-                        const key = id.toLowerCase();
-                        if (BUILT_IN.has(key) || provided.has(key)) continue;
-                        if (!(await findProject(key, instance))) {
-                            problems.push({ fileName: c.newName, name: c.update.name, text: `needs ${id}, which isn't installed and can't be found on Modrinth for this version` });
-                        }
-                    }
-                }
+                problems.push(...(await missingDependencies(
+                    candidates.filter((c) => c.info).map((c) => ({ ...c.info, fileName: c.newName, name: c.update.name, enabled: c.update.enabled })),
+                    mods,
+                    instance
+                )));
                 if (!problems.length) break;
                 if (mode === "ask") return { needsConfirm: true, problems: problems.map((p) => `${p.name} ${p.text}.`) };
 
@@ -323,9 +323,13 @@ async function runUpdates(instance, folder, updates, { mode = "skip", onProgress
         }
 
         // 3. Swap them in, keeping each old file.
-        const batchId = String(Date.now());
+        const batchId = intoBatch ?? String(Date.now());
         const batchDir = path.join(folder, BACKUPS, batchId);
         const changes = [];
+        if (beforeSwap) {
+            const change = await beforeSwap();
+            if (change) changes.push(change);
+        }
         for (const [index, { update, newName, file }] of candidates.entries()) {
             onProgress?.({ stage: "updates", percent: 70 + Math.round((index / Math.max(candidates.length, 1)) * 30), detail: `Installing ${update.name}` });
             try {
@@ -355,12 +359,19 @@ async function runUpdates(instance, folder, updates, { mode = "skip", onProgress
             }
         }
 
+        const batchFile = path.join(batchDir, "batch.json");
+        let batch = null;
         if (changes.length) {
-            fs.writeFileSync(path.join(batchDir, "batch.json"), JSON.stringify({ id: batchId, time: new Date().toISOString(), changes }, null, 2));
+            const earlier = intoBatch && fs.existsSync(batchFile) ? JSON.parse(fs.readFileSync(batchFile, "utf8")).changes : [];
+            fs.mkdirSync(batchDir, { recursive: true });
+            fs.writeFileSync(batchFile, JSON.stringify({ id: batchId, time: new Date().toISOString(), changes: [...earlier, ...changes] }, null, 2));
             pruneBatches(folder);
+            batch = { id: batchId, count: earlier.length + changes.length };
+        } else if (intoBatch && fs.existsSync(batchFile)) {
+            batch = { id: batchId, count: JSON.parse(fs.readFileSync(batchFile, "utf8")).changes.length };
         }
         onProgress?.({ stage: "done", percent: 100, detail: "Updates installed" });
-        return { updated, skipped, failed, batch: changes.length ? { id: batchId, count: changes.length } : null };
+        return { updated, skipped, failed, batch };
     } finally {
         fs.rmSync(staging, { recursive: true, force: true });
         try {
@@ -397,14 +408,23 @@ function lastUpdate(folder) {
     return null;
 }
 
-/* Puts back the files the latest change replaced. -> { restored: [{ name, version }] } */
+/*
+ * Puts back the files the latest change replaced. A loader the change updated comes back
+ * as loader, for the instance to go back to: -> { restored: [{ name, version }], loader }
+ */
 function undoLastUpdate(folder) {
     const dir = batchDirs(folder).find((candidate) => fs.existsSync(path.join(candidate, "batch.json")));
     if (!dir) throw new Error("There's no update to undo.");
     const batch = JSON.parse(fs.readFileSync(path.join(dir, "batch.json"), "utf8"));
 
     const restored = [];
+    let loader = null;
     for (const change of [...batch.changes].reverse()) {
+        if (change.type === "loader") {
+            loader = { loaderVersion: change.from, versionId: change.oldVersionId };
+            restored.push({ name: change.name, version: change.from });
+            continue;
+        }
         try {
             instanceMods.deleteItem(folder, { type: change.type, fileName: change.newFile });
         } catch {
@@ -421,7 +441,7 @@ function undoLastUpdate(folder) {
     } catch {
         // Older changes are still kept.
     }
-    return { restored };
+    return { restored, loader };
 }
 
 /* Installs the chosen updates from the latest check, leaving out any that wouldn't fit. */
@@ -524,6 +544,13 @@ async function installVersion(name, instance, folder, key, versionId, { force = 
     const item = lastItems.get(name)?.get(key);
     if (!item?.projectId) throw new Error("Check for updates first.");
 
+    const update = await updateTo(item, versionId);
+    if (update.file.sha1 && update.file.sha1 === item.sha1) return { updated: [], skipped: [], failed: [], batch: null };
+    return runUpdates(instance, folder, [update], { mode: force ? "force" : "ask", onProgress });
+}
+
+/* An update of a checked item to one version of it, in the shape runUpdates takes. */
+async function updateTo(item, versionId) {
     let file;
     let number;
     if (item.source === "modrinth") {
@@ -538,10 +565,8 @@ async function installVersion(name, instance, folder, key, versionId, { force = 
         file = { url: found.downloadUrl, fileName: found.fileName, sha1: (found.hashes ?? []).find((h) => h.algo === 1)?.value ?? null };
         number = found.displayName;
     }
-    if (file.sha1 && file.sha1 === item.sha1) return { updated: [], skipped: [], failed: [], batch: null };
-
-    const update = {
-        key,
+    return {
+        key: keyOf(item),
         type: item.type,
         fileName: item.fileName,
         enabled: item.enabled,
@@ -553,7 +578,44 @@ async function installVersion(name, instance, folder, key, versionId, { force = 
         latest: number,
         file,
     };
-    return runUpdates(instance, folder, [update], { mode: force ? "force" : "ask", onProgress });
 }
 
-module.exports = { identify, checkUpdates, applyUpdates, listVersions, versionChangelog, installVersion, undoLastUpdate, lastUpdate };
+/*
+ * Mods the new files need that aren't installed and can't be found, so wouldn't be
+ * fetched afterwards and the game wouldn't start. newMods are modInfo with fileName, name
+ * and enabled; mods everything there would be. -> [{ fileName, name, text }]
+ */
+async function missingDependencies(newMods, mods, instance) {
+    const provided = new Set(mods.filter((mod) => mod.enabled).flatMap((mod) => [...mod.ids, ...(mod.provides ?? [])]).map((id) => id.toLowerCase()));
+    const problems = [];
+    for (const mod of newMods.filter((m) => m.enabled)) {
+        for (const id of mod.depends ?? []) {
+            const key = id.toLowerCase();
+            if (BUILT_IN.has(key) || provided.has(key)) continue;
+            if (!(await findProject(key, instance))) {
+                problems.push({ fileName: mod.fileName, name: mod.name, text: `needs ${id}, which isn't installed and can't be found on Modrinth for this version` });
+            }
+        }
+    }
+    return problems;
+}
+
+/* What the latest check saw for an instance: each file ("mod/sodium.jar" -> item), and the updates it found. */
+const checkedItems = (name) => lastItems.get(name) ?? null;
+const pendingUpdates = (name) => lastCheck.get(name) ?? null;
+
+module.exports = {
+    identify,
+    checkUpdates,
+    applyUpdates,
+    listVersions,
+    versionChangelog,
+    installVersion,
+    undoLastUpdate,
+    lastUpdate,
+    runUpdates,
+    updateTo,
+    missingDependencies,
+    checkedItems,
+    pendingUpdates,
+};

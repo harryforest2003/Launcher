@@ -2,7 +2,7 @@ const EventEmitter = require("events");
 const fs = require("fs");
 const path = require("path");
 
-const { installInstance } = require("./minecraft/install.cjs");
+const { installInstance, switchLoader } = require("./minecraft/install.cjs");
 const { launch } = require("./minecraft/launch.cjs");
 const { getLatestLoaderVersion } = require("./minecraft/loaders.cjs");
 const launcherSettings = require("./minecraft/settings.cjs");
@@ -229,6 +229,46 @@ async function repairInstance(name, { onProgress } = {}) {
     );
 
     return finished;
+}
+
+/* ---------------- LOADER ---------------- */
+
+/* Writes just these fields into instance.json, leaving everything else as it is. */
+function writeInstanceFields(name, fields) {
+    const file = path.join(instanceFolder(name), "instance.json");
+    const current = JSON.parse(fs.readFileSync(file, "utf8"));
+    fs.writeFileSync(file, JSON.stringify({ ...current, ...fields }, null, 4));
+}
+
+/*
+ * Moves an instance to another build of its loader. Only the loader's files are fetched,
+ * and only the loader's fields change: the game folder, settings and the rest stay put.
+ * -> { from: { loaderVersion, versionId }, to: { loaderVersion, versionId } }
+ */
+async function changeLoaderVersion(name, loaderVersion, { onProgress } = {}) {
+    const instance = getInstance(name);
+    const folder = instanceFolder(name);
+    if (!instance.loader || instance.loader === "vanilla") throw new Error(`"${name}" has no mod loader to change.`);
+    if (isRunning(name) || starting.has(name)) throw new Error(`Close Minecraft before changing the loader of "${name}".`);
+
+    const result = await switchLoader({ ...instance, loaderVersion }, folder, {
+        onProgress,
+        resolveJava: installerJava(instance, onProgress),
+    });
+
+    const to = { loaderVersion: result.loaderVersion || loaderVersion, versionId: result.versionId };
+    writeInstanceFields(name, { ...to, vanillaId: result.vanillaId });
+    return { from: { loaderVersion: instance.loaderVersion, versionId: instance.versionId }, to };
+}
+
+/* Puts an instance back on a loader build it had, reinstalling it if its files are gone. */
+async function restoreLoader(name, { loaderVersion, versionId }, { onProgress } = {}) {
+    const json = versionId && path.join(instanceFolder(name), "versions", versionId, `${versionId}.json`);
+    if (json && fs.existsSync(json)) {
+        writeInstanceFields(name, { loaderVersion, versionId });
+        return { loaderVersion, versionId };
+    }
+    return (await changeLoaderVersion(name, loaderVersion, { onProgress })).to;
 }
 
 function deleteInstance(name) {
@@ -669,6 +709,8 @@ module.exports = {
     instanceExists,
     uniqueName,
     repairInstance,
+    changeLoaderVersion,
+    restoreLoader,
     deleteInstance,
     launchInstance,
     getLog,

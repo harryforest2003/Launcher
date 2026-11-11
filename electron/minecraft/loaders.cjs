@@ -4,6 +4,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const { fetchJson, downloadFile } = require("./net.cjs");
+const { parseVersion, compare } = require("./compat.cjs");
 
 /*
  * Mod loader installation.
@@ -60,15 +61,23 @@ async function latestForge(mcVersion) {
     return build ? `${mcVersion}-${build}` : null;
 }
 
+/*
+ * The start of every NeoForge build for a Minecraft version: 1.21.1 -> "21.1.", and since
+ * Minecraft's year numbering, 26.2 -> "26.2.0.".
+ */
+function neoforgePrefix(mcVersion) {
+    const parts = mcVersion.split(".");
+    if (parts.length < 2) return null;
+    if (parts[0] === "1") return `${parts[1]}.${parts[2] ?? "0"}.`;
+    return `${parts[0]}.${parts[1]}.${parts[2] ?? "0"}.`;
+}
+
 async function latestNeoForge(mcVersion) {
     const meta = await fetchJson(NEOFORGE_MAVEN);
     const all = meta?.versions ?? [];
 
-    // MC 1.21.1 -> NeoForge 21.1.x
-    const parts = mcVersion.split(".");
-    if (parts.length < 2) return null;
-
-    const prefix = `${parts[1]}.${parts[2] ?? "0"}.`;
+    const prefix = neoforgePrefix(mcVersion);
+    if (!prefix) return null;
 
     const matching = all.filter(v => v.startsWith(prefix));
     if (matching.length === 0) return null;
@@ -88,6 +97,57 @@ async function getLatestLoaderVersion(loader, mcVersion) {
         case "neoforge": return latestNeoForge(mcVersion);
         default: return null;
     }
+}
+
+/* =========================================================
+   EVERY VERSION
+========================================================= */
+
+const FORGE_MAVEN_METADATA =
+    "https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
+
+const looksUnstable = (version) => /alpha|beta|pre|rc/i.test(version);
+
+/*
+ * Every build of a loader for a Minecraft version, newest first:
+ * [{ version, stable }]. Forge's are named "1.20.1-47.4.10", like the instance records them.
+ */
+async function listLoaderVersions(loader, mcVersion) {
+    let list = [];
+
+    switch ((loader || "").toLowerCase()) {
+        case "fabric":
+        case "quilt": {
+            const base = loader === "quilt" ? QUILT_META : FABRIC_META;
+            const entries = await fetchJson(`${base}/versions/loader/${mcVersion}`);
+            // Fabric only flags its newest build as stable, so the name decides.
+            list = (entries ?? []).map(entry => entry.loader?.version).filter(Boolean);
+            break;
+        }
+        case "forge": {
+            const res = await fetch(FORGE_MAVEN_METADATA, { signal: AbortSignal.timeout(30 * 1000) });
+            if (!res.ok) throw new Error(`Forge's version list answered HTTP ${res.status}.`);
+            const xml = await res.text();
+            list = [...xml.matchAll(/<version>([^<]+)<\/version>/g)]
+                .map(match => match[1])
+                .filter(version => version.startsWith(`${mcVersion}-`));
+            break;
+        }
+        case "neoforge": {
+            const prefix = neoforgePrefix(mcVersion);
+            const meta = await fetchJson(NEOFORGE_MAVEN);
+            list = prefix ? (meta?.versions ?? []).filter(v => v.startsWith(prefix)) : [];
+            break;
+        }
+        default:
+            return [];
+    }
+
+    const plain = (version) => version.replace(/^\d+(\.\d+)*-(?=\d)/, "");
+    return [...new Set(list)]
+        .map(version => ({ version, stable: !looksUnstable(version), parsed: parseVersion(plain(version)) }))
+        .sort((a, b) => (a.parsed && b.parsed ? compare(b.parsed, a.parsed) : 0))
+        .map(({ version, stable }) => ({ version, stable }));
 }
 
 /* =========================================================
@@ -314,4 +374,5 @@ async function installLoader({
 module.exports = {
     installLoader,
     getLatestLoaderVersion,
+    listLoaderVersions,
 };

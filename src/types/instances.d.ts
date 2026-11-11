@@ -92,6 +92,31 @@ declare global {
         batch: { id: string; count: number } | null;
     };
 
+    /** The builds of an instance's mod loader to choose from. */
+    type LoaderVersions = {
+        /** "Fabric Loader", "Quilt Loader", "Forge" or "NeoForge". */
+        loaderName: string;
+        current: string;
+        /** The newest build newer than the current one (stable, unless the current one is a beta). */
+        newest: string | null;
+        /** Newest first; problems is how many enabled mods wouldn't accept it as they are. */
+        versions: { version: string; stable: boolean; installed: boolean; problems: number }[];
+    };
+
+    /** What changing the loader would take. */
+    type LoaderPlan = {
+        loaderName: string;
+        current: string;
+        target: string;
+        upgrade: boolean;
+        /** Mods that would be updated with it, so they keep working. */
+        fixes: { name: string; from: string; to: string }[];
+        /** Why mods wouldn't work with it, one sentence each; empty if they all would. */
+        blocking: string[];
+        /** Other updates from the latest check that could go in at the same time. */
+        otherUpdates: number;
+    };
+
     type ContentVersion = {
         id: string;
         number: string;
@@ -578,6 +603,19 @@ declare global {
             /** The latest change to the instance's content that can be undone. */
             lastUpdate(name: string): Promise<{ id: string; time: string; names: string[] } | null>;
             undoUpdate(name: string): Promise<{ restored: { name: string; version: string }[] }>;
+            /** The builds of the instance's loader for its Minecraft version. */
+            loaderVersions(name: string): Promise<LoaderVersions>;
+            /** Checks every mod against that loader build, looking for mod updates that would make them fit. */
+            planLoader(name: string, version: string): Promise<LoaderPlan>;
+            /** Changes the loader, with the mods its plan updates; without force, says why mods wouldn't work instead. */
+            applyLoader(
+                name: string,
+                version: string,
+                options?: { force?: boolean; alsoUpdate?: boolean }
+            ): Promise<
+                | { needsConfirm: true; problems: string[] }
+                | (UpdateResult & DependencyCheck & { needsConfirm?: undefined; loader: { name: string; from: string; to: string } })
+            >;
             /** Chooses a Java for this instance alone. Null if cancelled. */
             pickInstanceJava(name: string): Promise<string | null>;
             /** The Java automatic would use, and whether it has been downloaded. */
