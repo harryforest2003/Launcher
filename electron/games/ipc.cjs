@@ -1,5 +1,6 @@
 const { BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { GAMES, getGame } = require("./registry.cjs");
+const { readSettings, writeSettings } = require("./storage.cjs");
 const detect = require("./detect.cjs");
 const store = require("./store.cjs");
 const protect = require("./protect.cjs");
@@ -81,6 +82,23 @@ async function handleNxm(link) {
     } catch (err) {
         send("games:nxm", { status: "failed", gameId: game.id, modId: parsed.modId, name, error: err.message, notes: err.notes ?? [] });
     }
+}
+
+/*
+ * Adult mods on Nexus Mods: offered only for an account Nexus says is age-verified, and
+ * shown only once turned on here. Checked here, not by the page, on every search.
+ * -> { hasKey, verified, on, blur, error }
+ */
+async function adultStatus() {
+    let access = null;
+    let error = null;
+    try {
+        access = await nexus.adultAccess();
+    } catch (err) {
+        error = err.message;
+    }
+    const verified = access?.verified === true;
+    return { hasKey: nexus.hasKey(), verified, on: verified && readSettings().adultMods === true, blur: access?.blur !== false, error };
 }
 
 /* A page of CurseForge's mods for a game. */
@@ -222,7 +240,8 @@ function registerGamesIpc() {
         const run = (source) =>
             source === "curseforge"
                 ? searchCurseForge(game, { query, sort: options?.sort, page, size })
-                : nexus.search(game.nexus, { query, sort: options?.sort, page, count: size, adult: options?.adult === true });
+                : nexus.search(game.nexus, { query, sort: options?.sort, page, count: size, adult });
+        const adult = sources.includes("nexus") ? (await adultStatus()).on : false;
         const answers = await Promise.allSettled(sources.map(run));
         const totals = {};
         const lists = [];
@@ -311,6 +330,19 @@ function registerGamesIpc() {
         }
     });
     ipcMain.handle("games:undoUpdate", (_e, id, key) => store.undoReplace(need(id).id, String(key)));
+
+    ipcMain.handle("games:adultStatus", async (_e, recheck) => {
+        if (recheck) nexus.forgetAccount();
+        return adultStatus();
+    });
+    ipcMain.handle("games:setAdult", async (_e, on) => {
+        const status = await adultStatus();
+        if (on && !status.verified) throw new Error("Nexus Mods hasn't age-verified this account, so adult mods stay hidden.");
+        const settings = readSettings();
+        settings.adultMods = on === true;
+        writeSettings(settings);
+        return adultStatus();
+    });
 
     ipcMain.handle("games:nexusAccount", async () => {
         nexus.forgetAccount();

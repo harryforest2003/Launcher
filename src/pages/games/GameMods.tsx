@@ -29,7 +29,8 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "on", label: "On" },
   { id: "off", label: "Off" },
-  { id: "newer", label: "Updates" },
+  // These two show only when a mod has one.
+  { id: "newer", label: "Update available" },
   { id: "update", label: "May need updating" },
 ];
 
@@ -87,17 +88,21 @@ export default function GameMods({
     return () => clearTimeout(timer);
   }, [confirming]);
 
+  const counts: Partial<Record<Filter, number>> = { newer: newer.size, update: mods.filter((mod) => mod.mayNeedUpdate).length };
+  // A filter that's emptied (everything updated) goes back to showing all.
+  const activeFilter: Filter = counts[filter] === 0 ? "all" : filter;
+
   const shown = useMemo(() => {
     const words = query.trim().toLowerCase();
     return mods.filter((mod) => {
       if (words && !mod.name.toLowerCase().includes(words) && !(mod.where ?? "").toLowerCase().includes(words)) return false;
-      if (filter === "on") return mod.enabled;
-      if (filter === "off") return !mod.enabled;
-      if (filter === "update") return mod.mayNeedUpdate;
-      if (filter === "newer") return newer.has(mod.key);
+      if (activeFilter === "on") return mod.enabled;
+      if (activeFilter === "off") return !mod.enabled;
+      if (activeFilter === "update") return mod.mayNeedUpdate;
+      if (activeFilter === "newer") return newer.has(mod.key);
       return true;
     });
-  }, [mods, query, filter, newer]);
+  }, [mods, query, activeFilter, newer]);
 
   const mayNeedUpdate = mods.filter((mod) => mod.mayNeedUpdate && mod.enabled);
   const onCount = mods.filter((mod) => mod.enabled).length;
@@ -188,22 +193,24 @@ export default function GameMods({
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <IconButton
-            tip={detail.found ? "Open the game's folder" : "The game's folder hasn't been found: choose it in Settings"}
-            label="Open the game's folder"
-            disabled={!detail.gameDir}
-            onUnavailable={goSettings}
-            onClick={() => window.gamesAPI.openFolder(detail.id, "game").catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
-          >
-            <Folder size={20} />
-          </IconButton>
-          {detail.id === "sims4" && (
+          {/* The Sims 4's mods are in Documents, so that's the folder it opens; the game's own is in Settings. */}
+          {detail.id === "sims4" ? (
             <IconButton
-              tip="Open The Sims 4's folder in Documents (Mods, Tray, saves)"
+              tip={detail.docsDir ? "Open The Sims 4's folder in Documents: Mods, Tray and saves" : "The Sims 4's Documents folder hasn't been found: choose it in Settings"}
               label="Open The Sims 4's Documents folder"
               disabled={!detail.docsDir}
               onUnavailable={goSettings}
               onClick={() => window.gamesAPI.openFolder(detail.id, "docs").catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
+            >
+              <Folder size={20} />
+            </IconButton>
+          ) : (
+            <IconButton
+              tip={detail.found ? "Open the game's folder" : "The game's folder hasn't been found: choose it in Settings"}
+              label="Open the game's folder"
+              disabled={!detail.gameDir}
+              onUnavailable={goSettings}
+              onClick={() => window.gamesAPI.openFolder(detail.id, "game").catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
             >
               <Folder size={20} />
             </IconButton>
@@ -322,16 +329,15 @@ export default function GameMods({
           placeholder="Search your mods..."
           style={{ flex: "1 1 220px", padding: 12, borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9" }}
         />
-        {FILTERS.map((option) => (
+        {FILTERS.filter((option) => counts[option.id] !== 0).map((option) => (
           <button
             key={option.id}
             className="sidebar-button"
             onClick={() => setFilter(option.id)}
-            style={{ fontSize: 12, padding: "8px 12px", opacity: filter === option.id ? 1 : 0.6, ...(filter === option.id ? { background: "#6d28d9" } : {}) }}
+            style={{ fontSize: 12, padding: "8px 12px", opacity: activeFilter === option.id ? 1 : 0.6, ...(activeFilter === option.id ? { background: "#6d28d9" } : {}) }}
           >
             {option.label}
-            {option.id === "update" && mods.some((mod) => mod.mayNeedUpdate) ? ` (${mods.filter((mod) => mod.mayNeedUpdate).length})` : ""}
-            {option.id === "newer" && newer.size ? ` (${newer.size})` : ""}
+            {counts[option.id] ? ` (${counts[option.id]})` : ""}
           </button>
         ))}
         <IconButton

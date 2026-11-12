@@ -14,10 +14,22 @@ const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 1
 export default function GameSettings({ detail, reload, goLauncherSettings }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [account, setAccount] = useState<{ name: string; premium: boolean } | null | undefined>(undefined);
+  const [adult, setAdult] = useState<GameAdultStatus | null>(null);
 
   useEffect(() => {
-    if (detail.nexus) window.gamesAPI.nexusAccount().then(setAccount).catch(() => setAccount(null));
+    if (!detail.nexus) return;
+    window.gamesAPI.nexusAccount().then(setAccount).catch(() => setAccount(null));
+    window.gamesAPI.adultStatus().then(setAdult).catch(() => setAdult(null));
   }, [detail.nexus]);
+
+  async function changeAdult(work: () => Promise<GameAdultStatus>) {
+    setError(null);
+    try {
+      setAdult(await work());
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
 
   async function act(work: () => Promise<unknown>) {
     setError(null);
@@ -128,6 +140,29 @@ export default function GameSettings({ detail, reload, goLauncherSettings }: Pro
             <button className="sidebar-button" style={smallButton} onClick={goLauncherSettings}>
               API keys
             </button>
+          </div>
+          <div style={{ ...row, marginTop: 10 }} data-testid="adult-setting">
+            <div style={{ flex: 1 }}>
+              <div>Adult mods</div>
+              <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>
+                {!adult
+                  ? "Checking..."
+                  : adult.error
+                    ? `Couldn't ask Nexus Mods: ${adult.error}`
+                    : !adult.hasKey
+                      ? "Shown only for a Nexus Mods account that's age-verified. Add your key to check yours."
+                      : !adult.verified
+                        ? "Your Nexus Mods account isn't age-verified, so adult mods stay hidden. Verify it on nexusmods.com, then check again."
+                        : `Your Nexus Mods account is age-verified. Shows adult mods in Discover for every game${adult.blur ? ", with their pictures blurred as your Nexus preferences ask" : ""}.`}
+              </div>
+            </div>
+            {adult?.verified ? (
+              <Toggle on={adult.on} label="Show adult mods" onChange={(on) => changeAdult(() => window.gamesAPI.setAdult(on))} />
+            ) : adult?.hasKey ? (
+              <button className="sidebar-button" style={smallButton} onClick={() => changeAdult(() => window.gamesAPI.adultStatus(true))}>
+                Check again
+              </button>
+            ) : null}
           </div>
         </div>
       )}

@@ -47,6 +47,7 @@ const MODS: Partial<Record<GameId, GameMod[]>> = {
 const updatable = new Set(["m:mccc", "m:ww"]);
 
 let simsOptions = { mods: true, scripts: true };
+let adultOn = false;
 let simsUpdated: GameSummary["updated"] = { from: "1.111.102.1030", to: "1.112.519.1020" };
 
 const summary = (game: GameSummary): GameSummary => ({
@@ -194,6 +195,11 @@ export const gamesBridge = {
     return { restored: key, version: "2025.9" };
   },
   nexusAccount: async () => ({ name: "PreviewUser", premium: false }),
+  adultStatus: async (): Promise<GameAdultStatus> => ({ hasKey: true, verified: true, on: adultOn, blur: true, error: null }),
+  setAdult: async (on: boolean): Promise<GameAdultStatus> => {
+    adultOn = on;
+    return { hasKey: true, verified: true, on, blur: true, error: null };
+  },
   openUrl: async (url: string) => {
     window.open(url, "_blank", "noopener");
   },

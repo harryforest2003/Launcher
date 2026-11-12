@@ -134,6 +134,36 @@ function bbcodeHtml(bbcode) {
 }
 
 let account = null;
+let adultInfo = null;
+
+/*
+ * Whether the key's account is age-verified on Nexus Mods, and its own adult-content
+ * preferences: { verified, adult, blur }, or null without a key. Nexus' newer API takes
+ * the same personal key.
+ */
+async function adultAccess() {
+    if (!nexusKey.hasApiKey()) return null;
+    adultInfo ??= (async () => {
+        const res = await fetch(GQL, {
+            method: "POST",
+            headers: { ...HEADERS, ...nexusKey.apiHeaders(), "Content-Type": "application/json" },
+            body: JSON.stringify({ query: "{ ageVerificationInfo { verified } preferences { adult adultBlurImages } }" }),
+            signal: AbortSignal.timeout(30000),
+        });
+        if (res.status === 401) throw Object.assign(new Error("Nexus Mods didn't accept your API key. Check it in Settings → API keys."), { code: "BAD_KEY" });
+        if (!res.ok) throw new Error(`Nexus Mods answered ${res.status}.`);
+        const json = await res.json();
+        return {
+            verified: json.data?.ageVerificationInfo?.verified === true,
+            adult: json.data?.preferences?.adult === true,
+            blur: json.data?.preferences?.adultBlurImages !== false,
+        };
+    })().catch((err) => {
+        adultInfo = null;
+        throw err;
+    });
+    return adultInfo;
+}
 
 /* Who the key belongs to and whether they're Premium (null without a key). */
 async function whoAmI() {
@@ -244,6 +274,7 @@ function parseNxm(link) {
 
 const forgetAccount = () => {
     account = null;
+    adultInfo = null;
 };
 
-module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml, filesOf, byMd5, updatedThisMonth, modName, hasKey: () => nexusKey.hasApiKey() };
+module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml, filesOf, byMd5, updatedThisMonth, modName, adultAccess, hasKey: () => nexusKey.hasApiKey() };

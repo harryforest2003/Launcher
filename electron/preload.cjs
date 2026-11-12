@@ -314,6 +314,8 @@ contextBridge.exposeInMainWorld("gamesAPI", {
     update: (id, key) => ipcRenderer.invoke("games:update", id, key),
     undoUpdate: (id, key) => ipcRenderer.invoke("games:undoUpdate", id, key),
     nexusAccount: () => ipcRenderer.invoke("games:nexusAccount"),
+    adultStatus: (recheck) => ipcRenderer.invoke("games:adultStatus", recheck),
+    setAdult: (on) => ipcRenderer.invoke("games:setAdult", on),
     openUrl: (url) => ipcRenderer.invoke("games:openUrl", url),
 
     onProgress: listen("games:progress"),

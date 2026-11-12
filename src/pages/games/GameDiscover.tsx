@@ -48,8 +48,15 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
   const [chosenPage, setChosenPage] = useState({ filterKey, page: 1 });
   const page = chosenPage.filterKey === filterKey ? chosenPage.page : 1;
 
+  // Adult mods' pictures are blurred when the account's Nexus preferences say so.
+  const [blurAdult, setBlurAdult] = useState(true);
+
   useEffect(() => {
     window.gamesAPI.nexusAccount().then(setAccount).catch(() => setAccount(null));
+    window.gamesAPI
+      .adultStatus()
+      .then((status) => setBlurAdult(status.blur))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -258,7 +265,9 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
                   background: "#1b1b1b",
                 }}
               >
-                {mod.picture ? <img src={mod.picture} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                {mod.picture ? (
+                  <img src={mod.picture} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", filter: mod.adult && blurAdult ? "blur(10px)" : undefined }} />
+                ) : null}
               </div>
 
               <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
@@ -266,6 +275,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
                 <div style={{ fontSize: 12, color: "#aaa" }}>{mod.summary?.slice(0, 160)}</div>
                 <div style={{ fontSize: 11, marginTop: 4, color: "#d4d4d8", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ padding: "1px 6px", borderRadius: 5, background: BADGE[mod.provider].colour, color: "white", fontWeight: 700, fontSize: 10 }}>{BADGE[mod.provider].label}</span>
+                  {mod.adult && <span style={{ padding: "1px 6px", borderRadius: 5, border: "1px solid #f87171", color: "#fca5a5", fontWeight: 700, fontSize: 10 }}>18+</span>}
                   {mod.author && <span>by {mod.author}</span>}
                   <span>↓ {countText(mod.downloads)}</span>
                   {mod.endorsements != null && <span>♥ {countText(mod.endorsements)}</span>}

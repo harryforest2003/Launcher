@@ -111,6 +111,9 @@ declare global {
         installable?: boolean;
     };
 
+    /* Adult mods: offered only when Nexus says the account is age-verified. */
+    type GameAdultStatus = { hasKey: boolean; verified: boolean; on: boolean; blur: boolean; error: string | null };
+
     type GameSearchPage = {
         total: number;
         totals?: { nexus?: number; curseforge?: number };
@@ -184,6 +187,9 @@ declare global {
             update: (id: GameId, key: string) => Promise<GameInstallResult>;
             undoUpdate: (id: GameId, key: string) => Promise<{ restored: string; version: string | null }>;
             nexusAccount: () => Promise<{ name: string; premium: boolean } | null>;
+            /* recheck: ask Nexus again (after verifying on the website). */
+            adultStatus: (recheck?: boolean) => Promise<GameAdultStatus>;
+            setAdult: (on: boolean) => Promise<GameAdultStatus>;
             openUrl: (url: string) => Promise<void>;
 
             onProgress: (callback: (data: { gameId: GameId; detail: string }) => void) => () => void;
