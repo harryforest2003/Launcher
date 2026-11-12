@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, GripVertical } from "lucide-react";
+import { ChevronDown, ChevronUp, GripVertical, Undo2 } from "lucide-react";
 import IconButton from "../../components/IconButton";
 import Toggle from "../../components/Toggle";
 import { errorText, fixNeeded, fixSentence, note, panel, smallButton } from "./shared";
@@ -23,6 +23,10 @@ export default function LoadOrderPage({ detail }: Props) {
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
   const [fixedNow, setFixedNow] = useState<string | null>(null);
+  // Sorting by LOOT's rules: what it would move (shown first), and the order before, for Undo.
+  const [lootPlan, setLootPlan] = useState<{ moved: GameLootMove[]; loops: string[] } | null>(null);
+  const [lootBusy, setLootBusy] = useState(false);
+  const [sorted, setSorted] = useState<{ count: number; previous: { name: string; active: boolean }[] } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -52,6 +56,37 @@ export default function LoadOrderPage({ detail }: Props) {
     next.splice(to, 0, item);
     write(next);
   };
+
+  async function previewLoot() {
+    setLootBusy(true);
+    setError(null);
+    try {
+      setLootPlan(await window.gamesAPI.lootPlan(detail.id));
+    } catch (err) {
+      setError(errorText(err));
+    }
+    setLootBusy(false);
+  }
+
+  async function sortLoot() {
+    setLootBusy(true);
+    try {
+      const result = await window.gamesAPI.lootSort(detail.id);
+      setOrder(result);
+      setSorted({ count: result.moved.length, previous: result.previous });
+      setLootPlan(null);
+      setFixedNow(null);
+    } catch (err) {
+      setError(errorText(err));
+    }
+    setLootBusy(false);
+  }
+
+  async function undoSort() {
+    if (!sorted) return;
+    await write(sorted.previous.map((entry) => ({ ...order!.plugins.find((p) => p.name === entry.name)!, active: entry.active })).filter((p) => p.name));
+    setSorted(null);
+  }
 
   async function fix() {
     try {
@@ -91,6 +126,88 @@ export default function LoadOrderPage({ detail }: Props) {
               Fix load order
             </button>
           )}
+        </div>
+      )}
+
+      {/* SORTING BY LOOT'S RULES */}
+      {order && order.plugins.length > 1 && (
+        <div style={{ ...panel, display: "flex", flexDirection: "column", gap: 10 }} data-testid="loot">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: "#d4d4d8" }}>
+              {sorted
+                ? sorted.count
+                  ? `Sorted by LOOT's rules: ${sorted.count} plugin${sorted.count === 1 ? "" : "s"} moved.`
+                  : "Already in the order LOOT's rules give."
+                : "Sort the way LOOT does: each plugin in its group (fixes early, overhauls and patches later) and after the plugins its rules name. Nothing it doesn't know about changes order."}
+            </span>
+            {sorted && sorted.count > 0 && (
+              <button className="sidebar-button" data-testid="loot-undo" style={{ ...smallButton, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={undoSort}>
+                <Undo2 size={14} />
+                Undo
+              </button>
+            )}
+            {!lootPlan && !sorted && (
+              <button className="sidebar-button" data-testid="loot-preview" style={{ ...smallButton, flexShrink: 0 }} onClick={previewLoot}>
+                {lootBusy ? "Reading LOOT's rules..." : "Sort with LOOT's rules"}
+              </button>
+            )}
+          </div>
+
+          {lootPlan && (
+            <div data-testid="loot-plan">
+              {lootPlan.moved.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#86efac" }}>Already in the order LOOT's rules give: nothing to move.</div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, color: "#e9d5ff", marginBottom: 6 }}>
+                    This moves {lootPlan.moved.length} plugin{lootPlan.moved.length === 1 ? "" : "s"}:
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, maxHeight: 220, overflowY: "auto", marginBottom: 8 }}>
+                    {lootPlan.moved.map((move) => (
+                      <div key={move.name} style={{ fontSize: 12, color: "#d4d4d8" }}>
+                        <b style={{ color: "#e9d5ff", fontWeight: 600 }}>{move.name}</b>
+                        <span style={{ color: "#9ca3af" }}>
+                          {" — "}
+                          {[move.group !== "default" ? `in LOOT's ${move.group} group` : "", move.after.length ? `after ${move.after.join(", ")}` : ""].filter(Boolean).join(", ") ||
+                            "to make room for the others"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {lootPlan.loops.length > 0 && (
+                <div style={{ fontSize: 12, color: "#fcd34d", marginBottom: 8 }}>
+                  LOOT's rules contradict each other around {lootPlan.loops.join(", ")}, so {lootPlan.loops.length === 1 ? "it stays" : "they stay"} as near
+                  as possible to where {lootPlan.loops.length === 1 ? "it is" : "they are"}.
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 10 }}>
+                {lootPlan.moved.length > 0 && (
+                  <button className="sidebar-button" data-testid="loot-sort" style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }} onClick={sortLoot}>
+                    {lootBusy ? "Sorting..." : "Sort"}
+                  </button>
+                )}
+                <button className="sidebar-button" style={smallButton} onClick={() => setLootPlan(null)}>
+                  {lootPlan.moved.length ? "Cancel" : "Close"}
+                </button>
+              </div>
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: "#6b7280" }}>
+            Rules from{" "}
+            <a
+              href="https://loot.github.io"
+              onClick={(event) => {
+                event.preventDefault();
+                window.open("https://loot.github.io", "_blank", "noopener");
+              }}
+              style={{ color: "#8ab4ff" }}
+            >
+              LOOT
+            </a>
+            's community masterlist, checked for changes once a day. LOOT also compares what plugins change, which this doesn't.
+          </div>
         </div>
       )}
 

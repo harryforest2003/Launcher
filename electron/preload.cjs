@@ -327,6 +327,8 @@ contextBridge.exposeInMainWorld("gamesAPI", {
     loadOrder: (id) => ipcRenderer.invoke("games:loadOrder", id),
     setLoadOrder: (id, entries) => ipcRenderer.invoke("games:setLoadOrder", id, entries),
     fixLoadOrder: (id) => ipcRenderer.invoke("games:fixLoadOrder", id),
+    lootPlan: (id) => ipcRenderer.invoke("games:lootPlan", id),
+    lootSort: (id) => ipcRenderer.invoke("games:lootSort", id),
 
     requirements: (id) => ipcRenderer.invoke("games:requirements", id),
     requirementsBefore: (id, modId) => ipcRenderer.invoke("games:requirementsBefore", id, modId),

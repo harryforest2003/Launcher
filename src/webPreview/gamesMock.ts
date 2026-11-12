@@ -279,6 +279,20 @@ export const gamesBridge = {
     skyrimOrder = entries.map((e) => ({ ...skyrimOrder.find((p) => p.name === e.name)!, active: e.active }));
     return orderNow();
   },
+  lootPlan: async () => ({
+    moved: [
+      { name: "SkyUI_SE.esp", group: "Fixes", after: [] },
+      { name: "Obsidian Weathers.esp", group: "default", after: [] },
+    ],
+    fetchedAt: Date.now(),
+    loops: [],
+  }),
+  lootSort: async () => {
+    const previous = skyrimOrder.map((p) => ({ name: p.name, active: p.active }));
+    const sky = skyrimOrder.find((p) => p.name === "SkyUI_SE.esp")!;
+    skyrimOrder = [sky, ...skyrimOrder.filter((p) => p !== sky)];
+    return { ...orderNow(), previous, moved: [{ name: "SkyUI_SE.esp", group: "Fixes", after: [] }] };
+  },
   fixLoadOrder: async () => {
     const done = orderNow().fix;
     const off = new Set(done.turnOff.map((t) => t.name));

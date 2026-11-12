@@ -14,6 +14,7 @@ const plugins = require("./plugins.cjs");
 const requirements = require("./requirements.cjs");
 const sets = require("./sets.cjs");
 const finder = require("./finder.cjs");
+const loot = require("./loot.cjs");
 const curseforge = require("../mods/providers/curseforge.cjs");
 const { curseforgeFetch } = require("../curseforge.cjs");
 
@@ -331,6 +332,23 @@ function registerGamesIpc() {
         plugins.setOrder(game, loc, (entries ?? []).map((e) => ({ name: String(e.name), active: e.active === true })));
         store.touch(id);
         return withFix(game, loc);
+    });
+
+    // Sorting by LOOT's community masterlist: what it'd move, and doing it (with the order before, for Undo).
+    ipcMain.handle("games:lootPlan", async (_e, id) => {
+        const game = need(id);
+        if (!game.bethesda) throw new Error(`${game.name} has no load order to sort.`);
+        const planned = await loot.plan(game, detect.locate(id));
+        return { moved: planned.moved, fetchedAt: planned.fetchedAt, loops: planned.loops };
+    });
+    ipcMain.handle("games:lootSort", async (_e, id) => {
+        const game = need(id);
+        const loc = detect.locate(id);
+        const previous = plugins.loadOrder(game, loc).plugins.map((p) => ({ name: p.name, active: p.active }));
+        const planned = await loot.plan(game, loc);
+        plugins.setOrder(game, loc, planned.order);
+        store.touch(id);
+        return { ...withFix(game, loc), previous, moved: planned.moved };
     });
 
     // What mods need that isn't installed, and getting it.

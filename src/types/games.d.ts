@@ -130,6 +130,8 @@ declare global {
     };
     /* What fixing the load order changes: masters turned on, plugins that can't load turned off, and ones moved after what they need. */
     type GameLoadOrderFix = { turnOn: { name: string; for: string }[]; turnOff: { name: string; needs: string; missing: boolean }[]; moved: string[] };
+    /* A plugin LOOT's rules move: its LOOT group, and the plugins its rules say it loads after. */
+    type GameLootMove = { name: string; group: string; after: string[] };
     type GameLoadOrder = { fixed: string[]; plugins: GamePlugin[]; fix: GameLoadOrderFix };
 
     type GameRequirement = {
@@ -252,6 +254,10 @@ declare global {
             loadOrder: (id: GameId) => Promise<GameLoadOrder>;
             setLoadOrder: (id: GameId, entries: { name: string; active: boolean }[]) => Promise<GameLoadOrder>;
             fixLoadOrder: (id: GameId) => Promise<GameLoadOrder & { done: GameLoadOrderFix }>;
+            /* Sorting by LOOT's community masterlist: what would move, and why. */
+            lootPlan: (id: GameId) => Promise<{ moved: GameLootMove[]; fetchedAt: number; loops: string[] }>;
+            /* previous: the order before, for Undo. */
+            lootSort: (id: GameId) => Promise<GameLoadOrder & { previous: { name: string; active: boolean }[]; moved: GameLootMove[] }>;
 
             requirements: (id: GameId) => Promise<GameRequirement[]>;
             requirementsBefore: (id: GameId, modId: string) => Promise<GameRequirement[]>;
