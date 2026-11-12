@@ -92,6 +92,14 @@
       "category": "Game",
       "executableName": "unity-launcher"
     },
+    "protocols": [
+      {
+        "name": "Nexus Mods",
+        "schemes": [
+          "nxm"
+        ]
+      }
+    ],
     "extraResources": [
       {
         "from": "vendor/blockbench",

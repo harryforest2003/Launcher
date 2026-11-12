@@ -205,6 +205,7 @@ function parseModUrl(url) {
 }
 
 module.exports = {
+    apiHeaders: headers,
     id,
     label,
     supports,

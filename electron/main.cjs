@@ -12,6 +12,7 @@ const {
 } = require("./instanceManager.cjs");
 
 const { registerModIpc } = require("./mods/index.cjs");
+const { registerGamesIpc, handleNxm } = require("./games/ipc.cjs");
 const { registerInstanceIpc, saveAccount } = require("./minecraft/ipc.cjs");
 const { accountForLaunch } = require("./minecraft/account.cjs");
 const { registerSkinBuilderIpc } = require("./skinBuilder/ipc.cjs");
@@ -239,6 +240,46 @@ ipcMain.handle("minecraft:searchPlayers", async (_event, query) => {
 
 const isDev = !app.isPackaged;
 
+/*
+ * Nexus Mods' "Mod Manager Download" button opens an nxm:// link, which the system hands
+ * to this app: on a Mac as an open-url event, elsewhere as an argument to a second copy
+ * of the app, which passes it here and quits. Links that arrive before the window has
+ * loaded wait for it, so the page can show the download.
+ */
+const pendingNxm = [];
+let pageReady = false;
+
+function takeNxm(link) {
+    if (!/^nxm:\/\//i.test(String(link))) return;
+    if (pageReady) handleNxm(link);
+    else pendingNxm.push(link);
+}
+
+// Only the installed app handles these links: run from source, it would claim them for Electron.
+// A second copy of the installed app hands its link to the first and quits, without a window.
+const secondCopy = app.isPackaged && !app.requestSingleInstanceLock();
+if (app.isPackaged) {
+    if (secondCopy) {
+        app.quit();
+    } else {
+        app.setAsDefaultProtocolClient("nxm");
+        app.on("second-instance", (_event, argv) => {
+            argv.filter((arg) => /^nxm:\/\//i.test(arg)).forEach(takeNxm);
+            const win = BrowserWindow.getAllWindows()[0];
+            if (win) {
+                if (win.isMinimized()) win.restore();
+                win.focus();
+            }
+        });
+        process.argv.filter((arg) => /^nxm:\/\//i.test(arg)).forEach(takeNxm);
+    }
+}
+app.on("open-url", (event, url) => {
+    if (!/^nxm:\/\//i.test(url)) return;
+    event.preventDefault();
+    takeNxm(url);
+});
+
 function createWindow() {
     const win = new BrowserWindow({
         width: 1600,
@@ -256,6 +297,11 @@ function createWindow() {
     });
 
     win.maximize();
+
+    win.webContents.once("did-finish-load", () => {
+        pageReady = true;
+        pendingNxm.splice(0).forEach(handleNxm);
+    });
 
     /*
      * Project pages contain links written by strangers. Opening one inside the app
@@ -286,12 +332,15 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    if (secondCopy) return;
+
     // Run from source, the Dock would show Electron's icon; the installed app has its own.
     const devIcon = path.join(__dirname, "..", "build", "icon.png");
     if (process.platform === "darwin" && !app.isPackaged && fs.existsSync(devIcon)) app.dock?.setIcon(devIcon);
 
     // Both need app.getPath("userData"), so they can't run at module load.
     registerModIpc();
+    registerGamesIpc();
     registerInstanceIpc();
     registerSkinBuilderIpc();
     registerBlockbenchIpc();

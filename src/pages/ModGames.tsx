@@ -8,6 +8,8 @@ type Props = {
   onSettings: () => void;
 };
 
+const OWN_SECTIONS = new Set(["sims4", "gtav", "skyrimse", "fallout4", "cyberpunk2077", "stardew"]);
+
 export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
   const [games, setGames] = useState<DetectedGame[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +31,8 @@ export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
         window.modAPI.getSettings(),
       ]);
 
-      setGames(list);
+      // The Sims 4, GTA V, Skyrim, Cyberpunk and Stardew have their own sections now.
+      setGames(list.filter((game) => !OWN_SECTIONS.has(game.id)));
       setHasNexusKey(settings.hasNexusKey);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -82,11 +85,12 @@ export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
         ← Back to Launcher
       </button>
 
-      <h1 style={{ color: "#c084fc", marginBottom: 6 }}>Mod Manager</h1>
+      <h1 style={{ color: "#c084fc", marginBottom: 6 }}>More Games</h1>
 
       <p style={{ color: "#9ca3af", marginBottom: 20 }}>
-        Games found on this computer. Mods can be viewed, enabled and disabled
-        for any of them.
+        Other games found on this computer. Mods can be viewed, enabled and disabled
+        for any of them. The Sims 4, GTA V, Skyrim, Fallout 4, Cyberpunk 2077 and
+        Stardew Valley have their own sections on the home page.
       </p>
 
       <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
@@ -129,8 +133,7 @@ export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
 
           <p style={{ fontSize: 13, lineHeight: 1.7 }}>
             The scan looks through Steam libraries, Epic manifests, and the
-            standard install and mod folders for The Sims 4, GTA V, Stardew
-            Valley, Palworld, Terraria, Skyrim SE, Cyberpunk 2077, Baldur's
+            standard install and mod folders for Palworld, Terraria, Baldur's
             Gate 3, Valheim and RimWorld.
             <br />
             <br />

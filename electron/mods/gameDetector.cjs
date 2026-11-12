@@ -287,4 +287,5 @@ module.exports = {
     detectGames,
     resolveModDir,
     getGame,
+    steamLibraries,
 };

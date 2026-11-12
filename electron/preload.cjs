@@ -279,3 +279,40 @@ contextBridge.exposeInMainWorld("modAPI", {
         return () => ipcRenderer.removeListener("mods:progress", handler);
     },
 });
+
+// ---------------- GAME SECTIONS (The Sims 4, GTA V, Skyrim, Fallout 4, Cyberpunk 2077, Stardew Valley) ----------------
+
+const listen = (channel) => (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeListener(channel, handler);
+};
+
+contextBridge.exposeInMainWorld("gamesAPI", {
+    list: () => ipcRenderer.invoke("games:list"),
+    get: (id) => ipcRenderer.invoke("games:get", id),
+
+    mods: (id) => ipcRenderer.invoke("games:mods", id),
+    setEnabled: (id, key, enabled) => ipcRenderer.invoke("games:setEnabled", id, key, enabled),
+    remove: (id, key) => ipcRenderer.invoke("games:remove", id, key),
+
+    downloads: (id) => ipcRenderer.invoke("games:downloads", id),
+    install: (id, filePath) => ipcRenderer.invoke("games:install", id, filePath),
+
+    chooseFolder: (id) => ipcRenderer.invoke("games:chooseFolder", id),
+    forgetFolder: (id) => ipcRenderer.invoke("games:forgetFolder", id),
+    chooseDocs: (id) => ipcRenderer.invoke("games:chooseDocs", id),
+    openFolder: (id, which) => ipcRenderer.invoke("games:openFolder", id, which),
+
+    launch: (id, options) => ipcRenderer.invoke("games:launch", id, options),
+    setSimsOptions: (options) => ipcRenderer.invoke("games:setSimsOptions", options),
+
+    search: (id, options) => ipcRenderer.invoke("games:search", id, options),
+    details: (id, provider, modId) => ipcRenderer.invoke("games:details", id, provider, modId),
+    installRemote: (id, provider, modId, fileId, name) => ipcRenderer.invoke("games:installRemote", id, provider, modId, fileId, name),
+    nexusAccount: () => ipcRenderer.invoke("games:nexusAccount"),
+    openUrl: (url) => ipcRenderer.invoke("games:openUrl", url),
+
+    onProgress: listen("games:progress"),
+    onNxm: listen("games:nxm"),
+});

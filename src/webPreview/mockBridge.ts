@@ -8,6 +8,7 @@
  * in localStorage. It is not loaded by `npm run electron:dev` or production builds.
  */
 
+import { gamesBridge } from "./gamesMock";
 import { createCatalog } from "../../electron/shared/catalog.mjs";
 import { curseForgeType, modrinthType } from "../../electron/shared/contentTypes.mjs";
 
@@ -1021,6 +1022,7 @@ if (!window.launcherAPI) {
   target.launcherAPI = withFallback("launcherAPI", launcherBridge);
   target.instanceAPI = withFallback("instanceAPI", instanceBridge);
   target.modAPI = withFallback("modAPI", modBridge);
+  target.gamesAPI = withFallback("gamesAPI", gamesBridge as unknown as Record<string, AnyFn>);
   target.skinBuilderAPI = withFallback("skinBuilderAPI", skinBuilderBridge);
   target.skinAPI = withFallback("skinAPI", skinBridge);
   target.blockbenchAPI = withFallback("blockbenchAPI", {

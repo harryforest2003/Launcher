@@ -9,6 +9,7 @@ import SkinSelector from "./pages/MCSkinSelector";
 import Settings from "./pages/MCSettings";
 import ModDescription from "./pages/ModDescription";
 import ModGames from "./pages/ModGames";
+import GameSection from "./pages/GameSection";
 import SkinBuilder from "./pages/SkinBuilder";
 import { SkinBuilderNavContext } from "./skinBuilder/navContext";
 
@@ -22,7 +23,8 @@ export type Screen =
   | "skinbuilder"
   | "settings"
   | "launcherSettings"
-  | "modmanager";
+  | "modmanager"
+  | "game";
 
 function App() {
   const [screen, setScreen] = useState<Screen>("home");
@@ -41,6 +43,9 @@ function Screens({
   screen: Screen;
   setScreen: (screen: Screen) => void;
 }) {
+
+  // The game whose section is open (screen "game").
+  const [gameId, setGameId] = useState<GameId>("sims4");
 
   const navigation = {
     goHome: () => setScreen("home"),
@@ -97,10 +102,17 @@ function Screens({
       return (
         <HomeScreen
           onMinecraft={navigation.goMinecraft}
+          onGame={(id) => {
+            setGameId(id);
+            setScreen("game");
+          }}
           onModManager={() => setScreen("modmanager")}
           onSettings={() => setScreen("launcherSettings")}
         />
       );
+
+    case "game":
+      return <GameSection key={gameId} gameId={gameId} onLauncher={navigation.goHome} onLauncherSettings={() => setScreen("launcherSettings")} />;
 
     case "launcherSettings":
       return <LauncherSettings onHome={navigation.goHome} onModManager={() => setScreen("modmanager")} />;
