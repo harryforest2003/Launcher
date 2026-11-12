@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Folder, Play } from "lucide-react";
+import { Bug, Folder, Play } from "lucide-react";
+import SearchDropdown from "../../components/SearchDropdown";
+import FinderPanel from "./FinderPanel";
+import RequirementsPanel from "./RequirementsPanel";
+import SetMenu from "./SetMenu";
 import IconButton from "../../components/IconButton";
 import { BinIcon, DownloadIcon, PlusIcon, RefreshIcon, ResetIcon } from "../../components/Icons";
 import Toggle from "../../components/Toggle";
@@ -21,7 +25,26 @@ type Props = {
   onUpdate: (found: GameModUpdate) => void;
   onUpdateAll: () => void;
   onUndo: (mod: GameMod) => void;
+  /* After an install: what it needs that's missing gets fetched. */
+  onInstalled: (result: GameInstallResult, before?: string) => void;
+  requirements: GameRequirement[] | null;
+  getting: boolean;
+  onGetRequirements: (entries: GameRequirement[]) => void;
+  sets: GameSet[];
+  setsApi: {
+    member: (setId: string, key: string, member: boolean) => Promise<void>;
+    create: (name: string, key?: string) => Promise<string | null>;
+    rename: (setId: string, name: string) => Promise<void>;
+    remove: (setId: string) => Promise<void>;
+    use: (set: GameSet) => Promise<void>;
+  };
+  finder: GameFinder;
+  finderIntro: boolean;
+  finderBusy: boolean;
+  finderApi: { intro: () => void; cancelIntro: () => void; start: () => void; answer: (happened: boolean) => void; stop: (keepOff: string | null) => void };
 };
+
+const ALL = "All mods";
 
 type Filter = "all" | "on" | "off" | "update" | "newer";
 
@@ -55,7 +78,21 @@ export default function GameMods({
   onUpdate,
   onUpdateAll,
   onUndo,
+  onInstalled,
+  requirements,
+  getting,
+  onGetRequirements,
+  sets,
+  setsApi,
+  finder,
+  finderIntro,
+  finderBusy,
+  finderApi,
 }: Props) {
+  // A set shown on its own ("All mods" for every one), and naming a new set or renaming one.
+  const [setShown, setSetShown] = useState(ALL);
+  const [naming, setNaming] = useState<{ id: string | null; name: string } | null>(null);
+  const currentSet = sets.find((set) => set.name === setShown) ?? null;
   const newer = useMemo(() => new Map((updates?.updates ?? []).map((found) => [found.key, found])), [updates]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -96,13 +133,14 @@ export default function GameMods({
     const words = query.trim().toLowerCase();
     return mods.filter((mod) => {
       if (words && !mod.name.toLowerCase().includes(words) && !(mod.where ?? "").toLowerCase().includes(words)) return false;
+      if (currentSet && !currentSet.keys.includes(mod.key)) return false;
       if (activeFilter === "on") return mod.enabled;
       if (activeFilter === "off") return !mod.enabled;
       if (activeFilter === "update") return mod.mayNeedUpdate;
       if (activeFilter === "newer") return newer.has(mod.key);
       return true;
     });
-  }, [mods, query, activeFilter, newer]);
+  }, [mods, query, activeFilter, newer, currentSet]);
 
   const mayNeedUpdate = mods.filter((mod) => mod.mayNeedUpdate && mod.enabled);
   const onCount = mods.filter((mod) => mod.enabled).length;
@@ -131,6 +169,7 @@ export default function GameMods({
       else {
         const skipped = (result.skipped ?? []).map((s) => `Left out ${s.file} (${s.reason})`);
         setMessage({ tone: (result.notes?.length ?? 0) + skipped.length ? "warn" : "good", text: installSummary(result), notes: [...(result.notes ?? []), ...skipped.slice(0, 8)] });
+        onInstalled(result);
       }
       await reload();
       if (showDownloads) await loadDownloads();
@@ -147,6 +186,7 @@ export default function GameMods({
     setMessage(null);
     const done: string[] = [];
     const problems: string[] = [];
+    const missing: GameRequirement[] = [];
     for (const [index, file] of fresh.entries()) {
       setBusy(`all:${index + 1}/${fresh.length}`);
       try {
@@ -156,6 +196,7 @@ export default function GameMods({
         else {
           done.push(result.mod?.name ?? file.name);
           for (const line of result.notes ?? []) if (!/^Replaced the copy installed before/.test(line)) problems.push(`${result.mod?.name ?? file.name}: ${line}`);
+          for (const entry of result.missing ?? []) if (!missing.some((m) => m.key === entry.key)) missing.push(entry);
         }
       } catch (err) {
         problems.push(`${file.name}: ${errorText(err)}`);
@@ -169,6 +210,7 @@ export default function GameMods({
     });
     await reload();
     await loadDownloads();
+    if (missing.length) onInstalled({ missing }, `Installed ${done.length} of ${fresh.length}.`);
   }
 
   // Mods The Sims 4 named in what went wrong, matched to the list.
@@ -179,6 +221,33 @@ export default function GameMods({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* FINDING A BROKEN MOD */}
+      {finder.active && (
+        <FinderPanel detail={detail} finder={finder} busy={finderBusy} playing={playing} onPlay={onPlay} onAnswer={finderApi.answer} onStop={finderApi.stop} />
+      )}
+      {!finder.active && finderIntro && (
+        <div style={{ padding: 16, borderRadius: 12, background: "#17141f", border: "1px solid #a855f7" }} data-testid="finder-intro">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <Bug size={20} color="#c084fc" />
+            <span style={{ fontSize: 16, fontWeight: 600, color: "#e9d5ff" }}>Find the mod that's breaking {detail.name}</span>
+          </div>
+          <div style={{ fontSize: 13, color: "#d4d4d8", lineHeight: 1.6 }}>
+            First every mod is turned off, to check it's a mod at all. Then half of them are turned off at a time: each round, play, try whatever went
+            wrong, and say whether it happened. With {mods.filter((m) => m.enabled).length} mods on that's about{" "}
+            {Math.ceil(Math.log2(Math.max(mods.filter((m) => m.enabled).length, 2))) + 1} plays. Your saves are backed up first, and stopping at any point
+            puts every mod back as it was.
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            <button className="sidebar-button" data-testid="finder-start" style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }} onClick={() => !finderBusy && finderApi.start()}>
+              {finderBusy ? "Starting..." : "Start"}
+            </button>
+            <button className="sidebar-button" style={smallButton} onClick={finderApi.cancelIntro}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* HEADER */}
       <div style={{ ...panel, display: "flex", alignItems: "center", gap: 18 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -351,6 +420,15 @@ export default function GameMods({
         >
           <RefreshIcon size={18} />
         </IconButton>
+        <IconButton
+          tip={finder.active ? "Already finding a broken mod: see the top of the page" : "Find the mod that's breaking the game, by turning half off at a time"}
+          label="Find a broken mod"
+          testId="finder-button"
+          variant={finder.active || finderIntro ? "ready" : ""}
+          onClick={() => !finder.active && finderApi.intro()}
+        >
+          <Bug size={18} />
+        </IconButton>
         <IconButton tip="Install a mod from a file you choose" label="Install from a file" onClick={() => install()}>
           <PlusIcon size={18} />
         </IconButton>
@@ -364,6 +442,95 @@ export default function GameMods({
           Add from Downloads
         </button>
       </div>
+
+      {/* SETS */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }} data-testid="sets-bar">
+        <span style={{ fontSize: 13, color: "#9ca3af" }}>Showing</span>
+        <div style={{ width: 230 }}>
+          <SearchDropdown
+            compact
+            label="Show a set"
+            placeholder="Search sets..."
+            active={Boolean(currentSet)}
+            value={currentSet ? currentSet.name : ALL}
+            options={[{ value: ALL, label: ALL }, ...sets.map((set) => ({ value: set.name, label: `${set.name} (${set.keys.filter((key) => mods.some((m) => m.key === key)).length})` }))]}
+            onChange={(value) => {
+              setSetShown(value);
+              setNaming(null);
+            }}
+          />
+        </div>
+        {naming ? (
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const name = naming.name.trim();
+              if (!name) return;
+              if (naming.id) await setsApi.rename(naming.id, name);
+              else if (!(await setsApi.create(name))) return;
+              setSetShown(name);
+              setNaming(null);
+            }}
+            style={{ display: "flex", gap: 8 }}
+          >
+            <input
+              autoFocus
+              value={naming.name}
+              onChange={(event) => setNaming({ ...naming, name: event.target.value })}
+              placeholder={naming.id ? "New name..." : "Name the set..."}
+              maxLength={40}
+              style={{ padding: "8px 10px", borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", fontSize: 13 }}
+            />
+            <button type="submit" className="sidebar-button" style={{ ...smallButton, padding: "8px 12px" }}>
+              {naming.id ? "Rename" : "Make set"}
+            </button>
+            <button type="button" className="sidebar-button" style={{ ...smallButton, padding: "8px 12px" }} onClick={() => setNaming(null)}>
+              Cancel
+            </button>
+          </form>
+        ) : currentSet ? (
+          <>
+            <button
+              className="sidebar-button"
+              data-testid="use-set"
+              style={{ ...smallButton, padding: "8px 12px", ...(confirming === `use:${currentSet.id}` ? { background: "#7f1d1d", borderColor: "#ef4444" } : {}) }}
+              onClick={() => {
+                if (confirming !== `use:${currentSet.id}`) return setConfirming(`use:${currentSet.id}`);
+                setConfirming(null);
+                setsApi.use(currentSet);
+              }}
+            >
+              {confirming === `use:${currentSet.id}` ? "Click again: the rest go off" : "Turn on just this set"}
+            </button>
+            <button className="sidebar-button" style={{ ...smallButton, padding: "8px 12px" }} onClick={() => setNaming({ id: currentSet.id, name: currentSet.name })}>
+              Rename
+            </button>
+            <IconButton
+              tip={confirming === `set:${currentSet.id}` ? "Click again to delete the set (its mods stay)" : "Delete this set (its mods stay)"}
+              label={`Delete the ${currentSet.name} set`}
+              variant={confirming === `set:${currentSet.id}` ? "confirming" : ""}
+              style={{ width: 38, height: 38 }}
+              onClick={() => {
+                if (confirming !== `set:${currentSet.id}`) return setConfirming(`set:${currentSet.id}`);
+                setConfirming(null);
+                setsApi.remove(currentSet.id);
+                setSetShown(ALL);
+              }}
+            >
+              <BinIcon size={16} />
+            </IconButton>
+          </>
+        ) : (
+          <button className="sidebar-button" data-testid="new-set" style={{ ...smallButton, padding: "8px 12px" }} onClick={() => setNaming({ id: null, name: "" })}>
+            New set
+          </button>
+        )}
+        {currentSet && !currentSet.keys.some((key) => mods.some((m) => m.key === key)) && (
+          <span style={{ fontSize: 12, color: "#6b7280" }}>Add mods to it with the tag button on each one.</span>
+        )}
+      </div>
+
+      <RequirementsPanel requirements={requirements} getting={getting} onGet={onGetRequirements} />
 
       {/* UPDATES */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 36 }} data-testid="updates-line">
@@ -516,6 +683,13 @@ export default function GameMods({
                     </span>
                   )}
                   {mod.kind === "plugin" && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#1e293b", color: "#93c5fd" }}>Plugin</span>}
+                  {sets
+                    .filter((set) => set.keys.includes(mod.key))
+                    .map((set) => (
+                      <span key={set.id} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, border: "1px solid #4c1d95", color: "#c4b5fd" }}>
+                        {set.name}
+                      </span>
+                    ))}
                   {newer.has(mod.key) && (
                     <span data-testid="update-badge" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#14532d", color: "#bbf7d0" }}>
                       Update{newer.get(mod.key)!.fromVersion || newer.get(mod.key)!.toVersion ? `: ${newer.get(mod.key)!.fromVersion || "?"} → ${newer.get(mod.key)!.toVersion || "newer"}` : " available"}
@@ -541,6 +715,14 @@ export default function GameMods({
                   </div>
                 ))}
               </div>
+              <SetMenu
+                mod={mod}
+                sets={sets}
+                onMember={(setId, member) => setsApi.member(setId, mod.key, member)}
+                onCreate={async (name) => {
+                  await setsApi.create(name, mod.key);
+                }}
+              />
               {newer.has(mod.key) && (
                 <IconButton
                   tip={

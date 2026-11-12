@@ -315,6 +315,33 @@ contextBridge.exposeInMainWorld("gamesAPI", {
     undoUpdate: (id, key) => ipcRenderer.invoke("games:undoUpdate", id, key),
     nexusAccount: () => ipcRenderer.invoke("games:nexusAccount"),
     adultStatus: (recheck) => ipcRenderer.invoke("games:adultStatus", recheck),
+
+    saves: (id) => ipcRenderer.invoke("games:saves", id),
+    backupSaves: (id) => ipcRenderer.invoke("games:backupSaves", id),
+    restoreSaves: (id, backupId) => ipcRenderer.invoke("games:restoreSaves", id, backupId),
+    deleteBackup: (id, backupId) => ipcRenderer.invoke("games:deleteBackup", id, backupId),
+    chooseSaves: (id) => ipcRenderer.invoke("games:chooseSaves", id),
+    forgetSaves: (id) => ipcRenderer.invoke("games:forgetSaves", id),
+    openSaves: (id) => ipcRenderer.invoke("games:openSaves", id),
+
+    loadOrder: (id) => ipcRenderer.invoke("games:loadOrder", id),
+    setLoadOrder: (id, entries) => ipcRenderer.invoke("games:setLoadOrder", id, entries),
+    sortLoadOrder: (id) => ipcRenderer.invoke("games:sortLoadOrder", id),
+
+    requirements: (id) => ipcRenderer.invoke("games:requirements", id),
+    requirementsBefore: (id, modId) => ipcRenderer.invoke("games:requirementsBefore", id, modId),
+    getRequirement: (id, key) => ipcRenderer.invoke("games:getRequirement", id, key),
+
+    sets: (id) => ipcRenderer.invoke("games:sets", id),
+    saveSet: (id, set) => ipcRenderer.invoke("games:saveSet", id, set),
+    deleteSet: (id, setId) => ipcRenderer.invoke("games:deleteSet", id, setId),
+    setMember: (id, setId, key, member) => ipcRenderer.invoke("games:setMember", id, setId, key, member),
+    useSet: (id, setId) => ipcRenderer.invoke("games:useSet", id, setId),
+
+    finder: (id) => ipcRenderer.invoke("games:finder", id),
+    finderStart: (id) => ipcRenderer.invoke("games:finderStart", id),
+    finderAnswer: (id, happened) => ipcRenderer.invoke("games:finderAnswer", id, happened),
+    finderStop: (id, keepOff) => ipcRenderer.invoke("games:finderStop", id, keepOff),
     setAdult: (on) => ipcRenderer.invoke("games:setAdult", on),
     openUrl: (url) => ipcRenderer.invoke("games:openUrl", url),
 

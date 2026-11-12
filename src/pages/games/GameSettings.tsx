@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Toggle from "../../components/Toggle";
+import SavesPanel from "./SavesPanel";
 import { errorText, note, panel, smallButton } from "./shared";
 
 type Props = {
@@ -96,6 +97,8 @@ export default function GameSettings({ detail, reload, goLauncherSettings }: Pro
           </div>
         )}
       </div>
+
+      <SavesPanel detail={detail} />
 
       {detail.id === "sims4" && (
         <div style={panel}>

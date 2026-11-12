@@ -20,6 +20,8 @@ declare global {
         modCount: number;
         /* Set when the game has updated since it was last played from here. */
         updated: { from: string | null; to: string | null } | null;
+        /* Skyrim and Fallout 4: plugins load in an order that matters. */
+        loadOrder?: boolean;
     };
 
     type GameDetail = GameSummary & {
@@ -93,6 +95,10 @@ declare global {
         needsWebsite?: string | null;
         reason?: string;
         modId?: string;
+        /* What the mod needs that isn't installed (fetched straight after). */
+        missing?: GameRequirement[];
+        /* A requirement's page on another site, opened. */
+        opened?: string;
     };
 
     type GameRemoteMod = {
@@ -109,6 +115,48 @@ declare global {
         adult: boolean;
         url: string | null;
         installable?: boolean;
+    };
+
+    type GameSaveBackup = { id: string; at: string; reason: string; size: number; files: number; from: string };
+
+    type GamePlugin = {
+        name: string;
+        active: boolean;
+        /* ESM or ESL: loaded before the rest. */
+        master: boolean;
+        light: boolean;
+        masters: string[];
+        problems: { kind: "missing" | "off" | "after"; master: string }[];
+    };
+    type GameLoadOrder = { fixed: string[]; plugins: GamePlugin[] };
+
+    type GameRequirement = {
+        key: string;
+        name: string;
+        kind: "nexus" | "curseforge" | "web" | "search" | "master";
+        modId: string | null;
+        url: string | null;
+        neededBy: string[];
+        /* Sure enough to fetch without asking. */
+        auto: boolean;
+        note?: string;
+    };
+
+    type GameSet = { id: string; name: string; keys: string[] };
+
+    type GameFinder = {
+        active: boolean;
+        phase?: "baseline" | "split" | "found" | "not-mods";
+        round?: number;
+        roundsLeft?: number;
+        suspects?: string[];
+        testing?: string[];
+        off?: string[];
+        found?: string | null;
+        foundKey?: string | null;
+        total?: number;
+        keptOff?: string | null;
+        backedUp?: GameSaveBackup | null;
     };
 
     /* Adult mods: offered only when Nexus says the account is age-verified. */
@@ -173,7 +221,7 @@ declare global {
             chooseDocs: (id: GameId) => Promise<unknown>;
             openFolder: (id: GameId, which: "game" | "docs") => Promise<void>;
 
-            launch: (id: GameId, options?: { safe?: boolean }) => Promise<{ how: string; safe: boolean }>;
+            launch: (id: GameId, options?: { safe?: boolean }) => Promise<{ how: string; safe: boolean; backedUp: GameSaveBackup | null; backupError: string | null }>;
             setSimsOptions: (options: { mods?: boolean; scripts?: boolean }) => Promise<{ mods: boolean; scripts: boolean } | null>;
 
             /* provider "any" (or none): every site the game's on, mixed. */
@@ -190,6 +238,33 @@ declare global {
             /* recheck: ask Nexus again (after verifying on the website). */
             adultStatus: (recheck?: boolean) => Promise<GameAdultStatus>;
             setAdult: (on: boolean) => Promise<GameAdultStatus>;
+
+            saves: (id: GameId) => Promise<{ dir: string | null; backups: GameSaveBackup[] }>;
+            backupSaves: (id: GameId) => Promise<GameSaveBackup>;
+            restoreSaves: (id: GameId, backupId: string) => Promise<GameSaveBackup>;
+            deleteBackup: (id: GameId, backupId: string) => Promise<void>;
+            chooseSaves: (id: GameId) => Promise<string | null>;
+            forgetSaves: (id: GameId) => Promise<void>;
+            openSaves: (id: GameId) => Promise<void>;
+
+            loadOrder: (id: GameId) => Promise<GameLoadOrder>;
+            setLoadOrder: (id: GameId, entries: { name: string; active: boolean }[]) => Promise<GameLoadOrder>;
+            sortLoadOrder: (id: GameId) => Promise<GameLoadOrder>;
+
+            requirements: (id: GameId) => Promise<GameRequirement[]>;
+            requirementsBefore: (id: GameId, modId: string) => Promise<GameRequirement[]>;
+            getRequirement: (id: GameId, key: string) => Promise<GameInstallResult>;
+
+            sets: (id: GameId) => Promise<GameSet[]>;
+            saveSet: (id: GameId, set: { id?: string | null; name: string }) => Promise<GameSet[]>;
+            deleteSet: (id: GameId, setId: string) => Promise<GameSet[]>;
+            setMember: (id: GameId, setId: string, key: string, member: boolean) => Promise<GameSet[]>;
+            useSet: (id: GameId, setId: string) => Promise<{ changed: number }>;
+
+            finder: (id: GameId) => Promise<GameFinder>;
+            finderStart: (id: GameId) => Promise<GameFinder>;
+            finderAnswer: (id: GameId, happened: boolean) => Promise<GameFinder>;
+            finderStop: (id: GameId, keepOff?: string | null) => Promise<GameFinder>;
             openUrl: (url: string) => Promise<void>;
 
             onProgress: (callback: (data: { gameId: GameId; detail: string }) => void) => () => void;

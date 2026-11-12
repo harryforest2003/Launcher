@@ -1,7 +1,9 @@
-export type GamePage = "mods" | "discover" | "settings";
+export type GamePage = "mods" | "discover" | "loadorder" | "settings";
 
 type Props = {
   game: string;
+  /* Skyrim and Fallout 4: plugins load in an order that matters. */
+  hasLoadOrder?: boolean;
   current: GamePage | null;
   go: (page: GamePage) => void;
   showBack?: boolean;
@@ -10,7 +12,7 @@ type Props = {
 };
 
 /* The sidebar of a game's section: its mods, finding more, and its settings. */
-export default function GameSidebar({ game, current, go, showBack = false, onBack, onLauncher }: Props) {
+export default function GameSidebar({ game, hasLoadOrder = false, current, go, showBack = false, onBack, onLauncher }: Props) {
   const buttonStyle = (active: boolean): React.CSSProperties => ({
     background: active ? "#6d28d9" : "#232323",
     color: "white",
@@ -56,6 +58,11 @@ export default function GameSidebar({ game, current, go, showBack = false, onBac
         <button style={buttonStyle(current === "discover")} onClick={() => go("discover")} aria-current={current === "discover" ? "page" : undefined}>
           Discover Mods
         </button>
+        {hasLoadOrder && (
+          <button style={buttonStyle(current === "loadorder")} onClick={() => go("loadorder")} aria-current={current === "loadorder" ? "page" : undefined}>
+            Load Order
+          </button>
+        )}
         <button style={buttonStyle(current === "settings")} onClick={() => go("settings")} aria-current={current === "settings" ? "page" : undefined}>
           Settings
         </button>

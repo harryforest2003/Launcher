@@ -8,6 +8,7 @@ const { unpack, listFiles, isArchive } = require("./archive.cjs");
 const layouts = require("./layouts.cjs");
 const plugins = require("./plugins.cjs");
 const { hooksIntoGame } = require("./protect.cjs");
+const sets = require("./sets.cjs");
 
 /*
  * A game's mods: the ones installed here, each with every file it put in place, and the
@@ -34,8 +35,16 @@ function readState(gameId) {
     }
 }
 
-function writeState(gameId, state) {
+/* quiet: nothing about the mods themselves changed (what's remembered about them did). */
+function writeState(gameId, state, { quiet = false } = {}) {
+    // When the mods last changed, so the next play backs up the saves first.
+    if (!quiet) state.changedAt = new Date().toISOString();
     fs.writeFileSync(stateFile(gameId), JSON.stringify(state, null, 2));
+}
+
+/* For changes outside the launcher's own list (mods added by hand, the load order). */
+function touch(gameId) {
+    writeState(gameId, readState(gameId));
 }
 
 /* The real folder for "game" or "docs". */
@@ -197,7 +206,10 @@ async function install(gameId, filePath, meta = {}) {
                       (!meta.source?.modId && mod.name === modName)
               );
         const id = newId();
-        if (previous) setAside(gameId, previous, id);
+        if (previous) {
+            setAside(gameId, previous, id);
+            sets.renameKey(gameId, `m:${previous.id}`, `m:${id}`);
+        }
 
         const fresh = readState(gameId);
         const owners = new Map();
@@ -451,6 +463,7 @@ function parkedHandAdded(gameId) {
 }
 
 function setHandAddedEnabled(gameId, key, enabled) {
+    touch(gameId);
     const game = getGame(gameId);
     const loc = locate(gameId);
     const [, base, ...relParts] = key.split(":");
@@ -474,6 +487,7 @@ function setHandAddedEnabled(gameId, key, enabled) {
 }
 
 function removeHandAdded(gameId, key) {
+    touch(gameId);
     const loc = locate(gameId);
     const [kind, base, ...relParts] = key.split(":");
     const rel = relParts.join(":");
@@ -592,6 +606,7 @@ function undoReplace(gameId, key) {
     fresh.mods.push({ ...mod, enabled: false });
     writeState(gameId, fresh);
     if (wasEnabled) setEnabled(gameId, previous.id, true);
+    sets.renameKey(gameId, `m:${modId}`, `m:${previous.id}`);
     return { restored: previous.name, version: previous.source?.version ?? previous.source?.nexus?.version ?? null };
 }
 
@@ -602,7 +617,7 @@ function rememberSource(gameId, modId, patch, name = null) {
     if (!mod) return;
     mod.source = { ...(mod.source ?? {}), ...patch };
     if (name) mod.name = name;
-    writeState(gameId, state);
+    writeState(gameId, state, { quiet: true });
 }
 
 /* Deleting a mod deletes any earlier copy kept for it too. */
@@ -617,4 +632,4 @@ function deleteManaged(gameId, modId) {
 const setModEnabled = (gameId, key, enabled) => (key.startsWith("m:") ? setEnabled(gameId, key.slice(2), enabled) : setHandAddedEnabled(gameId, key, enabled));
 const deleteMod = (gameId, key) => (key.startsWith("m:") ? deleteManaged(gameId, key.slice(2)) : removeHandAdded(gameId, key));
 
-module.exports = { install, list, setModEnabled, deleteMod, readState, undoReplace, rememberSource, nexusIdsInName };
+module.exports = { install, list, setModEnabled, deleteMod, readState, undoReplace, rememberSource, nexusIdsInName, touch };

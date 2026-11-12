@@ -6,7 +6,9 @@ type Props = {
   detail: GameDetail;
   provider: "nexus" | "curseforge";
   modId: string;
-  afterInstall: () => void;
+  afterInstall: (result: GameInstallResult) => void;
+  /* A free Nexus account installs through the website; what the mod needs follows it. */
+  openOnNexus: (item: { modId: string; name: string; page: string }) => Promise<void>;
   goLauncherSettings: () => void;
 };
 
@@ -14,12 +16,14 @@ const SITE = { nexus: "https://www.nexusmods.com/", curseforge: "https://www.cur
 const BADGE = { nexus: { label: "NEXUS MODS", colour: "#d97706" }, curseforge: { label: "CURSEFORGE", colour: "#f97316" } };
 
 /* A mod's page, laid out as Minecraft's: what it is, its files, its pictures, and installing it. */
-export default function GameModPage({ detail, provider, modId, afterInstall, goLauncherSettings }: Props) {
+export default function GameModPage({ detail, provider, modId, afterInstall, openOnNexus, goLauncherSettings }: Props) {
   const [mod, setMod] = useState<GameModDetails | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [tab, setTab] = useState<"desc" | "files" | "gallery">("desc");
   const [installing, setInstalling] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "good" | "bad" | "warn" | "info"; text: string; notes?: string[] } | null>(null);
+  // A gallery picture shown large.
+  const [viewing, setViewing] = useState<string | null>(null);
 
   // Each mod gets its own copy of this page (keyed by it), so it starts afresh.
   useEffect(() => {
@@ -44,6 +48,11 @@ export default function GameModPage({ detail, provider, modId, afterInstall, goL
     setMessage(null);
     if (viaWebsite) {
       const page = file ? `${mod.url}?tab=files&file_id=${file.id}&nmm=1` : `${mod.url}?tab=files`;
+      if (mod.hasKey) {
+        await openOnNexus({ modId: mod.id, name: mod.name, page });
+        setMessage({ tone: "info", text: `Opened ${file ? file.name : "its files"} on Nexus Mods: press the download button there and the launcher installs it, then whatever it needs.` });
+        return;
+      }
       await window.gamesAPI.openUrl(page).catch(() => {});
       setMessage({
         tone: "info",
@@ -56,7 +65,9 @@ export default function GameModPage({ detail, provider, modId, afterInstall, goL
     setInstalling(file?.id ?? "main");
     try {
       const result = await window.gamesAPI.installRemote(detail.id, provider, mod.id, file?.id ?? null, mod.name);
-      if (result.needsWebsite !== undefined) {
+      if (result.needsWebsite && provider === "nexus") {
+        await openOnNexus({ modId: mod.id, name: mod.name, page: result.needsWebsite });
+      } else if (result.needsWebsite !== undefined) {
         const page = result.needsWebsite ?? mod.url;
         if (page) await window.gamesAPI.openUrl(page).catch(() => {});
         setMessage({ tone: "info", text: `${result.reason ?? "This one has to be downloaded from its website."} It's open in your browser; once it's downloaded, add it from Downloads on the Mods page.` });
@@ -65,7 +76,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, goL
       } else {
         const skipped = (result.skipped ?? []).map((s) => `Left out ${s.file} (${s.reason})`);
         setMessage({ tone: (result.notes?.length ?? 0) + skipped.length ? "warn" : "good", text: installSummary(result), notes: [...(result.notes ?? []), ...skipped.slice(0, 8)] });
-        afterInstall();
+        afterInstall(result);
       }
     } catch (err) {
       setMessage({ tone: "bad", text: errorText(err) });
@@ -84,6 +95,14 @@ export default function GameModPage({ detail, provider, modId, afterInstall, goL
 
   return (
     <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+      {viewing && (
+        <div
+          onClick={() => setViewing(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0, 0, 0, 0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30, cursor: "zoom-out" }}
+        >
+          <img src={viewing} alt="" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10 }} />
+        </div>
+      )}
       {/* LEFT */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 20, background: "#151515", padding: 20, borderRadius: 12, border: "1px solid #6d28d9", alignItems: "center" }}>
@@ -158,12 +177,38 @@ export default function GameModPage({ detail, provider, modId, afterInstall, goL
           )}
 
           {tab === "gallery" && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
-              {mod.images.length === 0 ? (
-                <div style={{ color: "#9ca3af" }}>No pictures.</div>
-              ) : (
-                mod.images.map((src) => <img key={src} src={src} alt="" loading="lazy" style={{ width: "100%", borderRadius: 10, border: "1px solid #333" }} />)
+            <div data-testid="mod-gallery">
+              {provider === "nexus" && mod.url && (
+                <div style={{ color: "#9ca3af", fontSize: 13, marginBottom: 12 }}>
+                  Nexus Mods only shares a mod's main picture and the ones in its description with apps.{" "}
+                  <a
+                    href={`${mod.url}?tab=images`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      window.gamesAPI.openUrl(`${mod.url}?tab=images`).catch(() => {});
+                    }}
+                    style={{ color: "#8ab4ff" }}
+                  >
+                    See its whole gallery on Nexus Mods
+                  </a>
+                </div>
               )}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
+                {mod.images.length === 0 ? (
+                  <div style={{ color: "#9ca3af" }}>No pictures.</div>
+                ) : (
+                  mod.images.map((src) => (
+                    <img
+                      key={src}
+                      src={src}
+                      alt=""
+                      loading="lazy"
+                      onClick={() => setViewing(src)}
+                      style={{ width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: 10, border: "1px solid #333", cursor: "zoom-in" }}
+                    />
+                  ))
+                )}
+              </div>
             </div>
           )}
         </div>

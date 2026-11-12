@@ -7,7 +7,9 @@ import { countText, errorText, installSummary, MORE_SITES, note, panel, shortDat
 type Props = {
   detail: GameDetail;
   openMod: (provider: "nexus" | "curseforge", id: string) => void;
-  afterInstall: () => void;
+  afterInstall: (result: GameInstallResult) => void;
+  /* A free Nexus account installs through the website; what the mod needs follows it. */
+  openOnNexus: (item: { modId: string; name: string; page: string }) => Promise<void>;
   goLauncherSettings: () => void;
   goMods: () => void;
 };
@@ -31,7 +33,7 @@ const BADGE: Record<string, { label: string; colour: string }> = {
  * game, and CurseForge too for the games it carries (The Sims 4, Stardew Valley).
  * Clicking a card opens the mod's page; the download button installs its main file.
  */
-export default function GameDiscover({ detail, openMod, afterInstall, goLauncherSettings, goMods }: Props) {
+export default function GameDiscover({ detail, openMod, afterInstall, openOnNexus, goLauncherSettings, goMods }: Props) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   // Games on both sites start with both, mixed, as Minecraft's Discover does.
@@ -100,8 +102,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
         if (account) {
           const details = await window.gamesAPI.details(detail.id, "nexus", mod.id);
           const main = details.files.find((file) => file.category === "Main") ?? details.files[0];
-          await window.gamesAPI.openUrl(main ? `${mod.url}?tab=files&file_id=${main.id}&nmm=1` : `${mod.url}?tab=files`);
-          setMessage({ tone: "info", text: `Opened ${main ? main.name : mod.name} on Nexus Mods: press the download button there and the launcher installs it.` });
+          await openOnNexus({ modId: mod.id, name: mod.name, page: main ? `${mod.url}?tab=files&file_id=${main.id}&nmm=1` : `${mod.url}?tab=files` });
         } else {
           await window.gamesAPI.openUrl(`${mod.url}?tab=files`);
           setMessage({ tone: "info", text: `Opened ${mod.name} on Nexus Mods. To install with the launcher, add your Nexus Mods key in Settings → API keys first.` });
@@ -114,7 +115,9 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
           if (!fileId) throw new Error(`${mod.name} has no files to download.`);
         }
         const result = await window.gamesAPI.installRemote(detail.id, mod.provider, mod.id, fileId, mod.name);
-        if (result.needsWebsite !== undefined) {
+        if (result.needsWebsite && mod.provider === "nexus") {
+          await openOnNexus({ modId: mod.id, name: mod.name, page: result.needsWebsite });
+        } else if (result.needsWebsite !== undefined) {
           const page = result.needsWebsite ?? mod.url;
           if (page) await window.gamesAPI.openUrl(page);
           setMessage({ tone: "info", text: `${result.reason ?? "This one has to be downloaded from its website."} It's open in your browser.` });
@@ -122,7 +125,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
           setMessage({ tone: "bad", text: `${result.failed}${result.notes?.length ? ` ${result.notes.join(" ")}` : ""}` });
         } else {
           setMessage({ tone: result.notes?.length ? "warn" : "good", text: `${installSummary(result)}${result.notes?.length ? ` ${result.notes.join(" ")}` : ""}` });
-          afterInstall();
+          afterInstall(result);
         }
       }
     } catch (err) {

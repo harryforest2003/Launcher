@@ -71,10 +71,11 @@ async function search(domain, { query = "", sort = "popular", page = 0, count = 
 
 /* Nexus' BBCode description as readable text, and the pictures in it. */
 function readable(bbcode) {
-    const images = [...String(bbcode).matchAll(/\[img\]\s*(https?:\/\/[^\s[\]]+?)\s*\[\/img\]/gi)].map((m) => m[1]).slice(0, 6);
+    // [img]url[/img], and [img width=600]… or [img=600x300]… as many descriptions write it.
+    const images = [...new Set([...String(bbcode).matchAll(/\[img(?:[=\s][^\]]*)?\]\s*(https?:\/\/[^\s[\]]+?)\s*\[\/img\]/gi)].map((m) => m[1]))].slice(0, 60);
     const text = String(bbcode)
         .replace(/<br\s*\/?>/gi, "")
-        .replace(/\[img\][\s\S]*?\[\/img\]/gi, "")
+        .replace(/\[img(?:[=\s][^\]]*)?\][\s\S]*?\[\/img\]/gi, "")
         .replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, "$2")
         .replace(/\[\*\]/g, "• ")
         .replace(/\[\/?[a-z]+(=[^\]]*)?\]/gi, "")
@@ -109,7 +110,7 @@ function bbcodeHtml(bbcode) {
         [/\[quote=[^\]]*\]/gi, "<blockquote>"],
         [/\[heading\]([\s\S]*?)\[\/heading\]/gi, "<h3>$1</h3>"],
         [/\[line\]/gi, "<hr>"],
-        [/\[img\]\s*(https?:\/\/[^\s[\]]+?)\s*\[\/img\]/gi, '<img src="$1" alt="">'],
+        [/\[img(?:[=\s][^\]]*)?\]\s*(https?:\/\/[^\s[\]]+?)\s*\[\/img\]/gi, '<img src="$1" alt="">'],
         [/\[url=["']?(https?:\/\/[^\]"']+)["']?\]([\s\S]*?)\[\/url\]/gi, '<a href="$1">$2</a>'],
         [/\[url\](https?:\/\/[^[]+?)\[\/url\]/gi, '<a href="$1">$1</a>'],
         [/\[youtube\]\s*([\w-]{6,20})\s*\[\/youtube\]/gi, '<a href="https://www.youtube.com/watch?v=$1">YouTube video</a>'],
@@ -189,7 +190,9 @@ async function details(domain, modId) {
     );
     const mod = data.legacyModsByDomain.nodes[0];
     if (!mod) throw new Error("That mod isn't on Nexus Mods any more.");
-    const { text, images } = readable(mod.description ?? "");
+    const { text, images: described } = readable(mod.description ?? "");
+    // Nexus gives apps the main picture and the description's; the rest of the gallery is on its page.
+    const images = [...new Set([mod.pictureUrl, ...described].filter(Boolean))];
     const out = { id: String(mod.modId), name: mod.name, summary: mod.summary ?? "", picture: mod.pictureUrl ?? null, downloads: mod.downloads ?? 0, endorsements: mod.endorsements ?? 0, updated: mod.updatedAt ?? null, author: mod.author, version: mod.version, description: text, html: bbcodeHtml(mod.description ?? ""), images, url: `https://www.nexusmods.com/${domain}/mods/${modId}`, hasKey: nexusKey.hasApiKey(), premium: false, files: [] };
     if (!out.hasKey) return out;
     try {
@@ -277,4 +280,4 @@ const forgetAccount = () => {
     adultInfo = null;
 };
 
-module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml, filesOf, byMd5, updatedThisMonth, modName, adultAccess, hasKey: () => nexusKey.hasApiKey() };
+module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml, filesOf, byMd5, updatedThisMonth, modName, adultAccess, gqlQuery: gql, hasKey: () => nexusKey.hasApiKey() };

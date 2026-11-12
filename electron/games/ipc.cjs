@@ -9,6 +9,11 @@ const nexus = require("./nexus.cjs");
 const { launch } = require("./launch.cjs");
 const { installFromUrl } = require("./remote.cjs");
 const updates = require("./updates.cjs");
+const saves = require("./saves.cjs");
+const plugins = require("./plugins.cjs");
+const requirements = require("./requirements.cjs");
+const sets = require("./sets.cjs");
+const finder = require("./finder.cjs");
 const curseforge = require("../mods/providers/curseforge.cjs");
 const { curseforgeFetch } = require("../curseforge.cjs");
 
@@ -58,7 +63,32 @@ function summary(game) {
         curseforge: game.curseforge ?? null,
         modCount: mods,
         updated: protect.updatedSince(game, loc),
+        loadOrder: Boolean(game.bethesda),
     };
+}
+
+/*
+ * After an install, what the mod needs that isn't there yet, sure enough to fetch
+ * straight away (the page gets them all, as Update all does).
+ */
+async function withMissing(gameId, result) {
+    if (!result?.mod?.name) return result;
+    try {
+        result.missing = remember(gameId, (await requirements.missingFor(gameId, result.mod.name)).filter((entry) => entry.auto));
+    } catch {
+        result.missing = [];
+    }
+    return result;
+}
+
+/*
+ * Requirements worked out here, by key. A requirement's page (which can be any site a mod's
+ * author named) is opened only from these, never from a link the page passes back.
+ */
+const known = new Map();
+function remember(gameId, entries) {
+    for (const entry of entries) known.set(`${gameId}|${entry.key}`, entry);
+    return entries;
 }
 
 /* A Nexus "Mod Manager Download" link (nxm://), from the website's button. */
@@ -78,7 +108,7 @@ async function handleNxm(link) {
         const result = await installFromUrl(game, url, { name, source: { provider: "nexus", modId: parsed.modId, fileId: parsed.fileId } }, (detail) =>
             send("games:nxm", { status: "working", gameId: game.id, modId: parsed.modId, name, detail })
         );
-        send("games:nxm", { status: "installed", gameId: game.id, modId: parsed.modId, name, result });
+        send("games:nxm", { status: "installed", gameId: game.id, modId: parsed.modId, name, result: await withMissing(game.id, result) });
     } catch (err) {
         send("games:nxm", { status: "failed", gameId: game.id, modId: parsed.modId, name, error: err.message, notes: err.notes ?? [] });
     }
@@ -186,7 +216,7 @@ function registerGamesIpc() {
             file = picked.filePaths[0];
         }
         try {
-            return await store.install(id, file);
+            return await withMissing(id, await store.install(id, file));
         } catch (err) {
             // The notes say what to do instead (an OpenIV package, say).
             return { failed: err.message, notes: err.notes ?? [] };
@@ -220,10 +250,143 @@ function registerGamesIpc() {
         if (failed) throw new Error(failed);
     });
 
-    ipcMain.handle("games:launch", (_e, id, options) => {
+    // Before a risky play (the game's updated, the mods have changed, or it's the first
+    // from here) the saves are backed up. While finding a broken mod, its start did that.
+    ipcMain.handle("games:launch", async (_e, id, options) => {
         const game = need(id);
-        return launch(game, detect.locate(id), { safe: options?.safe === true, open: (url) => shell.openExternal(url) });
+        const loc = detect.locate(id);
+        const played = protect.lastPlayed(id);
+        const changedAt = Date.parse(store.readState(id).changedAt ?? "") || 0;
+        const reason = !played?.at
+            ? "Before the first play from the launcher"
+            : protect.updatedSince(game, loc)
+              ? "Before the first play after a game update"
+              : changedAt > played.at
+                ? "Before playing with changed mods"
+                : null;
+        let backedUp = null;
+        let backupError = null;
+        if (reason && !finder.read(id)) {
+            try {
+                backedUp = await saves.backup(game, loc, reason);
+            } catch (err) {
+                backupError = err.message;
+            }
+        }
+        const started = await launch(game, loc, { safe: options?.safe === true, open: (url) => shell.openExternal(url) });
+        return { ...started, backedUp, backupError };
     });
+
+    // Saves and their backups.
+    ipcMain.handle("games:saves", (_e, id) => {
+        const game = need(id);
+        return { dir: saves.savesDir(game, detect.locate(id)), backups: saves.list(id) };
+    });
+    ipcMain.handle("games:backupSaves", async (_e, id) => {
+        const game = need(id);
+        const made = await saves.backup(game, detect.locate(id), "Backed up from Settings");
+        if (!made) throw new Error("There are no saves to back up yet.");
+        return made;
+    });
+    ipcMain.handle("games:restoreSaves", (_e, id, backupId) => saves.restore(need(id), detect.locate(id), String(backupId)));
+    ipcMain.handle("games:deleteBackup", (_e, id, backupId) => saves.remove(need(id).id, String(backupId)));
+    ipcMain.handle("games:chooseSaves", async (event, id) => {
+        const game = need(id);
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), { title: `${game.name}'s saves folder`, properties: ["openDirectory"] });
+        if (picked.canceled || !picked.filePaths.length) return null;
+        saves.chooseSavesDir(id, picked.filePaths[0]);
+        return picked.filePaths[0];
+    });
+    ipcMain.handle("games:forgetSaves", (_e, id) => saves.chooseSavesDir(need(id).id, null));
+    ipcMain.handle("games:openSaves", async (_e, id) => {
+        const dir = saves.savesDir(need(id), detect.locate(id));
+        if (!dir) throw new Error("The saves folder wasn't found.");
+        const failed = await shell.openPath(dir);
+        if (failed) throw new Error(failed);
+    });
+
+    // Skyrim's and Fallout 4's load order.
+    ipcMain.handle("games:loadOrder", (_e, id) => {
+        const game = need(id);
+        if (!game.bethesda) throw new Error(`${game.name} has no load order to set.`);
+        return plugins.loadOrder(game, detect.locate(id));
+    });
+    ipcMain.handle("games:setLoadOrder", (_e, id, entries) => {
+        const game = need(id);
+        const loc = detect.locate(id);
+        plugins.setOrder(game, loc, (entries ?? []).map((e) => ({ name: String(e.name), active: e.active === true })));
+        store.touch(id);
+        return plugins.loadOrder(game, loc);
+    });
+    ipcMain.handle("games:sortLoadOrder", (_e, id) => {
+        const game = need(id);
+        const loc = detect.locate(id);
+        plugins.setOrder(game, loc, plugins.sorted(plugins.loadOrder(game, loc).plugins));
+        store.touch(id);
+        return plugins.loadOrder(game, loc);
+    });
+
+    // What mods need that isn't installed, and getting it.
+    ipcMain.handle("games:requirements", async (_e, id) => remember(id, await requirements.missing(need(id).id)));
+    ipcMain.handle("games:requirementsBefore", async (_e, id, modId) => {
+        try {
+            return remember(id, await requirements.missingBeforeInstall(need(id).id, String(modId)));
+        } catch {
+            return [];
+        }
+    });
+    // -> an install result; { needsWebsite, modId } for a Nexus page to finish on; { opened } for another site's.
+    ipcMain.handle("games:getRequirement", async (event, id, key) => {
+        need(id);
+        const entry = known.get(`${id}|${key}`);
+        if (!entry) return { failed: "That requirement has changed since: check again." };
+        try {
+            const result = await requirements.get(id, entry, (detail) => event.sender.send("games:progress", { gameId: id, detail }));
+            if (result.external) {
+                if (!/^https?:\/\//i.test(String(result.needsWebsite ?? ""))) return { failed: `${entry.name} has no page to get it from.` };
+                await shell.openExternal(result.needsWebsite);
+                return { opened: entry.name };
+            }
+            return result.mod ? await withMissing(id, result) : result;
+        } catch (err) {
+            return { failed: err.message, notes: err.notes ?? [] };
+        }
+    });
+
+    // Sets of mods.
+    ipcMain.handle("games:sets", (_e, id) => sets.list(need(id).id));
+    ipcMain.handle("games:saveSet", (_e, id, set) => sets.save(need(id).id, { id: set?.id ?? null, name: set?.name }));
+    ipcMain.handle("games:deleteSet", (_e, id, setId) => sets.remove(need(id).id, String(setId)));
+    ipcMain.handle("games:setMember", (_e, id, setId, key, member) => sets.setMember(need(id).id, String(setId), String(key), member === true));
+    ipcMain.handle("games:useSet", (_e, id, setId) => {
+        const set = sets.list(need(id).id).find((s) => s.id === setId);
+        if (!set) throw new Error("That set isn't there any more.");
+        const keys = new Set(set.keys);
+        let changed = 0;
+        for (const mod of store.list(id).mods) {
+            const want = keys.has(mod.key);
+            if (mod.enabled !== want) {
+                store.setModEnabled(id, mod.key, want);
+                changed += 1;
+            }
+        }
+        return { changed };
+    });
+
+    // Finding the mod that breaks the game.
+    ipcMain.handle("games:finder", (_e, id) => finder.status(need(id).id));
+    ipcMain.handle("games:finderStart", async (_e, id) => {
+        const game = need(id);
+        let backedUp = null;
+        try {
+            backedUp = await saves.backup(game, detect.locate(id), "Before finding a broken mod");
+        } catch {
+            // Saves can't always be found; the finder still works.
+        }
+        return { ...finder.start(id), backedUp };
+    });
+    ipcMain.handle("games:finderAnswer", (_e, id, happened) => finder.answer(need(id).id, happened === true));
+    ipcMain.handle("games:finderStop", (_e, id, keepOff) => finder.stop(need(id).id, { keepOff: keepOff ? String(keepOff) : null }));
 
     ipcMain.handle("games:setSimsOptions", (_e, options) => protect.setSimsOptions(detect.locate("sims4"), { mods: options?.mods, scripts: options?.scripts }));
 
@@ -306,10 +469,10 @@ function registerGamesIpc() {
         try {
             if (provider === "curseforge") {
                 const file = await curseforge.resolveDownload(String(modId), fileId ? String(fileId) : null);
-                return await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress);
+                return await withMissing(id, await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress));
             }
             const url = await nexus.downloadUrl(game.nexus, String(modId), String(fileId));
-            return await installFromUrl(game, url, { name: String(name || `Nexus mod ${modId}`), source: { provider: "nexus", modId: String(modId), fileId: String(fileId) } }, progress);
+            return await withMissing(id, await installFromUrl(game, url, { name: String(name || `Nexus mod ${modId}`), source: { provider: "nexus", modId: String(modId), fileId: String(fileId) } }, progress));
         } catch (err) {
             if (err.code === "PREMIUM_REQUIRED" || err.code === "DISTRIBUTION_DENIED") {
                 const page = provider === "curseforge" ? null : `https://www.nexusmods.com/${game.nexus}/mods/${modId}?tab=files&file_id=${fileId}&nmm=1`;
@@ -354,7 +517,10 @@ function registerGamesIpc() {
     });
 
     ipcMain.handle("games:openUrl", (_e, url) => {
-        if (/^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com)\//i.test(String(url))) return shell.openExternal(String(url));
+        const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com)\//i;
+        // Script Hook V's own site, and Script Hook V .NET's releases (requirements of GTA V mods).
+        const frameworks = /^(http:\/\/www\.dev-c\.com\/gtav\/|https:\/\/github\.com\/scripthookvdotnet\/)/i;
+        if (allowed.test(String(url)) || frameworks.test(String(url))) return shell.openExternal(String(url));
         throw new Error("That link isn't one the launcher opens.");
     });
 }

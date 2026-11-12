@@ -9,8 +9,8 @@ const daysAgo = (days: number) => new Date(now - days * 86400000).toISOString();
 const GAMES: GameSummary[] = [
   { id: "sims4", name: "The Sims 4", tagline: "Custom content, script mods and Gallery downloads", colour: "#22c55e", found: true, gameDir: "/Applications/The Sims 4.app", docsDir: "~/Documents/Electronic Arts/The Sims 4", source: "the EA app (sample)", chosen: false, windowsOnly: false, nexus: "thesims4", curseforge: 78062, modCount: 0, updated: null },
   { id: "gtav", name: "Grand Theft Auto V", tagline: "Script mods, trainers and add-on vehicles", colour: "#16a34a", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "gta5", curseforge: null, modCount: 0, updated: null },
-  { id: "skyrimse", name: "Skyrim Special Edition", tagline: "Plugins, textures and SKSE mods", colour: "#94a3b8", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "skyrimspecialedition", curseforge: null, modCount: 0, updated: null },
-  { id: "fallout4", name: "Fallout 4", tagline: "Plugins, settlements and F4SE mods", colour: "#eab308", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "fallout4", curseforge: null, modCount: 0, updated: null },
+  { id: "skyrimse", name: "Skyrim Special Edition", tagline: "Plugins, textures and SKSE mods", colour: "#94a3b8", found: true, gameDir: "C:/Steam/steamapps/common/Skyrim Special Edition", docsDir: null, source: "a CrossOver bottle (sample)", chosen: false, windowsOnly: true, nexus: "skyrimspecialedition", curseforge: null, modCount: 0, updated: null, loadOrder: true },
+  { id: "fallout4", name: "Fallout 4", tagline: "Plugins, settlements and F4SE mods", colour: "#eab308", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "fallout4", curseforge: null, modCount: 0, updated: null, loadOrder: true },
   { id: "cyberpunk2077", name: "Cyberpunk 2077", tagline: "Archive mods, Cyber Engine Tweaks, redscript and RED4ext", colour: "#facc15", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "cyberpunk2077", curseforge: null, modCount: 0, updated: null },
   { id: "stardew", name: "Stardew Valley", tagline: "SMAPI mods", colour: "#4ade80", found: true, gameDir: "~/Library/Application Support/Steam/steamapps/common/Stardew Valley", docsDir: null, source: "Steam (sample)", chosen: false, windowsOnly: false, nexus: "stardewvalley", curseforge: 669, modCount: 0, updated: null },
 ];
@@ -41,6 +41,56 @@ const MODS: Partial<Record<GameId, GameMod[]>> = {
     mod("h:docs:Mods/old_slider.package", "old_slider.package", { managed: false, source: { provider: "hand" }, where: "Mods", kind: "file", areas: [], enabled: false }),
   ],
   stardew: [mod("m:cjb", "CJB Cheats Menu", { hooks: true, areas: [{ area: "Mods", count: 3 }], fileCount: 3 })],
+  skyrimse: [
+    mod("m:skyui", "SkyUI", { areas: [{ area: "Data", count: 2 }], plugins: ["SkyUI_SE.esp"], version: "5.2SE" }),
+    mod("p:game:Data/Immersive Armors.esp", "Immersive Armors.esp", { managed: false, kind: "plugin", source: { provider: "hand" }, where: "Data", areas: [] }),
+    mod("p:game:Data/Armor Patch.esp", "Armor Patch.esp", { managed: false, kind: "plugin", source: { provider: "hand" }, where: "Data", areas: [] }),
+    mod("m:weather", "Obsidian Weathers", { areas: [{ area: "Data", count: 4 }], plugins: ["Obsidian Weathers.esp"] }),
+  ],
+};
+
+const plugin = (name: string, extra: Partial<GamePlugin> = {}): GamePlugin => ({ name, active: true, master: /\.esm$/i.test(name), light: false, masters: ["Skyrim.esm"], problems: [], ...extra });
+let skyrimOrder: GamePlugin[] = [
+  plugin("Armor Patch.esp", { masters: ["Skyrim.esm", "Immersive Armors.esp"] }),
+  plugin("Immersive Armors.esp"),
+  plugin("SkyUI_SE.esp"),
+  plugin("Obsidian Weathers.esp", { masters: ["Skyrim.esm", "Missing Lighting.esm"] }),
+  plugin("Old Tweaks.esp", { active: false }),
+];
+const withProblems = (list: GamePlugin[]): GamePlugin[] =>
+  list.map((p, i) => ({
+    ...p,
+    problems: !p.active
+      ? []
+      : p.masters.flatMap((m): GamePlugin["problems"] => {
+          const at = list.findIndex((q) => q.name === m);
+          if (m === "Skyrim.esm") return [];
+          if (at < 0) return [{ kind: "missing" as const, master: m }];
+          if (at > i) return [{ kind: "after" as const, master: m }];
+          return [];
+        }),
+  }));
+
+const backups: GameSaveBackup[] = [
+  { id: "b2", at: daysAgo(1), reason: "Before playing with changed mods", size: 48_000_000, files: 12, from: "Saves" },
+  { id: "b1", at: daysAgo(9), reason: "Before the first play after a game update", size: 46_500_000, files: 11, from: "Saves" },
+];
+const setsByGame: Partial<Record<GameId, GameSet[]>> = { sims4: [{ id: "s1", name: "Gameplay", keys: ["m:mccc", "m:ww"] }] };
+let finderState: { phase: GameFinder["phase"]; suspects: string[]; testing: string[]; round: number } | null = null;
+const finderStatus = (id: GameId): GameFinder => {
+  if (!finderState) return { active: false };
+  const names = (keys: string[]) => keys.map((k) => MODS[id]?.find((m) => m.key === k)?.name ?? k);
+  return {
+    active: true,
+    phase: finderState.phase,
+    round: finderState.round,
+    roundsLeft: Math.ceil(Math.log2(Math.max(finderState.suspects.length, 1))) + (finderState.phase === "baseline" ? 1 : 0),
+    suspects: names(finderState.suspects),
+    testing: names(finderState.testing),
+    found: finderState.phase === "found" ? names(finderState.suspects)[0] : null,
+    foundKey: finderState.phase === "found" ? finderState.suspects[0] : null,
+    total: finderState.suspects.length,
+  };
 };
 
 // Sample mods with a newer version.
@@ -131,7 +181,7 @@ export const gamesBridge = {
       simsUpdated = null;
       for (const m of MODS.sims4 ?? []) m.mayNeedUpdate = m.hooks && !!options?.safe && m.mayNeedUpdate;
     }
-    return { how: id === "sims4" ? "The Sims 4 app" : "Steam", safe: Boolean(options?.safe) };
+    return { how: id === "sims4" ? "The Sims 4 app" : "Steam", safe: Boolean(options?.safe), backedUp: backups[0] ?? null, backupError: null };
   },
   setSimsOptions: async (options: { mods?: boolean; scripts?: boolean }) => {
     simsOptions = { mods: options.mods ?? simsOptions.mods, scripts: options.scripts ?? simsOptions.scripts };
@@ -195,6 +245,92 @@ export const gamesBridge = {
     return { restored: key, version: "2025.9" };
   },
   nexusAccount: async () => ({ name: "PreviewUser", premium: false }),
+
+  saves: async (id: GameId) => ({ dir: id === "sims4" ? "~/Documents/Electronic Arts/The Sims 4/Saves" : null, backups: id === "sims4" ? backups : [] }),
+  backupSaves: async () => {
+    const made = { id: `b${Date.now()}`, at: new Date().toISOString(), reason: "Backed up from Settings", size: 48_200_000, files: 12, from: "Saves" };
+    backups.unshift(made);
+    return made;
+  },
+  restoreSaves: async (_id: GameId, backupId: string) => backups.find((b) => b.id === backupId)!,
+  deleteBackup: async (_id: GameId, backupId: string) => {
+    backups.splice(backups.findIndex((b) => b.id === backupId), 1);
+  },
+  chooseSaves: async () => null,
+  forgetSaves: async () => {},
+  openSaves: async () => {},
+
+  loadOrder: async (): Promise<GameLoadOrder> => ({ fixed: ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"], plugins: withProblems(skyrimOrder) }),
+  setLoadOrder: async (_id: GameId, entries: { name: string; active: boolean }[]): Promise<GameLoadOrder> => {
+    skyrimOrder = entries.map((e) => ({ ...skyrimOrder.find((p) => p.name === e.name)!, active: e.active }));
+    return { fixed: ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"], plugins: withProblems(skyrimOrder) };
+  },
+  sortLoadOrder: async (): Promise<GameLoadOrder> => {
+    const patch = skyrimOrder.find((p) => p.name === "Armor Patch.esp")!;
+    skyrimOrder = [...skyrimOrder.filter((p) => p !== patch).slice(0, 1), patch, ...skyrimOrder.filter((p) => p !== patch).slice(1)];
+    return { fixed: ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"], plugins: withProblems(skyrimOrder) };
+  },
+
+  requirements: async (id: GameId): Promise<GameRequirement[]> =>
+    id === "skyrimse"
+      ? [
+          { key: "nexus:30379", name: "Skyrim Script Extender (SKSE64)", kind: "nexus", modId: "30379", url: null, neededBy: ["SkyUI"], auto: true },
+          { key: "master:missing lighting.esm", name: "Missing Lighting.esm", kind: "master", modId: null, url: null, neededBy: ["Obsidian Weathers.esp"], auto: false, note: "A plugin file other plugins need." },
+        ]
+      : id === "sims4"
+        ? [{ key: "cf:123", name: "XML Injector", kind: "curseforge", modId: "123", url: null, neededBy: ["UI Cheats Extension"], auto: true }]
+        : [],
+  requirementsBefore: async () => [],
+  getRequirement: async (_id: GameId, key: string): Promise<GameInstallResult> => ({ needsWebsite: "https://www.nexusmods.com/", modId: key.split(":")[1] }),
+
+  sets: async (id: GameId) => setsByGame[id] ?? [],
+  saveSet: async (id: GameId, set: { id?: string | null; name: string }) => {
+    const list = (setsByGame[id] ??= []);
+    const existing = set.id && list.find((s) => s.id === set.id);
+    if (existing) existing.name = set.name;
+    else list.push({ id: `s${Date.now()}`, name: set.name, keys: [] });
+    return [...list];
+  },
+  deleteSet: async (id: GameId, setId: string) => (setsByGame[id] = (setsByGame[id] ?? []).filter((s) => s.id !== setId)),
+  setMember: async (id: GameId, setId: string, key: string, member: boolean) => {
+    const set = setsByGame[id]?.find((s) => s.id === setId);
+    if (set) set.keys = member ? [...new Set([...set.keys, key])] : set.keys.filter((k) => k !== key);
+    return [...(setsByGame[id] ?? [])];
+  },
+  useSet: async (id: GameId, setId: string) => {
+    const set = setsByGame[id]?.find((s) => s.id === setId);
+    let changed = 0;
+    for (const m of MODS[id] ?? []) {
+      const want = Boolean(set?.keys.includes(m.key));
+      if (m.enabled !== want) {
+        m.enabled = want;
+        changed += 1;
+      }
+    }
+    return { changed };
+  },
+
+  finder: async (id: GameId) => finderStatus(id),
+  finderStart: async (id: GameId) => {
+    const on = (MODS[id] ?? []).filter((m) => m.enabled).map((m) => m.key);
+    finderState = { phase: "baseline", suspects: on, testing: [], round: 0 };
+    return finderStatus(id);
+  },
+  finderAnswer: async (id: GameId, happened: boolean) => {
+    const f = finderState!;
+    if (f.phase === "baseline") f.phase = happened ? "not-mods" : "split";
+    else f.suspects = happened ? f.testing : f.suspects.filter((k) => !f.testing.includes(k));
+    if (f.phase === "split" && f.suspects.length === 1) f.phase = "found";
+    if (f.phase === "split") {
+      f.testing = f.suspects.slice(0, Math.ceil(f.suspects.length / 2));
+      f.round += 1;
+    }
+    return finderStatus(id);
+  },
+  finderStop: async (id: GameId, keepOff?: string | null): Promise<GameFinder> => {
+    finderState = null;
+    return { active: false, keptOff: keepOff ? (MODS[id]?.find((m) => m.key === keepOff)?.name ?? null) : null };
+  },
   adultStatus: async (): Promise<GameAdultStatus> => ({ hasKey: true, verified: true, on: adultOn, blur: true, error: null }),
   setAdult: async (on: boolean): Promise<GameAdultStatus> => {
     adultOn = on;
