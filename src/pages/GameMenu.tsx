@@ -12,6 +12,19 @@ type Props = {
 // These have their own sections; the Mod Manager ("More Games") covers the rest.
 const OWN_SECTIONS = new Set(["sims4", "gtav", "skyrimse", "fallout4", "cyberpunk2077", "stardew"]);
 
+/* What needs looking at, in a few words: "3 updates · load order problem". */
+function needsLooking(status: GameStatus | undefined) {
+  if (!status) return [];
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return [
+    status.crashes ? (status.crashes === 1 ? "crashed" : plural(status.crashes, "crash report", "crash reports")) : "",
+    status.loadOrder ? "load order problem" : "",
+    status.health ? plural(status.health, "mod folder problem", "mod folder problems") : "",
+    status.requirements ? `${status.requirements} missing` : "",
+    status.updates ? plural(status.updates, "update", "updates") : "",
+  ].filter(Boolean);
+}
+
 function gameStatus(game: GameSummary, platform: string) {
   if (game.found) {
     const mods = `${game.modCount} mod${game.modCount === 1 ? "" : "s"} on`;
@@ -26,6 +39,8 @@ function HomeScreen({ onMinecraft, onGame, onModManager, onSettings }: Props) {
   const [detected, setDetected] = useState<DetectedGame[]>([]);
   const [scanning, setScanning] = useState(true);
   const [games, setGames] = useState<GameSummary[]>([]);
+  // What needs looking at in each game, filled in as each is worked out.
+  const [statuses, setStatuses] = useState<Partial<Record<GameId, GameStatus>>>({});
 
   useEffect(() => {
     window.modAPI
@@ -35,7 +50,15 @@ function HomeScreen({ onMinecraft, onGame, onModManager, onSettings }: Props) {
       .finally(() => setScanning(false));
     window.gamesAPI
       .list()
-      .then(setGames)
+      .then((found) => {
+        setGames(found);
+        for (const game of found.filter((g) => g.found)) {
+          window.gamesAPI
+            .status(game.id)
+            .then((status) => setStatuses((now) => ({ ...now, [game.id]: status })))
+            .catch(() => {});
+        }
+      })
       .catch(() => setGames([]));
   }, []);
 
@@ -133,6 +156,19 @@ function HomeScreen({ onMinecraft, onGame, onModManager, onSettings }: Props) {
                 <p style={{ color: game.updated ? "#fcd34d" : "#6b7280", fontSize: 12, marginTop: 10, fontFamily: "system-ui, sans-serif" }}>
                   {gameStatus(game, navigator.platform)}
                 </p>
+                {needsLooking(statuses[game.id]).length > 0 && (
+                  <p
+                    data-testid="home-game-status"
+                    style={{
+                      color: needsLooking(statuses[game.id]).some((t) => !/update/.test(t)) ? "#fcd34d" : "#c4b5fd",
+                      fontSize: 12,
+                      marginTop: 4,
+                      fontFamily: "system-ui, sans-serif",
+                    }}
+                  >
+                    {needsLooking(statuses[game.id]).join(" · ")}
+                  </p>
+                )}
               </div>
             ))}
 

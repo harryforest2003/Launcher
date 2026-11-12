@@ -24,6 +24,8 @@ declare global {
         loadOrder?: boolean;
     };
 
+    type GameStatus = { updates: number; requirements: number; loadOrder: number; crashes: number; health: number };
+
     type GameDetail = GameSummary & {
         platform: string;
         version: string | null;
@@ -31,7 +33,7 @@ declare global {
         /* The Sims 4's own switches for custom content and script mods (null until it has an Options.ini). */
         simsOptions: { mods: boolean; scripts: boolean } | null;
         /* What The Sims 4 said went wrong since it was last played, naming the mods it could. */
-        problems: { file: string; time: string; mods: string[]; line: string | null }[];
+        problems: { file: string; time: string; mods: string[]; line: string | null; kind?: "crash" | "error" | "outdated" }[];
     };
 
     type GameMod = {
@@ -161,6 +163,33 @@ declare global {
 
     type GameSet = { id: string; name: string; keys: string[] };
 
+    /* Mods that have the same files, whose copies are used (live; "mixed" when it differs file to file), and which the rules pick. */
+    type GameConflict = { id: string; mods: { id: string; name: string }[]; files: string[]; live: string; suggested: string; reason: string; chosen: boolean };
+
+    /* Something the mod health check found: fix is the button's label, or null when it's fixed by hand. */
+    type GameHealthIssue = { id: string; severity: "error" | "warn"; title: string; detail: string; files: string[]; fix: string | null };
+
+    /* One thing on the download queue. */
+    type GameQueueItem = {
+        id: string;
+        gameId: GameId;
+        kind: "update" | "requirement" | "nexus-file";
+        name: string;
+        key?: string;
+        modId?: string;
+        fileId?: string;
+        page?: string;
+        status: "waiting" | "working" | "website" | "done" | "failed" | "skipped";
+        detail?: string | null;
+        error?: string | null;
+    };
+    type GameQueue = {
+        items: GameQueueItem[];
+        current: GameQueueItem | null;
+        counts: { waiting: number; done: number; failed: number; skipped: number; total: number };
+    };
+    type GameQueueAdd = { gameId: GameId; kind: GameQueueItem["kind"]; name: string; key?: string; modId?: string; fileId?: string };
+
     type GameFinder = {
         active: boolean;
         phase?: "baseline" | "split" | "found" | "not-mods";
@@ -186,6 +215,30 @@ declare global {
         mods: GameRemoteMod[];
         /* A site that couldn't be searched, while the other could. */
         warnings?: string[];
+    };
+
+    type GameCollectionSummary = {
+        slug: string;
+        name: string;
+        summary: string;
+        picture: string | null;
+        author: string;
+        endorsements: number;
+        downloads: number;
+        updated: string | null;
+        mods: number;
+        size: number;
+        revision: number | null;
+        adult: boolean;
+        url: string;
+    };
+    type GameCollection = Omit<GameCollectionSummary, "mods" | "updated" | "adult"> & {
+        description: string;
+        installationInfo: string;
+        /* installed: "same" (this file), "other" (another version of the mod), or "no". */
+        files: { modId: string; fileId: string; name: string; fileName: string; version: string; optional: boolean; installed: "same" | "other" | "no" }[];
+        /* Things it needs from other sites. */
+        external: { name: string; url: string; optional: boolean }[];
     };
 
     type GameModFile = {
@@ -223,6 +276,8 @@ declare global {
     interface Window {
         gamesAPI: {
             list: () => Promise<GameSummary[]>;
+            /* For Home: what needs looking at. */
+            status: (id: GameId) => Promise<GameStatus>;
             get: (id: GameId) => Promise<GameDetail>;
 
             mods: (id: GameId) => Promise<GameMod[]>;
@@ -247,6 +302,10 @@ declare global {
                 options: { provider?: "any" | "nexus" | "curseforge"; query?: string; sort?: string; page?: number; adult?: boolean }
             ) => Promise<GameSearchPage>;
             details: (id: GameId, provider: "nexus" | "curseforge", modId: string) => Promise<GameModDetails>;
+            collections: (id: GameId, options: { query?: string; sort?: string; page?: number }) => Promise<{ total: number; collections: GameCollectionSummary[] }>;
+            collection: (id: GameId, slug: string) => Promise<GameCollection>;
+            /* Puts the chosen files on the download queue. */
+            installCollection: (id: GameId, slug: string, fileIds: string[]) => Promise<{ added: number; external: GameCollection["external"] }>;
             installRemote: (id: GameId, provider: "nexus" | "curseforge", modId: string, fileId: string | null, name: string) => Promise<GameInstallResult>;
             checkUpdates: (id: GameId) => Promise<GameUpdateCheck>;
             update: (id: GameId, key: string) => Promise<GameInstallResult>;
@@ -287,6 +346,18 @@ declare global {
             finderAnswer: (id: GameId, happened: boolean) => Promise<GameFinder>;
             finderStop: (id: GameId, keepOff?: string | null) => Promise<GameFinder>;
             openUrl: (url: string) => Promise<void>;
+
+            conflicts: (id: GameId) => Promise<GameConflict[]>;
+            /* modId null: back to the rules' choice. */
+            chooseConflict: (id: GameId, groupId: string, modId: string | null) => Promise<GameConflict[]>;
+            health: (id: GameId) => Promise<GameHealthIssue[]>;
+            healthFix: (id: GameId, issueId: string) => Promise<{ done: string }>;
+            queue: () => Promise<GameQueue>;
+            /* -> how many were added (ones already waiting aren't added twice). */
+            queueAdd: (items: GameQueueAdd[]) => Promise<number>;
+            queueControl: (action: "skip" | "stop" | "open" | "clear" | "retry") => Promise<GameQueue>;
+            onQueue: (callback: (queue: GameQueue) => void) => () => void;
+            onModsChanged: (callback: (data: { gameId: GameId }) => void) => () => void;
 
             onProgress: (callback: (data: { gameId: GameId; detail: string }) => void) => () => void;
             onNxm: (callback: (event: GameNxmEvent) => void) => () => void;

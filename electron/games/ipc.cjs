@@ -15,6 +15,10 @@ const requirements = require("./requirements.cjs");
 const sets = require("./sets.cjs");
 const finder = require("./finder.cjs");
 const loot = require("./loot.cjs");
+const queue = require("./queue.cjs");
+const crashes = require("./crashes.cjs");
+const health = require("./health.cjs");
+const conflicts = require("./conflicts.cjs");
 const curseforge = require("../mods/providers/curseforge.cjs");
 const { curseforgeFetch } = require("../curseforge.cjs");
 
@@ -74,12 +78,58 @@ function summary(game) {
  */
 async function withMissing(gameId, result) {
     if (!result?.mod?.name) return result;
+    // Files it shares with other mods: the right copies go in (made-for first, then newest).
+    try {
+        result.conflictsChanged = await conflicts.resolve(gameId);
+    } catch {
+        // Sorted out next time.
+    }
     try {
         result.missing = remember(gameId, (await requirements.missingFor(gameId, result.mod.name)).filter((entry) => entry.auto));
     } catch {
         result.missing = [];
     }
     return result;
+}
+
+/* What an install needs that isn't there goes on the download queue. */
+function queueMissing(gameId, result) {
+    if (result?.missing?.length) queue.add(result.missing.map((entry) => ({ gameId, kind: "requirement", key: entry.key, name: entry.name, modId: entry.modId ?? undefined })));
+    return result;
+}
+
+/* One item of the download queue. -> an install result, { needsWebsite, modId }, { opened } or { failed }. */
+async function runQueued(item, progress) {
+    const game = need(item.gameId);
+    if (item.kind === "update") {
+        const result = await updates.update(item.gameId, String(item.key), progress);
+        if (result.needsWebsite === null) return { failed: result.reason ?? "It can only be downloaded from its website." };
+        return result.mod ? withMissing(item.gameId, result) : result;
+    }
+    if (item.kind === "requirement") {
+        const entry = known.get(`${item.gameId}|${item.key}`);
+        if (!entry) return { failed: "That requirement has changed since: check again." };
+        const result = await requirements.get(item.gameId, entry, progress);
+        if (result.external) {
+            if (!/^https?:\/\//i.test(String(result.needsWebsite ?? ""))) return { failed: `${entry.name} has no page to get it from.` };
+            await shell.openExternal(result.needsWebsite);
+            return { opened: entry.name };
+        }
+        return result.mod ? withMissing(item.gameId, result) : result;
+    }
+    if (item.kind === "nexus-file") {
+        const page = item.page ?? `https://www.nexusmods.com/${game.nexus}/mods/${item.modId}?tab=files${item.fileId ? `&file_id=${item.fileId}&nmm=1` : ""}`;
+        const account = await nexus.whoAmI().catch(() => null);
+        if (!account?.premium || !item.fileId) return { needsWebsite: page, modId: String(item.modId) };
+        try {
+            const url = await nexus.downloadUrl(game.nexus, String(item.modId), String(item.fileId));
+            return withMissing(item.gameId, await installFromUrl(game, url, { name: item.name, source: { provider: "nexus", modId: String(item.modId), fileId: String(item.fileId) } }, progress));
+        } catch (err) {
+            if (err.code === "PREMIUM_REQUIRED") return { needsWebsite: page, modId: String(item.modId) };
+            throw err;
+        }
+    }
+    return { failed: "The launcher doesn't know how to get that." };
 }
 
 /*
@@ -109,7 +159,10 @@ async function handleNxm(link) {
         const result = await installFromUrl(game, url, { name, source: { provider: "nexus", modId: parsed.modId, fileId: parsed.fileId } }, (detail) =>
             send("games:nxm", { status: "working", gameId: game.id, modId: parsed.modId, name, detail })
         );
-        send("games:nxm", { status: "installed", gameId: game.id, modId: parsed.modId, name, result: await withMissing(game.id, result) });
+        const withNeeds = await withMissing(game.id, result);
+        send("games:nxm", { status: "installed", gameId: game.id, modId: parsed.modId, name, result: withNeeds });
+        // What the queue was waiting for (if it was), and what it needs, next.
+        queue.arrived(game.id, parsed.modId, withNeeds);
     } catch (err) {
         send("games:nxm", { status: "failed", gameId: game.id, modId: parsed.modId, name, error: err.message, notes: err.notes ?? [] });
     }
@@ -166,11 +219,76 @@ async function searchCurseForge(game, { query, sort, page, size }) {
     };
 }
 
+const statusCache = new Map();
+
 function registerGamesIpc() {
+    // The download queue: started with what was left last time.
+    queue.start({
+        run: runQueued,
+        open: (url) => {
+            if (/^https?:\/\//i.test(String(url))) shell.openExternal(String(url));
+        },
+        changed: (gameId) => {
+            statusCache.delete(gameId);
+            send("games:modsChanged", { gameId });
+        },
+        onChange: (snap) => send("games:queue", snap),
+    });
+    ipcMain.handle("games:queue", () => queue.snapshot());
+    // Requirements are added by key, and only ones worked out here.
+    ipcMain.handle("games:queueAdd", (_e, list) =>
+        queue.add(
+            (Array.isArray(list) ? list : [])
+                .filter((item) => item && getGame(item.gameId) && ["update", "requirement", "nexus-file"].includes(item.kind))
+                .filter((item) => item.kind !== "requirement" || known.has(`${item.gameId}|${item.key}`))
+                .filter((item) => item.kind !== "nexus-file" || /^\d+$/.test(String(item.modId)))
+                .map((item) => ({
+                    gameId: item.gameId,
+                    kind: item.kind,
+                    name: String(item.name ?? "").slice(0, 200),
+                    key: item.key ? String(item.key) : undefined,
+                    modId: item.modId ? String(item.modId) : undefined,
+                    fileId: item.fileId && /^\d+$/.test(String(item.fileId)) ? String(item.fileId) : undefined,
+                }))
+        )
+    );
+    ipcMain.handle("games:queueControl", (_e, action) => queue.control(String(action)));
+
+    // The check-up of a game's mod folders, and fixing what it finds.
+    ipcMain.handle("games:health", (_e, id) => health.check(need(id).id));
+    ipcMain.handle("games:healthFix", (_e, id, issueId) => health.fix(need(id).id, String(issueId)));
+
     ipcMain.handle("games:list", () => GAMES.map(summary));
+
+    // For the Home cards: how many updates, missing requirements, load order, crash and health problems.
+    ipcMain.handle("games:status", async (_e, id) => {
+        const game = need(id);
+        const loc = detect.locate(id);
+        const cached = statusCache.get(id);
+        if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.value;
+        const value = { updates: 0, requirements: 0, loadOrder: 0, crashes: 0, health: 0 };
+        if (!loc.found) return value;
+        const played = protect.lastPlayed(id);
+        const hasMods = store.readState(id).mods.length > 0;
+        await Promise.all([
+            hasMods && updates.check(id).then((r) => (value.updates = r.updates.length)).catch(() => {}),
+            requirements.missing(id).then((r) => (value.requirements = r.length)).catch(() => {}),
+            (async () => {
+                if (!game.bethesda) return;
+                const plan = plugins.fixPlan(game, loc);
+                value.loadOrder = plan.turnOn.length + plan.turnOff.length + plan.moved.length + plan.get.length;
+            })().catch(() => {}),
+            (async () => (value.crashes = crashes.reports(game, loc, played?.at ? played.at - 60 * 60 * 1000 : Date.now() - 3 * 24 * 60 * 60 * 1000).length))(),
+            (async () => (value.health = health.check(id).length))(),
+        ]);
+        statusCache.set(id, { at: Date.now(), value });
+        return value;
+    });
 
     ipcMain.handle("games:get", (_e, id) => {
         const game = need(id);
+        // Opening a game's section means its counts may be out of date by the time Home shows them again.
+        statusCache.delete(game.id);
         const loc = detect.locate(id);
         const played = protect.lastPlayed(id);
         return {
@@ -183,7 +301,8 @@ function registerGamesIpc() {
             })(),
             lastPlayed: played?.at ? new Date(played.at).toISOString() : null,
             simsOptions: game.id === "sims4" ? protect.simsOptions(loc) : null,
-            problems: game.id === "sims4" ? protect.simsProblems(loc, played?.at ? played.at - 60 * 60 * 1000 : 0) : [],
+            // What went wrong since it was last played from here (or in the last 3 days).
+            problems: crashes.reports(game, loc, played?.at ? played.at - 60 * 60 * 1000 : Date.now() - 3 * 24 * 60 * 60 * 1000),
         };
     });
 
@@ -195,7 +314,17 @@ function registerGamesIpc() {
         return mods.map((mod) => ({ ...mod, mayNeedUpdate: Boolean(threshold && mod.hooks && mod.since && Date.parse(mod.since) < threshold) }));
     });
 
-    ipcMain.handle("games:setEnabled", (_e, id, key, enabled) => store.setModEnabled(need(id).id, String(key), enabled === true));
+    ipcMain.handle("games:setEnabled", async (_e, id, key, enabled) => {
+        const result = store.setModEnabled(need(id).id, String(key), enabled === true);
+        // A mod turned back on may share files with others: the right copies go in.
+        if (enabled === true && String(key).startsWith("m:")) await conflicts.resolve(id).catch(() => 0);
+        return result;
+    });
+    ipcMain.handle("games:conflicts", async (_e, id) => (await conflicts.list(need(id).id)).map((group) => ({ ...group, keys: undefined })));
+    ipcMain.handle("games:chooseConflict", async (_e, id, groupId, modId) => {
+        await conflicts.choose(need(id).id, String(groupId), modId ? String(modId) : null);
+        return (await conflicts.list(id)).map((group) => ({ ...group, keys: undefined }));
+    });
     ipcMain.handle("games:remove", (_e, id, key) => store.deleteMod(need(id).id, String(key)));
 
     ipcMain.handle("games:downloads", async (_e, id) => {
@@ -217,7 +346,7 @@ function registerGamesIpc() {
             file = picked.filePaths[0];
         }
         try {
-            return await withMissing(id, await store.install(id, file));
+            return queueMissing(id, await withMissing(id, await store.install(id, file)));
         } catch (err) {
             // The notes say what to do instead (an OpenIV package, say).
             return { failed: err.message, notes: err.notes ?? [] };
@@ -473,6 +602,38 @@ function registerGamesIpc() {
         return { total: sources.reduce((sum, source) => sum + totals[source], 0), totals, pageCount, mods, warnings };
     });
 
+    // Nexus collections: whole curated lists of mods, installed through the download queue.
+    ipcMain.handle("games:collections", async (_e, id, options) => {
+        const game = need(id);
+        if (!game.nexus) throw new Error(`${game.name} isn't on Nexus Mods.`);
+        const adult = (await adultStatus()).on;
+        return nexus.collections(game.nexus, { query: String(options?.query ?? ""), sort: options?.sort, page: Number(options?.page) || 0, adult });
+    });
+    ipcMain.handle("games:collection", async (_e, id, slug) => {
+        const game = need(id);
+        const found = await nexus.collection(game.nexus, String(slug));
+        const mods = store.readState(id).mods;
+        const have = new Map();
+        for (const mod of mods) {
+            const modId = mod.source?.provider === "nexus" ? mod.source.modId : mod.source?.nexus?.modId;
+            const fileId = mod.source?.provider === "nexus" ? mod.source.fileId : mod.source?.nexus?.fileId;
+            if (modId) have.set(String(modId), String(fileId ?? ""));
+        }
+        return {
+            ...found,
+            files: found.files.map((file) => ({ ...file, installed: have.get(file.modId) === file.fileId ? "same" : have.has(file.modId) ? "other" : "no" })),
+        };
+    });
+    ipcMain.handle("games:installCollection", async (_e, id, slug, fileIds) => {
+        const game = need(id);
+        const found = await nexus.collection(game.nexus, String(slug));
+        const wanted = new Set((Array.isArray(fileIds) ? fileIds : []).map(String));
+        const items = found.files
+            .filter((file) => wanted.has(file.fileId))
+            .map((file) => ({ gameId: id, kind: "nexus-file", modId: file.modId, fileId: file.fileId, name: file.name }));
+        return { added: queue.add(items), external: found.external };
+    });
+
     ipcMain.handle("games:details", async (_e, id, provider, modId) => {
         const game = need(id);
         if (provider === "curseforge") {
@@ -514,10 +675,10 @@ function registerGamesIpc() {
         try {
             if (provider === "curseforge") {
                 const file = await curseforge.resolveDownload(String(modId), fileId ? String(fileId) : null);
-                return await withMissing(id, await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress));
+                return queueMissing(id, await withMissing(id, await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress)));
             }
             const url = await nexus.downloadUrl(game.nexus, String(modId), String(fileId));
-            return await withMissing(id, await installFromUrl(game, url, { name: String(name || `Nexus mod ${modId}`), source: { provider: "nexus", modId: String(modId), fileId: String(fileId) } }, progress));
+            return queueMissing(id, await withMissing(id, await installFromUrl(game, url, { name: String(name || `Nexus mod ${modId}`), source: { provider: "nexus", modId: String(modId), fileId: String(fileId) } }, progress)));
         } catch (err) {
             if (err.code === "PREMIUM_REQUIRED" || err.code === "DISTRIBUTION_DENIED") {
                 const page = provider === "curseforge" ? null : `https://www.nexusmods.com/${game.nexus}/mods/${modId}?tab=files&file_id=${fileId}&nmm=1`;

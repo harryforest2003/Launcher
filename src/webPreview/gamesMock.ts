@@ -115,6 +115,22 @@ const finderStatus = (id: GameId): GameFinder => {
 // Sample mods with a newer version.
 const updatable = new Set(["m:mccc", "m:ww"]);
 
+// The downloads queue, simulated: "Skip this one" stands in for pressing Nexus' download button.
+const queueItems: GameQueueItem[] = [];
+const queueListeners = new Set<(q: GameQueue) => void>();
+const queueSnap = (): GameQueue => ({
+  items: [...queueItems],
+  current: queueItems.find((i) => i.status === "website" || i.status === "working") ?? null,
+  counts: {
+    waiting: queueItems.filter((i) => i.status === "waiting").length,
+    done: queueItems.filter((i) => i.status === "done").length,
+    failed: queueItems.filter((i) => i.status === "failed").length,
+    skipped: queueItems.filter((i) => i.status === "skipped").length,
+    total: queueItems.length,
+  },
+});
+const emitQueue = () => queueListeners.forEach((listener) => listener(queueSnap()));
+
 let simsOptions = { mods: true, scripts: true };
 let adultOn = false;
 let simsUpdated: GameSummary["updated"] = { from: "1.111.102.1030", to: "1.112.519.1020" };
@@ -151,6 +167,47 @@ const sampleMods = (game: GameSummary, provider: "nexus" | "curseforge", query: 
 
 export const gamesBridge = {
   list: async () => GAMES.map(summary),
+  collections: async (): Promise<{ total: number; collections: GameCollectionSummary[] }> => ({
+    total: 2,
+    collections: [
+      { slug: "abc123", name: "Cosy Valley", summary: "A sample collection for the web preview: farm life, prettier seasons and more friends.", picture: null, author: "SampleCurator", endorsements: 4800, downloads: 760000, updated: daysAgo(4), mods: 6, size: 465_000_000, revision: 12, adult: false, url: "https://www.nexusmods.com/" },
+      { slug: "def456", name: "Bigger Town", summary: "Another sample collection.", picture: null, author: "SampleCurator", endorsements: 690, downloads: 130000, updated: daysAgo(20), mods: 3, size: 120_000_000, revision: 3, adult: false, url: "https://www.nexusmods.com/" },
+    ],
+  }),
+  collection: async (_id: GameId, slug: string): Promise<GameCollection> => ({
+    slug,
+    name: "Cosy Valley",
+    summary: "A sample collection for the web preview: farm life, prettier seasons and more friends.",
+    description: "## What's in it\n\nA **sample** description, written the way collection authors do.",
+    picture: null,
+    author: "SampleCurator",
+    endorsements: 4800,
+    downloads: 760000,
+    revision: 12,
+    size: 465_000_000,
+    installationInfo: "",
+    url: "https://www.nexusmods.com/",
+    files: [
+      { modId: "1915", fileId: "1", name: "Content Patcher", fileName: "Content Patcher 2.5", version: "2.5.0", optional: false, installed: "same" },
+      { modId: "2", fileId: "2", name: "Seasonal Outfits", fileName: "Seasonal Outfits", version: "1.4", optional: false, installed: "no" },
+      { modId: "3", fileId: "3", name: "Better Ranching", fileName: "Better Ranching", version: "2.1", optional: false, installed: "other" },
+      { modId: "4", fileId: "4", name: "Lookup Anything", fileName: "Lookup Anything", version: "1.40", optional: false, installed: "no" },
+      { modId: "5", fileId: "5", name: "Prettier Paths", fileName: "Prettier Paths", version: "1.0", optional: true, installed: "no" },
+      { modId: "6", fileId: "6", name: "Night Sky", fileName: "Night Sky", version: "0.9", optional: true, installed: "no" },
+    ],
+    external: [],
+  }),
+  installCollection: async (_id: GameId, _slug: string, fileIds: string[]) => ({ added: fileIds.length, external: [] }),
+  status: async (id: GameId): Promise<GameStatus> =>
+    id === "sims4" ? { updates: 2, requirements: 1, loadOrder: 0, crashes: 1, health: 0 } : id === "skyrimse" ? { updates: 0, requirements: 2, loadOrder: 2, crashes: 0, health: 1 } : { updates: 0, requirements: 0, loadOrder: 0, crashes: 0, health: 0 },
+  health: async (id: GameId): Promise<GameHealthIssue[]> =>
+    id === "skyrimse" ? [{ id: "orphan-archives", severity: "warn", title: "1 archive won't load", detail: "The game only loads an archive when a plugin of the same name does.", files: ["Data/LonelyTextures.bsa"], fix: null }] : [],
+  healthFix: async () => ({ done: "Fixed." }),
+  conflicts: async (id: GameId): Promise<GameConflict[]> =>
+    id === "skyrimse"
+      ? [{ id: "m:skyui+m:weather", mods: [{ id: "m:skyui", name: "SkyUI" }, { id: "m:weather", name: "Obsidian Weathers" }], files: ["Data/interface/skyui/config.txt"], live: "m:weather", suggested: "m:weather", reason: "Updated most recently (3 Nov 2026)", chosen: false }]
+      : [],
+  chooseConflict: async () => [],
   get: async (id: GameId): Promise<GameDetail> => {
     const game = summary(need(id));
     return {
@@ -383,6 +440,29 @@ export const gamesBridge = {
   openUrl: async (url: string) => {
     window.open(url, "_blank", "noopener");
   },
+  queue: async (): Promise<GameQueue> => queueSnap(),
+  queueAdd: async (list: GameQueueAdd[]) => {
+    for (const item of list) queueItems.push({ ...item, id: `q${Date.now()}${Math.random()}`, status: queueItems.some((i) => i.status === "website") ? "waiting" : "website" });
+    emitQueue();
+    return list.length;
+  },
+  queueControl: async (action: string) => {
+    const current = queueItems.find((i) => i.status === "website");
+    if (action === "skip" && current) {
+      current.status = "done";
+      const next = queueItems.find((i) => i.status === "waiting");
+      if (next) next.status = "website";
+    }
+    if (action === "stop") queueItems.forEach((i) => (i.status === "waiting" || i.status === "website") && (i.status = "skipped"));
+    if (action === "clear") queueItems.splice(0, queueItems.length, ...queueItems.filter((i) => i.status === "waiting" || i.status === "website"));
+    emitQueue();
+    return queueSnap();
+  },
+  onQueue: (callback: (q: GameQueue) => void) => {
+    queueListeners.add(callback);
+    return () => queueListeners.delete(callback);
+  },
+  onModsChanged: () => () => {},
   onProgress: () => () => {},
   onNxm: () => () => {},
 };

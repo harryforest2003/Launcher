@@ -420,4 +420,4 @@ async function get(gameId, entry, progress) {
     return { needsWebsite: entry.url, external: true };
 }
 
-module.exports = { missing, missingFor, missingBeforeInstall, get, forMasters, FRAMEWORKS };
+module.exports = { missing, missingFor, missingBeforeInstall, get, forMasters, nexusRequirements, FRAMEWORKS };

@@ -12,6 +12,7 @@ import ModGames from "./pages/ModGames";
 import GameSection from "./pages/GameSection";
 import SkinBuilder from "./pages/SkinBuilder";
 import { SkinBuilderNavContext } from "./skinBuilder/navContext";
+import DownloadQueue from "./components/DownloadQueue";
 
 export type Screen =
   | "home"
@@ -32,6 +33,8 @@ function App() {
   return (
     <SkinBuilderNavContext.Provider value={() => setScreen("skinbuilder")}>
       <Screens screen={screen} setScreen={setScreen} />
+      {/* The game sections' downloads carry on, and show, whichever page is open. */}
+      <DownloadQueue />
     </SkinBuilderNavContext.Provider>
   );
 }

@@ -26,6 +26,8 @@ const gameData = (gameId) => path.join(dataDir(), gameId);
 const stateFile = (gameId) => path.join(dataDir(), `${gameId}.json`);
 const parkedDir = (gameId, modId) => path.join(gameData(gameId), "parked", modId);
 const backupDir = (gameId, modId) => path.join(gameData(gameId), "backups", modId);
+// A mod's own copy of a file another mod's copy is in the game in place of.
+const versionsDir = (gameId, modId) => path.join(gameData(gameId), "versions", modId);
 
 function readState(gameId) {
     try {
@@ -87,6 +89,98 @@ function pruneEmpty(dir, stop) {
 }
 
 const fileKey = (file) => `${file.base}:${file.to.toLowerCase()}`;
+
+/*
+ * Whose copy of each file is in the game: { "base:to": modId }. Kept from when files began
+ * being shared; for mods installed before that, it's the last installed (as it was).
+ */
+function ownerMap(state) {
+    if (!state.owner) {
+        state.owner = {};
+        const byAge = state.mods.filter((m) => m.enabled).sort((a, b) => String(a.installedAt).localeCompare(String(b.installedAt)));
+        for (const mod of byAge) for (const file of mod.files) state.owner[fileKey(file)] = mod.id;
+    }
+    return state.owner;
+}
+
+/* Where a mod's own copy of a file is, when it isn't the one in the game: its kept copy, its turned-off copy, or (installed before copies were kept) the backup made when another overwrote it. */
+function copyOf(gameId, state, mod, file) {
+    const kept = within(path.join(versionsDir(gameId, mod.id), file.base), file.to);
+    if (fs.existsSync(kept)) return kept;
+    const parked = within(path.join(parkedDir(gameId, mod.id), file.base), file.to);
+    if (fs.existsSync(parked)) return parked;
+    for (const other of state.mods) {
+        if (!(other.replaced ?? []).some((r) => fileKey(r) === fileKey(file) && r.owner === mod.name)) continue;
+        const backup = within(path.join(backupDir(gameId, other.id), file.base), file.to);
+        if (fs.existsSync(backup)) return backup;
+    }
+    return null;
+}
+
+/* Keeps the copy that's in the game as its owner's, before another's goes in its place. */
+function keepCopy(gameId, loc, ownerId, file) {
+    const live = within(baseDir(loc, file.base), file.to);
+    if (!fs.existsSync(live)) return;
+    const kept = within(path.join(versionsDir(gameId, ownerId), file.base), file.to);
+    fs.mkdirSync(path.dirname(kept), { recursive: true });
+    fs.copyFileSync(live, kept);
+}
+
+/* Puts a mod's copy of a file in the game, and says it's that mod's. */
+function putIn(gameId, loc, state, mod, file) {
+    const source = copyOf(gameId, state, mod, file);
+    if (!source) return false;
+    const live = within(baseDir(loc, file.base), file.to);
+    fs.mkdirSync(path.dirname(live), { recursive: true });
+    fs.copyFileSync(source, live);
+    const kept = within(path.join(versionsDir(gameId, mod.id), file.base), file.to);
+    if (source === kept) fs.rmSync(kept, { force: true });
+    ownerMap(state)[fileKey(file)] = mod.id;
+    return true;
+}
+
+/* After a file's owner goes (off or removed): the next mod with it takes over, else the game's own file comes back. */
+function handOver(gameId, loc, state, leaving, file) {
+    const key = fileKey(file);
+    const next = state.mods
+        .filter((m) => m.id !== leaving.id && m.enabled && m.files.some((f) => fileKey(f) === key))
+        .sort((a, b) => String(b.installedAt).localeCompare(String(a.installedAt)))
+        .find((m) => putIn(gameId, loc, state, m, file));
+    if (next) return;
+    delete ownerMap(state)[key];
+    // The game's own file (or one added by hand) that a mod replaced, whichever mod kept it.
+    const backup = originalOf(gameId, state, file);
+    if (backup) {
+        const live = within(baseDir(loc, file.base), file.to);
+        fs.mkdirSync(path.dirname(live), { recursive: true });
+        fs.copyFileSync(backup, live);
+    }
+}
+
+/* The game's own copy of a file (or one added by hand), kept by whichever mod replaced it first. */
+function originalOf(gameId, state, file) {
+    for (const mod of state.mods) {
+        if (!(mod.replaced ?? []).some((r) => fileKey(r) === fileKey(file) && !r.owner)) continue;
+        const backup = within(path.join(backupDir(gameId, mod.id), file.base), file.to);
+        if (fs.existsSync(backup)) return backup;
+    }
+    return null;
+}
+
+/* A mod going for good passes the game's own files it kept to another mod with the same file. */
+function passOnOriginals(gameId, state, leaving) {
+    for (const entry of (leaving.replaced ?? []).filter((r) => !r.owner)) {
+        const heir = state.mods.find((m) => m.id !== leaving.id && m.files.some((f) => fileKey(f) === fileKey(entry)));
+        const backup = within(path.join(backupDir(gameId, leaving.id), entry.base), entry.to);
+        if (!heir || !fs.existsSync(backup)) continue;
+        const target = within(path.join(backupDir(gameId, heir.id), entry.base), entry.to);
+        if (!(heir.replaced ?? []).some((r) => fileKey(r) === fileKey(entry) && !r.owner)) {
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.copyFileSync(backup, target);
+            heir.replaced = [...(heir.replaced ?? []).filter((r) => fileKey(r) !== fileKey(entry)), { base: entry.base, to: entry.to, owner: null }];
+        }
+    }
+}
 
 /* ---------------- installing ---------------- */
 
@@ -234,10 +328,14 @@ async function install(gameId, filePath, meta = {}) {
             notes: planned.notes,
         };
 
+        const owner = ownerMap(fresh);
         for (const placement of planned.placements) {
             const root = baseDir(loc, placement.base);
             const target = within(root, placement.to);
             const file = { base: placement.base, to: placement.to };
+            // Another mod's copy that's in the game is kept as that mod's.
+            const holder = fresh.mods.find((m) => m.id === owner[fileKey(file)] && m.enabled);
+            if (holder && fs.existsSync(target)) keepCopy(gameId, loc, holder.id, file);
             if (fs.existsSync(target)) {
                 // Kept so turning this mod off or removing it puts it back.
                 const backup = within(path.join(backupDir(gameId, id), placement.base), placement.to);
@@ -248,6 +346,7 @@ async function install(gameId, filePath, meta = {}) {
             fs.mkdirSync(path.dirname(target), { recursive: true });
             fs.copyFileSync(path.join(unpacked.dir, placement.from), target);
             mod.files.push(file);
+            owner[fileKey(file)] = id;
         }
 
         if (game.layout === "bethesda" && planned.plugins.length) {
@@ -302,23 +401,39 @@ function setEnabled(gameId, modId, enabled) {
     if (!mod) throw new Error("That mod isn't installed any more.");
     if (mod.enabled === enabled) return describe(game, mod);
 
+    const owner = ownerMap(state);
     for (const file of mod.files) {
+        const key = fileKey(file);
         const live = within(baseDir(loc, file.base), file.to);
         const parked = within(path.join(parkedDir(gameId, mod.id), file.base), file.to);
+        const kept = within(path.join(versionsDir(gameId, mod.id), file.base), file.to);
         if (enabled) {
-            if (fs.existsSync(parked)) move(parked, live);
-        } else if (fs.existsSync(live)) {
-            move(live, parked);
-            pruneEmpty(path.dirname(live), baseDir(loc, file.base));
-        }
-    }
-    // What it replaced comes back while it's off.
-    for (const file of mod.replaced) {
-        const live = within(baseDir(loc, file.base), file.to);
-        const backup = within(path.join(backupDir(gameId, mod.id), file.base), file.to);
-        if (!enabled && fs.existsSync(backup)) {
-            fs.mkdirSync(path.dirname(live), { recursive: true });
-            fs.copyFileSync(backup, live);
+            if (!fs.existsSync(parked)) continue;
+            const holder = state.mods.find((m) => m.id === owner[key] && m.id !== mod.id && m.enabled);
+            if (holder) {
+                // Another mod's copy is in the game: this one's is kept until it's chosen.
+                fs.mkdirSync(path.dirname(kept), { recursive: true });
+                fs.renameSync(parked, kept);
+            } else {
+                // What's there now (the game's own file, or one added by hand) is kept to come back later.
+                if (fs.existsSync(live)) {
+                    const backup = within(path.join(backupDir(gameId, mod.id), file.base), file.to);
+                    fs.mkdirSync(path.dirname(backup), { recursive: true });
+                    fs.copyFileSync(live, backup);
+                    mod.replaced = [...(mod.replaced ?? []).filter((r) => fileKey(r) !== key), { ...file, owner: null }];
+                }
+                move(parked, live);
+                owner[key] = mod.id;
+            }
+        } else if (owner[key] === mod.id || owner[key] === undefined) {
+            // Its copy is the one in the game: it's put away, and the next mod's (or the game's own) goes in.
+            if (fs.existsSync(live)) move(live, parked);
+            handOver(gameId, loc, state, mod, file);
+            if (!fs.existsSync(live)) pruneEmpty(path.dirname(live), baseDir(loc, file.base));
+        } else if (fs.existsSync(kept)) {
+            // Another mod's copy is in the game; this one's is put away with the rest.
+            fs.mkdirSync(path.dirname(parked), { recursive: true });
+            fs.renameSync(kept, parked);
         }
     }
     if (mod.plugins?.length) {
@@ -341,19 +456,16 @@ function removeMod(gameId, modId) {
     if (!mod) throw new Error("That mod isn't installed any more.");
 
     if (mod.enabled) {
+        const owner = ownerMap(state);
         for (const file of mod.files) {
+            const key = fileKey(file);
+            // Only its own copy leaves the game; another mod's stays.
+            if (owner[key] !== mod.id && owner[key] !== undefined) continue;
             const root = baseDir(loc, file.base);
             const live = within(root, file.to);
             fs.rmSync(live, { force: true });
-            pruneEmpty(path.dirname(live), root);
-        }
-        for (const file of mod.replaced) {
-            const backup = within(path.join(backupDir(gameId, mod.id), file.base), file.to);
-            if (fs.existsSync(backup)) {
-                const live = within(baseDir(loc, file.base), file.to);
-                fs.mkdirSync(path.dirname(live), { recursive: true });
-                fs.copyFileSync(backup, live);
-            }
+            handOver(gameId, loc, state, mod, file);
+            if (!fs.existsSync(live)) pruneEmpty(path.dirname(live), root);
         }
     }
     if (mod.plugins?.length) {
@@ -363,8 +475,10 @@ function removeMod(gameId, modId) {
             // No load order file.
         }
     }
+    passOnOriginals(gameId, state, mod);
     fs.rmSync(parkedDir(gameId, mod.id), { recursive: true, force: true });
     fs.rmSync(backupDir(gameId, mod.id), { recursive: true, force: true });
+    fs.rmSync(versionsDir(gameId, mod.id), { recursive: true, force: true });
     state.mods = state.mods.filter((m) => m.id !== modId);
     writeState(gameId, state);
     return { removed: mod.name };
@@ -593,6 +707,43 @@ function list(gameId) {
     };
 }
 
+/*
+ * Files more than one mod that's on has: [{ key, file: { base, to }, owners: [modIds], live: modId }].
+ */
+function sharedFiles(gameId) {
+    const state = readState(gameId);
+    const owner = ownerMap(state);
+    const byKey = new Map();
+    for (const mod of state.mods.filter((m) => m.enabled)) {
+        for (const file of mod.files) {
+            const key = fileKey(file);
+            const entry = byKey.get(key) ?? { key, file, owners: [] };
+            entry.owners.push(mod.id);
+            byKey.set(key, entry);
+        }
+    }
+    return [...byKey.values()].filter((e) => e.owners.length > 1).map((e) => ({ ...e, live: owner[e.key] ?? e.owners.at(-1) }));
+}
+
+/* Makes a mod's copy of files the one in the game, keeping the copies it replaces. -> how many changed. */
+function setWinner(gameId, keys, winnerId) {
+    const loc = locate(gameId);
+    const state = readState(gameId);
+    const owner = ownerMap(state);
+    const winner = state.mods.find((m) => m.id === winnerId && m.enabled);
+    if (!winner) throw new Error("That mod isn't on.");
+    let changed = 0;
+    for (const key of keys) {
+        const file = winner.files.find((f) => fileKey(f) === key);
+        if (!file || owner[key] === winner.id) continue;
+        const current = state.mods.find((m) => m.id === owner[key] && m.enabled);
+        if (current) keepCopy(gameId, loc, current.id, file);
+        if (putIn(gameId, loc, state, winner, file)) changed += 1;
+    }
+    writeState(gameId, state);
+    return changed;
+}
+
 /* Puts back the copy an update replaced. */
 function undoReplace(gameId, key) {
     const modId = key.replace(/^m:/, "");
@@ -632,4 +783,4 @@ function deleteManaged(gameId, modId) {
 const setModEnabled = (gameId, key, enabled) => (key.startsWith("m:") ? setEnabled(gameId, key.slice(2), enabled) : setHandAddedEnabled(gameId, key, enabled));
 const deleteMod = (gameId, key) => (key.startsWith("m:") ? deleteManaged(gameId, key.slice(2)) : removeHandAdded(gameId, key));
 
-module.exports = { install, list, setModEnabled, deleteMod, readState, undoReplace, rememberSource, nexusIdsInName, touch };
+module.exports = { install, list, setModEnabled, deleteMod, readState, undoReplace, rememberSource, nexusIdsInName, touch, sharedFiles, setWinner };

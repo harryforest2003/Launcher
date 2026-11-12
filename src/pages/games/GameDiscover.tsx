@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import IconButton from "../../components/IconButton";
 import { DownloadIcon } from "../../components/Icons";
 import Pagination from "../../components/Pagination";
+import CollectionsList from "./CollectionsList";
 import { countText, errorText, installSummary, MORE_SITES, note, panel, shortDate } from "./shared";
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
   openOnNexus: (item: { modId: string; name: string; page: string }) => Promise<void>;
   goLauncherSettings: () => void;
   goMods: () => void;
+  openCollection: (slug: string) => void;
 };
 
 const PAGE_SIZE = 24;
@@ -33,7 +35,9 @@ const BADGE: Record<string, { label: string; colour: string }> = {
  * game, and CurseForge too for the games it carries (The Sims 4, Stardew Valley).
  * Clicking a card opens the mod's page; the download button installs its main file.
  */
-export default function GameDiscover({ detail, openMod, afterInstall, openOnNexus, goLauncherSettings, goMods }: Props) {
+export default function GameDiscover({ detail, openMod, afterInstall, openOnNexus, goLauncherSettings, goMods, openCollection }: Props) {
+  // Single mods, or Nexus Mods collections (whole lists of mods).
+  const [showing, setShowing] = useState<"mods" | "collections">("mods");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   // Games on both sites start with both, mixed, as Minecraft's Discover does.
@@ -142,6 +146,27 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
   return (
     <div>
       <h1 style={{ color: "#c084fc", marginTop: 0 }}>Discover Mods</h1>
+      {detail.nexus && (
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }} role="tablist">
+          {(["mods", "collections"] as const).map((tab) => (
+            <button
+              key={tab}
+              role="tab"
+              aria-selected={showing === tab}
+              data-testid={`discover-${tab}`}
+              className="sidebar-button"
+              onClick={() => setShowing(tab)}
+              style={{ fontSize: 13, padding: "8px 14px", ...(showing === tab ? { background: "#6d28d9" } : { opacity: 0.7 }) }}
+            >
+              {tab === "mods" ? "Mods" : "Collections"}
+            </button>
+          ))}
+        </div>
+      )}
+      {showing === "collections" ? (
+        <CollectionsList detail={detail} openCollection={openCollection} />
+      ) : (
+      <>
 
       <input
         value={search}
@@ -316,6 +341,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
         <div style={{ marginTop: 16 }}>
           <Pagination page={page} pageCount={pageCount} onChange={goToPage} />
         </div>
+      )}
+      </>
       )}
     </div>
   );

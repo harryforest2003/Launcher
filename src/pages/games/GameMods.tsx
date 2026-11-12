@@ -3,6 +3,8 @@ import { Bug, Folder, Play } from "lucide-react";
 import SearchDropdown from "../../components/SearchDropdown";
 import FinderPanel from "./FinderPanel";
 import LoadOrderNotice from "./LoadOrderNotice";
+import HealthPanel from "./HealthPanel";
+import ConflictsPanel from "./ConflictsPanel";
 import RequirementsPanel from "./RequirementsPanel";
 import SetMenu from "./SetMenu";
 import IconButton from "../../components/IconButton";
@@ -216,9 +218,16 @@ export default function GameMods({
     if (missing.length) onInstalled({ missing }, `Installed ${done.length} of ${fresh.length}.`);
   }
 
-  // Mods The Sims 4 named in what went wrong, matched to the list.
-  const namedMods = (names: string[]) =>
-    mods.filter((mod) => mod.enabled && names.some((name) => name.length > 2 && (mod.name.toLowerCase().includes(name.toLowerCase()) || mod.key.toLowerCase().includes(name.toLowerCase()))));
+  // Mods a crash report or error log named, matched to the list (by name, plugin, file or folder).
+  const namedMods = (names: string[]) => {
+    const simple = (text: string) => text.toLowerCase().replace(/\.(esp|esm|esl|dll|asi|reds|lua|ts4script|package)$/i, "").replace(/[^a-z0-9]+/g, "");
+    const wanted = names.map(simple).filter((name) => name.length > 2);
+    return mods.filter(
+      (mod) =>
+        mod.enabled &&
+        wanted.some((name) => [mod.name, mod.key, mod.where ?? "", ...mod.plugins].map(simple).some((have) => have && (have.includes(name) || (have.length > 3 && name.includes(have)))))
+    );
+  };
 
   const sims = detail.id === "sims4" ? detail.simsOptions : null;
 
@@ -348,20 +357,29 @@ export default function GameMods({
       )}
 
       {detail.problems.length > 0 && (
-        <div style={note("bad")} data-testid="sims-problems">
-          <div style={{ marginBottom: 6 }}>
-            The Sims 4 reported {detail.problems.length === 1 ? "an error" : `${detail.problems.length} errors`} since you last played from here.
-            {" "}A mod {detail.problems.length === 1 ? "it names" : "they name"} is the likeliest cause.
+        <div style={note(detail.problems.some((p) => p.kind === "outdated") ? "warn" : "bad")} data-testid="game-problems">
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+            <span style={{ flex: 1 }}>
+              {detail.problems.some((p) => p.kind === "crash")
+                ? `${detail.name} crashed${detail.problems.length > 1 ? ` (${detail.problems.length} reports)` : ""} since you last played from here.`
+                : `${detail.name} reported ${detail.problems.length === 1 ? "a problem" : `${detail.problems.length} problems`} since you last played from here.`}{" "}
+              {detail.problems.some((p) => p.mods.length) ? "A mod it names is the likeliest cause." : ""}
+            </span>
+            {!finder.active && (
+              <button className="sidebar-button" style={{ ...smallButton, padding: "6px 12px", fontSize: 12, flexShrink: 0 }} onClick={finderApi.intro}>
+                Find the broken mod
+              </button>
+            )}
           </div>
           {detail.problems.slice(0, 4).map((problem) => {
             const matches = namedMods(problem.mods);
             return (
-              <div key={problem.file} style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #4c1d1d" }}>
-                <div style={{ fontSize: 12, color: "#fecaca" }}>
+              <div key={problem.file + problem.time} style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                <div style={{ fontSize: 12, opacity: 0.9 }}>
                   {problem.file} • {shortDate(problem.time)}
                   {problem.mods.length ? ` • names ${problem.mods.join(", ")}` : " • no mod named"}
                 </div>
-                {problem.line && <div style={{ fontSize: 12, color: "#f87171", marginTop: 2, fontFamily: "monospace", wordBreak: "break-word" }}>{problem.line}</div>}
+                {problem.line && <div style={{ fontSize: 12, marginTop: 2, fontFamily: "monospace", wordBreak: "break-word", opacity: 0.85 }}>{problem.line}</div>}
                 {matches.length > 0 && (
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
                     {matches.slice(0, 4).map((mod) => (
@@ -534,6 +552,10 @@ export default function GameMods({
       </div>
 
       <LoadOrderNotice detail={detail} mods={mods} goLoadOrder={goLoadOrder} onGetRequirements={onGetRequirements} />
+
+      <HealthPanel detail={detail} mods={mods} reload={reload} />
+
+      <ConflictsPanel detail={detail} mods={mods} />
 
       <RequirementsPanel requirements={requirements} getting={getting} onGet={onGetRequirements} />
 

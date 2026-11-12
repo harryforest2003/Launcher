@@ -141,4 +141,4 @@ async function restore(game, loc, id) {
     return entry;
 }
 
-module.exports = { savesDir, chooseSavesDir, list, backup, restore, remove };
+module.exports = { savesDir, chooseSavesDir, list, backup, restore, remove, homes };

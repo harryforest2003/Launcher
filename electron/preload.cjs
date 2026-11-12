@@ -290,6 +290,7 @@ const listen = (channel) => (callback) => {
 
 contextBridge.exposeInMainWorld("gamesAPI", {
     list: () => ipcRenderer.invoke("games:list"),
+    status: (id) => ipcRenderer.invoke("games:status", id),
     get: (id) => ipcRenderer.invoke("games:get", id),
 
     mods: (id) => ipcRenderer.invoke("games:mods", id),
@@ -309,6 +310,9 @@ contextBridge.exposeInMainWorld("gamesAPI", {
 
     search: (id, options) => ipcRenderer.invoke("games:search", id, options),
     details: (id, provider, modId) => ipcRenderer.invoke("games:details", id, provider, modId),
+    collections: (id, options) => ipcRenderer.invoke("games:collections", id, options),
+    collection: (id, slug) => ipcRenderer.invoke("games:collection", id, slug),
+    installCollection: (id, slug, fileIds) => ipcRenderer.invoke("games:installCollection", id, slug, fileIds),
     installRemote: (id, provider, modId, fileId, name) => ipcRenderer.invoke("games:installRemote", id, provider, modId, fileId, name),
     checkUpdates: (id) => ipcRenderer.invoke("games:checkUpdates", id),
     update: (id, key) => ipcRenderer.invoke("games:update", id, key),
@@ -346,6 +350,16 @@ contextBridge.exposeInMainWorld("gamesAPI", {
     finderStop: (id, keepOff) => ipcRenderer.invoke("games:finderStop", id, keepOff),
     setAdult: (on) => ipcRenderer.invoke("games:setAdult", on),
     openUrl: (url) => ipcRenderer.invoke("games:openUrl", url),
+
+    conflicts: (id) => ipcRenderer.invoke("games:conflicts", id),
+    chooseConflict: (id, groupId, modId) => ipcRenderer.invoke("games:chooseConflict", id, groupId, modId),
+    health: (id) => ipcRenderer.invoke("games:health", id),
+    healthFix: (id, issueId) => ipcRenderer.invoke("games:healthFix", id, issueId),
+    queue: () => ipcRenderer.invoke("games:queue"),
+    queueAdd: (items) => ipcRenderer.invoke("games:queueAdd", items),
+    queueControl: (action) => ipcRenderer.invoke("games:queueControl", action),
+    onQueue: listen("games:queue"),
+    onModsChanged: listen("games:modsChanged"),
 
     onProgress: listen("games:progress"),
     onNxm: listen("games:nxm"),

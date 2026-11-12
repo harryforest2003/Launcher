@@ -240,6 +240,92 @@ async function byMd5(domain, md5) {
     }
 }
 
+/* ---------------- collections ---------------- */
+
+const COLLECTION_SORTS = {
+    popular: { endorsements: { direction: "DESC" } },
+    downloads: { downloads: { direction: "DESC" } },
+    updated: { updatedAt: { direction: "DESC" } },
+    new: { createdAt: { direction: "DESC" } },
+};
+
+/* A game's collections (curated lists of mods), best first: { total, collections }. */
+async function collections(domain, { query = "", sort = "popular", page = 0, count = 20, adult = false } = {}) {
+    const filter = { gameDomain: [{ value: domain, op: "EQUALS" }] };
+    if (query.trim()) filter.generalSearch = [{ value: query.trim(), op: "WILDCARD" }];
+    if (!adult) filter.adultContent = [{ value: false, op: "EQUALS" }];
+    const data = await gql(
+        `query($f: CollectionsSearchFilter, $s: [CollectionsSearchSort!], $count: Int, $offset: Int) {
+            collectionsV2(filter: $f, sort: $s, count: $count, offset: $offset) {
+                totalCount
+                nodes { slug name summary endorsements totalDownloads updatedAt tileImage { thumbnailUrl(size: med) } user { name } latestPublishedRevision { revisionNumber modCount totalSize adultContent } }
+            }
+        }`,
+        { f: filter, s: [COLLECTION_SORTS[sort] ?? COLLECTION_SORTS.popular], count, offset: page * count }
+    );
+    return {
+        total: data.collectionsV2.totalCount,
+        collections: data.collectionsV2.nodes.map((c) => ({
+            slug: c.slug,
+            name: c.name,
+            summary: c.summary ?? "",
+            picture: c.tileImage?.thumbnailUrl ?? null,
+            author: c.user?.name ?? "",
+            endorsements: c.endorsements ?? 0,
+            downloads: c.totalDownloads ?? 0,
+            updated: c.updatedAt ?? null,
+            mods: c.latestPublishedRevision?.modCount ?? 0,
+            size: Number(c.latestPublishedRevision?.totalSize ?? 0),
+            revision: c.latestPublishedRevision?.revisionNumber ?? null,
+            adult: Boolean(c.latestPublishedRevision?.adultContent),
+            url: `https://www.nexusmods.com/games/${domain}/collections/${c.slug}`,
+        })),
+    };
+}
+
+/* A collection's latest revision: what it is and every file in it, in its order. */
+async function collection(domain, slug) {
+    const data = await gql(
+        `query($slug: String, $domain: String) {
+            collection(slug: $slug, domainName: $domain, viewAdultContent: true) { name summary description endorsements totalDownloads tileImage { url } user { name } }
+            collectionRevision(slug: $slug, domainName: $domain, viewAdultContent: true) {
+                revisionNumber modCount totalSize installationInfo
+                modFiles { fileId optional version file { name modId mod { name } } }
+                externalResources { name resourceUrl optional }
+            }
+        }`,
+        { slug, domain }
+    );
+    const c = data.collection;
+    const r = data.collectionRevision;
+    if (!c || !r) throw new Error("That collection isn't on Nexus Mods any more.");
+    return {
+        slug,
+        name: c.name,
+        summary: c.summary ?? "",
+        description: c.description ?? "",
+        picture: c.tileImage?.url ?? null,
+        author: c.user?.name ?? "",
+        endorsements: c.endorsements ?? 0,
+        downloads: c.totalDownloads ?? 0,
+        revision: r.revisionNumber,
+        size: Number(r.totalSize ?? 0),
+        installationInfo: r.installationInfo ?? "",
+        url: `https://www.nexusmods.com/games/${domain}/collections/${slug}`,
+        files: (r.modFiles ?? [])
+            .filter((m) => m.file?.modId)
+            .map((m) => ({
+                modId: String(m.file.modId),
+                fileId: String(m.fileId),
+                name: m.file.mod?.name ?? m.file.name,
+                fileName: m.file.name,
+                version: m.version ?? "",
+                optional: Boolean(m.optional),
+            })),
+        external: (r.externalResources ?? []).map((e) => ({ name: e.name, url: e.resourceUrl, optional: Boolean(e.optional) })),
+    };
+}
+
 /* A mod's name on Nexus Mods (no key needed). */
 async function modName(domain, modId) {
     const data = await gql(
@@ -280,4 +366,4 @@ const forgetAccount = () => {
     adultInfo = null;
 };
 
-module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml, filesOf, byMd5, updatedThisMonth, modName, adultAccess, gqlQuery: gql, hasKey: () => nexusKey.hasApiKey() };
+module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml, filesOf, byMd5, updatedThisMonth, modName, adultAccess, gqlQuery: gql, collections, collection, hasKey: () => nexusKey.hasApiKey() };
