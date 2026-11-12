@@ -129,7 +129,14 @@ declare global {
         problems: { kind: "missing" | "off" | "after"; master: string }[];
     };
     /* What fixing the load order changes: masters turned on, plugins that can't load turned off, and ones moved after what they need. */
-    type GameLoadOrderFix = { turnOn: { name: string; for: string }[]; turnOff: { name: string; needs: string; missing: boolean }[]; moved: string[] };
+    type GameLoadOrderFix = {
+        turnOn: { name: string; for: string }[];
+        /* Only plugins needing official DLC or Creation Club files the game doesn't have. */
+        turnOff: { name: string; needs: string; missing: boolean; official?: boolean }[];
+        moved: string[];
+        /* Missing masters to get: the Nexus mod that has each, or a search for it. */
+        get: GameRequirement[];
+    };
     /* A plugin LOOT's rules move: its LOOT group, and the plugins its rules say it loads after. */
     type GameLootMove = { name: string; group: string; after: string[] };
     type GameLoadOrder = { fixed: string[]; plugins: GamePlugin[]; fix: GameLoadOrderFix };
@@ -144,6 +151,12 @@ declare global {
         /* Sure enough to fetch without asking. */
         auto: boolean;
         note?: string;
+        /* The exact file to get, when it's known (the one with a missing master). */
+        fileId?: string | null;
+        /* The master file it's got for. */
+        master?: string;
+        /* The game's own DLC or Creation Club: not on Nexus Mods. */
+        official?: boolean;
     };
 
     type GameSet = { id: string; name: string; keys: string[] };

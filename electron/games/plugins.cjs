@@ -220,9 +220,10 @@ function sorted(plugins) {
 
 /*
  * What fixing the load order would change, without changing it:
- * { turnOn: [{ name, for }], turnOff: [{ name, needs, missing }], moved: [names], order: [{ name, active }] }
- *  - a plugin needing a master that isn't installed (or needs one that isn't) is turned
- *    off, as the game won't start with it on;
+ * { turnOn: [{ name, for }], turnOff: [{ name, needs, missing, official }], moved: [names],
+ *   get: [{ master, for }], order: [{ name, active }] }
+ *  - a master that isn't installed is to be got (from Nexus Mods), and what needs it stays
+ *    on; one that comes with the game's DLC or Creation Club has what needs it turned off;
  *  - masters a plugin that's on needs are turned on;
  *  - then each plugin is put after what it needs, changing as little as it can.
  */
@@ -257,14 +258,35 @@ function fixPlan(game, loc) {
     };
     plugins.forEach((plugin) => check(plugin));
 
+    // The file at the end of a chain of masters that isn't installed (C needs B needs Missing.esm -> Missing.esm).
+    const rootMissing = (plugin, seen = new Set()) => {
+        if (seen.has(plugin.name.toLowerCase())) return null;
+        seen.add(plugin.name.toLowerCase());
+        for (const master of plugin.masters) {
+            const m = master.toLowerCase();
+            if (fixedSet.has(m)) continue;
+            if (!exists(m)) return master;
+            const deeper = rootMissing(byLower.get(m), seen);
+            if (deeper) return deeper;
+        }
+        return null;
+    };
+    const official = (name) => game.bethesda.official.includes(name.toLowerCase()) || OFFICIAL_CC.test(name);
+
+    // A missing master is got (it's on Nexus Mods); only one that comes with the game's DLC
+    // or Creation Club, which can't be got that way, has what needs it turned off.
     const active = new Map(plugins.map((p) => [p.name.toLowerCase(), p.active]));
     const turnOff = [];
+    const get = [];
     for (const plugin of plugins) {
         const needs = unavailable.get(plugin.name.toLowerCase());
-        if (plugin.active && needs) {
+        if (!plugin.active || !needs) continue;
+        const root = rootMissing(plugin) ?? needs;
+        if (official(root)) {
             active.set(plugin.name.toLowerCase(), false);
-            // Missing: not installed; otherwise installed but it can't load either.
-            turnOff.push({ name: plugin.name, needs, missing: !exists(needs.toLowerCase()) });
+            turnOff.push({ name: plugin.name, needs: root, missing: true, official: true });
+        } else if (!get.some((g) => g.master.toLowerCase() === root.toLowerCase() && g.for === plugin.name)) {
+            get.push({ master: root, for: plugin.name });
         }
     }
     const turnOn = [];
@@ -283,7 +305,7 @@ function fixPlan(game, loc) {
     const order = sorted(plugins);
     // The ones that loaded before something they need (the rest only shift along).
     const moved = plugins.filter((p) => p.problems.some((x) => x.kind === "after") && active.get(p.name.toLowerCase())).map((p) => p.name);
-    return { turnOn, turnOff, moved, order: order.map((p) => ({ name: p.name, active: active.get(p.name.toLowerCase()) })) };
+    return { turnOn, turnOff, moved, get, order: order.map((p) => ({ name: p.name, active: active.get(p.name.toLowerCase()) })) };
 }
 
 module.exports = { read, activate, remove, fileFor, header, loadOrder, setOrder, sorted, fixPlan };

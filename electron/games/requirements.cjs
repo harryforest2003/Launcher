@@ -7,6 +7,7 @@ const store = require("./store.cjs");
 const nexus = require("./nexus.cjs");
 const plugins = require("./plugins.cjs");
 const { installFromUrl } = require("./remote.cjs");
+const { sourceOf } = require("./fileSource.cjs");
 const curseforge = require("../mods/providers/curseforge.cjs");
 const { curseforgeFetch } = require("../curseforge.cjs");
 
@@ -118,10 +119,11 @@ async function nexusRequirements(domain, modIds) {
     for (let i = 0; i < stale.length; i += 40) {
         const batch = stale.slice(i, i + 40);
         const data = await nexus.gqlQuery(
-            `query($ids: [CompositeDomainWithIdInput!]!) {
-                legacyModsByDomain(ids: $ids) { nodes { modId game { id } modRequirements { nexusRequirements { nodes { modId modName gameId url externalRequirement notes } } } } }
+            // Nexus gives 20 a time unless asked for more.
+            `query($ids: [CompositeDomainWithIdInput!]!, $count: Int) {
+                legacyModsByDomain(ids: $ids, count: $count) { nodes { modId game { id } modRequirements { nexusRequirements { nodes { modId modName gameId url externalRequirement notes } } } } }
             }`,
-            { ids: batch.map((id) => ({ gameDomain: domain, modId: Number(id) })) }
+            { ids: batch.map((id) => ({ gameDomain: domain, modId: Number(id) })), count: batch.length }
         );
         for (const node of data.legacyModsByDomain.nodes) {
             cache[`${domain}/${node.modId}`] = {
@@ -162,6 +164,8 @@ async function missing(gameId) {
         const existing = found.get(entry.key);
         if (existing) {
             if (by && !existing.neededBy.includes(by)) existing.neededBy.push(by);
+            // A master's exact file is better than "the newest main file".
+            if (entry.fileId && !existing.fileId) Object.assign(existing, { fileId: entry.fileId, note: entry.note ?? existing.note });
             return;
         }
         found.set(entry.key, { ...entry, neededBy: by ? [by] : [] });
@@ -270,14 +274,16 @@ async function missing(gameId) {
         }
     }
 
-    // 5. Masters Skyrim and Fallout 4 plugins need.
+    // 5. Masters Skyrim and Fallout 4 plugins need: the Nexus mod that has each, found by what's in mods' files.
     if (game.bethesda && root) {
         const order = plugins.loadOrder(game, loc);
+        const lists = await nexusRequirements(game.nexus, state.mods.map(nexusIdOf).filter(Boolean)).catch(() => ({}));
         for (const plugin of order.plugins) {
             for (const problem of plugin.problems.filter((p) => p.kind === "missing")) {
-                const words = problem.master.replace(/\.(esp|esm|esl)$/i, "");
-                if (metByName(words)) continue;
-                need({ key: `master:${problem.master.toLowerCase()}`, name: problem.master, kind: "master", modId: null, url: `https://www.nexusmods.com/${game.nexus}/search/?gsearch=${encodeURIComponent(words)}`, auto: false, note: "A plugin file other plugins need." }, plugin.name);
+                if (metByName(problem.master.replace(/\.(esp|esm|esl)$/i, ""))) continue;
+                const owner = state.mods.find((mod) => (mod.plugins ?? []).some((p) => p.toLowerCase() === plugin.name.toLowerCase()));
+                const hints = (lists[nexusIdOf(owner ?? {}) ?? ""] ?? []).map((r) => r.modId).filter(Boolean);
+                for (const entry of await forMasters(game, [{ master: problem.master, for: plugin.name }], hints)) need(entry, plugin.name);
             }
         }
     }
@@ -285,9 +291,59 @@ async function missing(gameId) {
     return [...found.values()];
 }
 
-/* What one mod needs that's missing, by its name in the list. */
+/* What one mod needs that's missing, by its name in the list (or its plugins', for a master they need). */
 async function missingFor(gameId, modName) {
-    return (await missing(gameId)).filter((entry) => entry.neededBy.includes(modName));
+    const mod = store.readState(gameId).mods.find((m) => m.name === modName);
+    const names = new Set([modName, ...(mod?.plugins ?? [])]);
+    return (await missing(gameId)).filter((entry) => entry.neededBy.some((by) => names.has(by)));
+}
+
+const OFFICIAL_CC = /^cc[a-z0-9]+\.(esl|esm|esp)$/i;
+
+/*
+ * Requirements for master files plugins need: [{ master, for }] -> entries as missing() gives.
+ * The game's own DLC and Creation Club files can't come from Nexus Mods, so they're said so;
+ * the rest are the Nexus file that has them, or a search when none does.
+ */
+async function forMasters(game, wanted, hints = []) {
+    const out = [];
+    for (const { master, for: plugin } of wanted) {
+        const lower = master.toLowerCase();
+        if (game.bethesda.official.includes(lower) || OFFICIAL_CC.test(master)) {
+            out.push({
+                key: `master:${lower}`,
+                name: master,
+                kind: "master",
+                modId: null,
+                url: null,
+                auto: false,
+                official: true,
+                neededBy: [plugin],
+                note: OFFICIAL_CC.test(master) ? "Creation Club content: get it from the game's Creations menu." : "Part of the game's own DLC or Anniversary Edition, so it isn't on Nexus Mods.",
+            });
+            continue;
+        }
+        let source = null;
+        try {
+            source = await sourceOf(game, master, { hints });
+        } catch {
+            source = null;
+        }
+        const words = master.replace(/\.(esp|esm|esl)$/i, "");
+        out.push(
+            source
+                ? { key: `nexus:${source.modId}`, name: source.modName, kind: "nexus", modId: source.modId, fileId: source.fileId, url: null, auto: true, neededBy: [plugin], note: `Has ${master}${source.fileName ? ` (in "${source.fileName}")` : ""}.` }
+                : { key: `master:${lower}`, name: master, kind: "master", modId: null, url: `https://www.nexusmods.com/${game.nexus}/search/?gsearch=${encodeURIComponent(words)}`, auto: false, neededBy: [plugin], note: "No mod on Nexus Mods was found with it, so this searches for it." }
+        );
+    }
+    // The same mod for more than one master is got once.
+    const merged = new Map();
+    for (const entry of out) {
+        const existing = merged.get(entry.key);
+        if (existing) existing.neededBy = [...new Set([...existing.neededBy, ...entry.neededBy])];
+        else merged.set(entry.key, entry);
+    }
+    return [...merged.values()];
 }
 
 /*
@@ -332,10 +388,14 @@ async function get(gameId, entry, progress) {
     const game = getGame(gameId);
     if (entry.kind === "nexus") {
         const page = `https://www.nexusmods.com/${game.nexus}/mods/${entry.modId}`;
-        if (!nexus.hasKey()) return { needsWebsite: `${page}?tab=files`, modId: entry.modId };
+        // A master's exact file, when it's known which one has it.
+        if (!nexus.hasKey()) return { needsWebsite: entry.fileId ? `${page}?tab=files&file_id=${entry.fileId}&nmm=1` : `${page}?tab=files`, modId: entry.modId };
         const listing = await nexus.filesOf(game.nexus, entry.modId);
         const mains = (listing.files ?? []).filter((f) => f.category_name === "MAIN").sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0));
-        const file = mains[0] ?? (listing.files ?? []).filter((f) => f.category_name !== "ARCHIVED" && f.category_name !== "OLD_VERSION").sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0))[0];
+        const file =
+            (entry.fileId && (listing.files ?? []).find((f) => String(f.file_id) === String(entry.fileId))) ||
+            mains[0] ||
+            (listing.files ?? []).filter((f) => f.category_name !== "ARCHIVED" && f.category_name !== "OLD_VERSION").sort((a, b) => (b.uploaded_timestamp ?? 0) - (a.uploaded_timestamp ?? 0))[0];
         if (!file) return { needsWebsite: `${page}?tab=files`, modId: entry.modId };
         const filePage = `${page}?tab=files&file_id=${file.file_id}&nmm=1`;
         const account = await nexus.whoAmI().catch(() => null);
@@ -360,4 +420,4 @@ async function get(gameId, entry, progress) {
     return { needsWebsite: entry.url, external: true };
 }
 
-module.exports = { missing, missingFor, missingBeforeInstall, get, FRAMEWORKS };
+module.exports = { missing, missingFor, missingBeforeInstall, get, forMasters, FRAMEWORKS };

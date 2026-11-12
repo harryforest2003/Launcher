@@ -79,8 +79,13 @@ const orderNow = (): GameLoadOrder => {
     plugins,
     fix: {
       turnOn: plugins.flatMap((p) => p.problems.filter((x) => x.kind === "off").map((x) => ({ name: x.master, for: p.name }))),
-      turnOff: plugins.flatMap((p) => p.problems.filter((x) => x.kind === "missing").map((x) => ({ name: p.name, needs: x.master, missing: true }))),
+      turnOff: [],
       moved: plugins.filter((p) => p.problems.some((x) => x.kind === "after")).map((p) => p.name),
+      get: plugins.flatMap((p) =>
+        p.problems
+          .filter((x) => x.kind === "missing")
+          .map((x) => ({ key: "nexus:9999", name: "Lighting Overhaul", kind: "nexus" as const, modId: "9999", fileId: "1", url: null, neededBy: [p.name], auto: true, master: x.master }))
+      ),
     },
   };
 };

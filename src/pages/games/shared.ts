@@ -80,13 +80,28 @@ export const smallButton: React.CSSProperties = { padding: "8px 14px", fontSize:
 const list = (items: string[]) => (items.length <= 2 ? items.join(" and ") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`);
 
 /* Whether fixing the load order would change anything. */
-export const fixNeeded = (fix: GameLoadOrderFix | undefined) => Boolean(fix && (fix.turnOn.length || fix.turnOff.length || fix.moved.length));
+export const fixNeeded = (fix: GameLoadOrderFix | undefined) => Boolean(fix && (fix.turnOn.length || fix.turnOff.length || fix.moved.length || fix.get?.length));
 
 /* What fixing the load order does (or did), in a sentence. */
 export function fixSentence(fix: GameLoadOrderFix, done = false) {
   const parts: string[] = [];
   if (fix.turnOn.length) parts.push(`${done ? "turned on" : "turns on"} ${list(fix.turnOn.map((t) => `${t.name} (${t.for} needs it)`))}`);
-  if (fix.turnOff.length) parts.push(`${done ? "turned off" : "turns off"} ${list(fix.turnOff.map((t) => `${t.name} (it needs ${t.needs}, which ${t.missing ? "isn't installed" : "can't load"})`))}`);
+  if (fix.get?.length)
+    parts.push(
+      `${done ? "is getting" : "gets"} ${list(
+        fix.get.map((g) =>
+          g.kind === "nexus"
+            ? `${g.name} from Nexus Mods (it has ${g.master}, which ${list(g.neededBy)} ${g.neededBy.length === 1 ? "needs" : "need"})`
+            : `a search on Nexus Mods for ${g.master ?? g.name}`
+        )
+      )}`
+    );
+  if (fix.turnOff.length)
+    parts.push(
+      `${done ? "turned off" : "turns off"} ${list(
+        fix.turnOff.map((t) => `${t.name} (it needs ${t.needs}${t.official ? ", which comes with the game's DLC or Creation Club" : `, which ${t.missing ? "isn't installed" : "can't load"}`})`)
+      )}`
+    );
   if (fix.moved.length) parts.push(`${done ? "moved" : "moves"} ${list(fix.moved)} after what ${fix.moved.length === 1 ? "it needs" : "they need"}`);
   const sentence = list(parts);
   return sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";

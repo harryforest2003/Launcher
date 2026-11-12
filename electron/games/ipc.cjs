@@ -307,31 +307,51 @@ function registerGamesIpc() {
     });
 
     // Skyrim's and Fallout 4's load order.
-    // The order, and what fixing it would change (nothing, when it's fine).
-    const withFix = (game, loc) => {
+    // The order, and what fixing it would change (nothing, when it's fine). Missing masters
+    // come with the Nexus mod that has each.
+    const masterEntries = async (game, plan) => {
+        const state = store.readState(game.id);
+        const entries = [];
+        for (const wanted of plan.get) {
+            const owner = state.mods.find((mod) => (mod.plugins ?? []).some((p) => p.toLowerCase() === wanted.for.toLowerCase()));
+            const ownerId = owner?.source?.provider === "nexus" ? owner.source.modId : owner?.source?.nexus?.modId;
+            let hints = [];
+            if (ownerId) hints = ((await requirements.missingBeforeInstall(game.id, String(ownerId)).catch(() => [])) ?? []).map((r) => r.modId).filter(Boolean);
+            for (const entry of await requirements.forMasters(game, [wanted], hints)) {
+                // One mod needed by several plugins is got once.
+                const same = entries.find((e) => e.key === entry.key);
+                if (same) same.neededBy = [...new Set([...same.neededBy, ...entry.neededBy])];
+                else entries.push({ ...entry, master: wanted.master });
+            }
+        }
+        return remember(game.id, entries);
+    };
+    const withFix = async (game, loc) => {
         const order = plugins.loadOrder(game, loc);
         const plan = plugins.fixPlan(game, loc);
-        return { ...order, fix: { turnOn: plan.turnOn, turnOff: plan.turnOff, moved: plan.moved } };
+        return { ...order, fix: { turnOn: plan.turnOn, turnOff: plan.turnOff, moved: plan.moved, get: await masterEntries(game, plan) } };
     };
     ipcMain.handle("games:loadOrder", (_e, id) => {
         const game = need(id);
         if (!game.bethesda) throw new Error(`${game.name} has no load order to set.`);
         return withFix(game, detect.locate(id));
     });
-    ipcMain.handle("games:fixLoadOrder", (_e, id) => {
+    // Fixes what can be fixed here, and hands back the masters to get (the page gets them, as Update all does).
+    ipcMain.handle("games:fixLoadOrder", async (_e, id) => {
         const game = need(id);
         const loc = detect.locate(id);
         const plan = plugins.fixPlan(game, loc);
+        const get = await masterEntries(game, plan);
         plugins.setOrder(game, loc, plan.order);
         store.touch(id);
-        return { ...withFix(game, loc), done: { turnOn: plan.turnOn, turnOff: plan.turnOff, moved: plan.moved } };
+        return { ...(await withFix(game, loc)), done: { turnOn: plan.turnOn, turnOff: plan.turnOff, moved: plan.moved, get } };
     });
-    ipcMain.handle("games:setLoadOrder", (_e, id, entries) => {
+    ipcMain.handle("games:setLoadOrder", async (_e, id, entries) => {
         const game = need(id);
         const loc = detect.locate(id);
         plugins.setOrder(game, loc, (entries ?? []).map((e) => ({ name: String(e.name), active: e.active === true })));
         store.touch(id);
-        return withFix(game, loc);
+        return await withFix(game, loc);
     });
 
     // Sorting by LOOT's community masterlist: what it'd move, and doing it (with the order before, for Undo).
@@ -348,7 +368,7 @@ function registerGamesIpc() {
         const planned = await loot.plan(game, loc);
         plugins.setOrder(game, loc, planned.order);
         store.touch(id);
-        return { ...withFix(game, loc), previous, moved: planned.moved };
+        return { ...(await withFix(game, loc)), previous, moved: planned.moved };
     });
 
     // What mods need that isn't installed, and getting it.

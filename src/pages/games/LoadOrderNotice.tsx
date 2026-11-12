@@ -7,10 +7,12 @@ type Props = {
   /* The mods as listed: when they change, the load order is looked at again. */
   mods: GameMod[];
   goLoadOrder: () => void;
+  /* Gets missing masters, as Update all gets updates. */
+  onGetRequirements: (entries: GameRequirement[]) => void;
 };
 
 /* On the Mods page of Skyrim and Fallout 4: the load order's problems, and fixing them in one go. */
-export default function LoadOrderNotice({ detail, mods, goLoadOrder }: Props) {
+export default function LoadOrderNotice({ detail, mods, goLoadOrder, onGetRequirements }: Props) {
   const [order, setOrder] = useState<GameLoadOrder | null>(null);
   const [said, setSaid] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
 
@@ -31,6 +33,7 @@ export default function LoadOrderNotice({ detail, mods, goLoadOrder }: Props) {
       const result = await window.gamesAPI.fixLoadOrder(detail.id);
       setOrder(result);
       setSaid({ tone: "good", text: `Load order fixed: ${fixSentence(result.done, true).replace(/^./, (c) => c.toLowerCase())}` });
+      if (result.done.get.length) onGetRequirements(result.done.get);
     } catch (err) {
       setSaid({ tone: "bad", text: errorText(err) });
     }

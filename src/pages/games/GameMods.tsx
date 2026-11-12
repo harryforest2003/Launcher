@@ -533,7 +533,7 @@ export default function GameMods({
         )}
       </div>
 
-      <LoadOrderNotice detail={detail} mods={mods} goLoadOrder={goLoadOrder} />
+      <LoadOrderNotice detail={detail} mods={mods} goLoadOrder={goLoadOrder} onGetRequirements={onGetRequirements} />
 
       <RequirementsPanel requirements={requirements} getting={getting} onGet={onGetRequirements} />
 

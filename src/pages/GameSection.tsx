@@ -511,7 +511,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                 />
               )}
 
-              {page === "loadorder" && !openMod && <LoadOrderPage detail={detail} />}
+              {page === "loadorder" && !openMod && <LoadOrderPage detail={detail} onGetRequirements={(entries) => getRequirements(entries)} />}
 
               {page === "settings" && !openMod && <GameSettings detail={detail} reload={reload} goLauncherSettings={onLauncherSettings} />}
             </>

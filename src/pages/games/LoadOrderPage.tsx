@@ -4,7 +4,11 @@ import IconButton from "../../components/IconButton";
 import Toggle from "../../components/Toggle";
 import { errorText, fixNeeded, fixSentence, note, panel, smallButton } from "./shared";
 
-type Props = { detail: GameDetail };
+type Props = {
+  detail: GameDetail;
+  /* Gets missing masters, as Update all gets updates. */
+  onGetRequirements: (entries: GameRequirement[]) => void;
+};
 
 const PROBLEM: Record<GamePlugin["problems"][number]["kind"], (master: string) => string> = {
   missing: (master) => `Needs ${master}, which isn't installed`,
@@ -17,7 +21,7 @@ const PROBLEM: Record<GamePlugin["problems"][number]["kind"], (master: string) =
  * use the arrows); anything that needs a plugin loaded before it, turned on, or installed
  * says so, and Fix order puts each after what it needs, changing as little as it can.
  */
-export default function LoadOrderPage({ detail }: Props) {
+export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
   const [order, setOrder] = useState<GameLoadOrder | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
@@ -94,6 +98,7 @@ export default function LoadOrderPage({ detail }: Props) {
       setOrder(result);
       setFixedNow(fixNeeded(result.done) ? `Fixed: ${fixSentence(result.done, true)}` : null);
       setError(null);
+      if (result.done.get.length) onGetRequirements(result.done.get);
     } catch (err) {
       setError(errorText(err));
     }
