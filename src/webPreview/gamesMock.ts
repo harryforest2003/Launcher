@@ -94,6 +94,61 @@ const backups: GameSaveBackup[] = [
   { id: "b2", at: daysAgo(1), reason: "Before playing with changed mods", size: 48_000_000, files: 12, from: "Saves" },
   { id: "b1", at: daysAgo(9), reason: "Before the first play after a game update", size: 46_500_000, files: 11, from: "Saves" },
 ];
+const hiddenClashes = new Set<string>();
+const CLASHES: Partial<Record<GameId, GameClash[]>> = {
+  sims4: [
+    { id: "tuning|a|b", kind: "tuning", mods: [{ name: "Better Traits", key: "h:docs:Mods/BetterTraits.package" }, { name: "Better Traits (copy)", key: "h:docs:Mods/Old/BetterTraits.package" }], count: 282, examples: ["trait_Active", "trait_Ambitious", "trait_Cheerful"], severity: "error" },
+    { id: "item|c|d", kind: "item", mods: [{ name: "Tallulah Dress", key: "h:docs:Mods/CAS/Tallulah.package" }, { name: "Tallulah Dress v2", key: "h:docs:Mods/Tallulah_v2.package" }], count: 10, examples: [], severity: "warn" },
+  ],
+  skyrimse: [
+    { id: "records|Bandit Overhaul.esp>Prettier NPCs.esp", kind: "records", mods: [{ name: "Bandit Overhaul.esp", key: "p:game:Data/Bandit Overhaul.esp" }, { name: "Prettier NPCs.esp", key: "p:game:Data/Prettier NPCs.esp" }], winner: "Prettier NPCs.esp", count: 37, examples: ["NPC_ ×31", "OTFT ×6"], severity: "warn" },
+  ],
+  cyberpunk2077: [
+    { id: "redscript|e|f", kind: "redscript", mods: [{ name: "Better Death", key: "h:game:r6/scripts/BetterDeath" }, { name: "No Death Screen", key: "h:game:r6/scripts/NoDeathScreen" }], count: 1, examples: ["PlayerPuppet.OnDeath"], severity: "error" },
+  ],
+};
+const clashesFor = (id: GameId): GameClash[] => (CLASHES[id] ?? []).map((c) => ({ ...c, hidden: hiddenClashes.has(c.id) }));
+
+const picture = (colour: string, shape: string) =>
+  `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#ece8f4"/>${shape.replace(/C/g, colour)}</svg>`)}`;
+const DRESS = '<path d="M40 18h20l-4 18 16 50H28l16-50z" fill="C"/>';
+const SOFA = '<rect x="14" y="44" width="72" height="26" rx="8" fill="C"/><rect x="20" y="30" width="60" height="20" rx="6" fill="C" opacity=".8"/>';
+const HAIR = '<circle cx="50" cy="48" r="26" fill="C"/><circle cx="50" cy="56" r="16" fill="#f3d1b0"/>';
+const CC: GameCC[] = [
+  ["CAS/Tallulah Dress.package", "Create a Sim", 10, true],
+  ["CAS/Hair/Wavy Bob.package", "Create a Sim", 24, true],
+  ["CAS/Hair/Long Braids.package", "Create a Sim", 18, true],
+  ["CAS/Sneakers.package", "Create a Sim", 6, false],
+  ["Build/Velvet Sofa.package", "Build/Buy", 3, true],
+  ["Build/Garden Set.package", "Build/Buy", 12, true],
+  ["Build/Kitchen Island.package", "Build/Buy", 1, true],
+  ["Gameplay/Better Traits.package", "Gameplay", 0, true],
+  ["Gameplay/Realistic Careers.package", "Gameplay", 0, true],
+  ["MCCC/mc_cmd_center.ts4script", "Script", 0, true],
+  ["WickedWhims.ts4script", "Script", 0, true],
+  ["Misc/Loading Screen.package", "Other", 0, true],
+].map(([rel, category, items, enabled]) => ({
+  rel: String(rel),
+  key: `h:docs:Mods/${rel}`,
+  name: String(rel).split("/").pop()!.replace(/\.(package|ts4script)$/, ""),
+  folder: String(rel).includes("/") ? String(rel).split("/").slice(0, -1).join("/") : "",
+  category: category as GameCC["category"],
+  items: Number(items),
+  size: 180_000 + String(rel).length * 91_000,
+  enabled: Boolean(enabled),
+  picture: category === "Create a Sim" || category === "Build/Buy",
+  owner: rel === "WickedWhims.ts4script" ? "WickedWhims" : null,
+  broken: rel === "Misc/Loading Screen.package",
+}));
+const CC_PICTURES: Record<string, string> = {
+  "CAS/Tallulah Dress.package": picture("#7c3aed", DRESS),
+  "CAS/Hair/Wavy Bob.package": picture("#92400e", HAIR),
+  "CAS/Hair/Long Braids.package": picture("#1f2937", HAIR),
+  "CAS/Sneakers.package": picture("#dc2626", '<rect x="18" y="52" width="64" height="18" rx="9" fill="C"/>'),
+  "Build/Velvet Sofa.package": picture("#047857", SOFA),
+  "Build/Garden Set.package": picture("#65a30d", '<circle cx="35" cy="45" r="16" fill="C"/><circle cx="62" cy="40" r="20" fill="C"/><rect x="30" y="60" width="40" height="20" fill="#78350f"/>'),
+};
+
 const setsByGame: Partial<Record<GameId, GameSet[]>> = { sims4: [{ id: "s1", name: "Gameplay", keys: ["m:mccc", "m:ww"] }] };
 let finderState: { phase: GameFinder["phase"]; suspects: string[]; testing: string[]; round: number } | null = null;
 const finderStatus = (id: GameId): GameFinder => {
@@ -199,7 +254,7 @@ export const gamesBridge = {
   }),
   installCollection: async (_id: GameId, _slug: string, fileIds: string[]) => ({ added: fileIds.length, external: [] }),
   status: async (id: GameId): Promise<GameStatus> =>
-    id === "sims4" ? { updates: 2, requirements: 1, loadOrder: 0, crashes: 1, health: 0 } : id === "skyrimse" ? { updates: 0, requirements: 2, loadOrder: 2, crashes: 0, health: 1 } : { updates: 0, requirements: 0, loadOrder: 0, crashes: 0, health: 0 },
+    id === "sims4" ? { updates: 2, requirements: 1, loadOrder: 0, crashes: 1, health: 0, clashes: clashesFor(id).filter((c) => c.severity === "error" && !c.hidden).length } : id === "skyrimse" ? { updates: 0, requirements: 2, loadOrder: 2, crashes: 0, health: 1 } : { updates: 0, requirements: 0, loadOrder: 0, crashes: 0, health: 0 },
   health: async (id: GameId): Promise<GameHealthIssue[]> =>
     id === "skyrimse" ? [{ id: "orphan-archives", severity: "warn", title: "1 archive won't load", detail: "The game only loads an archive when a plugin of the same name does.", files: ["Data/LonelyTextures.bsa"], fix: null }] : [],
   healthFix: async () => ({ done: "Fixed." }),
@@ -208,6 +263,19 @@ export const gamesBridge = {
       ? [{ id: "m:skyui+m:weather", mods: [{ id: "m:skyui", name: "SkyUI" }, { id: "m:weather", name: "Obsidian Weathers" }], files: ["Data/interface/skyui/config.txt"], live: "m:weather", suggested: "m:weather", reason: "Updated most recently (3 Nov 2026)", chosen: false }]
       : [],
   chooseConflict: async () => [],
+  clashes: async (id: GameId) => clashesFor(id),
+  hideClash: async (id: GameId, clashId: string, hidden: boolean) => {
+    if (hidden) hiddenClashes.add(clashId);
+    else hiddenClashes.clear();
+    return clashesFor(id);
+  },
+  clashLoadAfter: async (id: GameId, name: string) => {
+    hiddenClashes.add(clashesFor(id).find((c) => c.kind === "records" && c.mods.some((m) => m.name === name))?.id ?? "");
+    return clashesFor(id);
+  },
+  ccList: async () => CC.map((item) => ({ ...item })),
+  ccPictures: async (rels: string[]) => Object.fromEntries(rels.map((rel) => [rel, CC_PICTURES[rel] ? { src: CC_PICTURES[rel], alpha: null } : null])),
+  ccReveal: async () => {},
   get: async (id: GameId): Promise<GameDetail> => {
     const game = summary(need(id));
     return {

@@ -24,7 +24,7 @@ declare global {
         loadOrder?: boolean;
     };
 
-    type GameStatus = { updates: number; requirements: number; loadOrder: number; crashes: number; health: number };
+    type GameStatus = { updates: number; requirements: number; loadOrder: number; crashes: number; health: number; clashes?: number };
 
     type GameDetail = GameSummary & {
         platform: string;
@@ -162,6 +162,23 @@ declare global {
     };
 
     type GameSet = { id: string; name: string; keys: string[] };
+
+    /* Mods changing the same thing inside the game: tuning, a CC item, script modules (Sims), records (Skyrim, Fallout 4), redscript functions (Cyberpunk), loaded assets (Stardew). */
+    type GameClash = {
+        id: string;
+        kind: "tuning" | "item" | "script" | "records" | "redscript" | "load";
+        mods: { name: string; key: string }[];
+        count: number;
+        examples: string[];
+        severity: "error" | "warn";
+        /* Skyrim and Fallout 4: the plugin whose changes the game uses. */
+        winner?: string;
+        /* Marked fine: not shown or counted. */
+        hidden?: boolean;
+    };
+
+    /* A Sims 4 package or script mod, for the CC browser. */
+    type GameCC = { rel: string; key: string; name: string; folder: string; category: "Create a Sim" | "Build/Buy" | "Gameplay" | "Script" | "Other"; items: number; size: number; enabled: boolean; picture: boolean; owner: string | null; broken: boolean };
 
     /* Mods that have the same files, whose copies are used (live; "mixed" when it differs file to file), and which the rules pick. */
     type GameConflict = { id: string; mods: { id: string; name: string }[]; files: string[]; live: string; suggested: string; reason: string; chosen: boolean };
@@ -347,6 +364,16 @@ declare global {
             finderStop: (id: GameId, keepOff?: string | null) => Promise<GameFinder>;
             openUrl: (url: string) => Promise<void>;
 
+            clashes: (id: GameId) => Promise<GameClash[]>;
+            /* Marks a conflict fine (or not; "*" with false shows them all again). */
+            hideClash: (id: GameId, clashId: string, hidden: boolean) => Promise<GameClash[]>;
+            /* Skyrim and Fallout 4: loads one plugin after another, so its changes win. */
+            clashLoadAfter: (id: GameId, name: string, after: string) => Promise<GameClash[]>;
+            ccList: () => Promise<GameCC[]>;
+            /* Pictures by rel path: the picture, and its transparency when it has one. */
+            ccPictures: (rels: string[]) => Promise<Record<string, { src: string; alpha: string | null } | null>>;
+            /* Shows a CC file in its folder. */
+            ccReveal: (rel: string) => Promise<void>;
             conflicts: (id: GameId) => Promise<GameConflict[]>;
             /* modId null: back to the rules' choice. */
             chooseConflict: (id: GameId, groupId: string, modId: string | null) => Promise<GameConflict[]>;

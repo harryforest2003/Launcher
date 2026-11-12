@@ -5,6 +5,7 @@ import FinderPanel from "./FinderPanel";
 import LoadOrderNotice from "./LoadOrderNotice";
 import HealthPanel from "./HealthPanel";
 import ConflictsPanel from "./ConflictsPanel";
+import ClashesPanel from "./ClashesPanel";
 import RequirementsPanel from "./RequirementsPanel";
 import SetMenu from "./SetMenu";
 import IconButton from "../../components/IconButton";
@@ -556,6 +557,8 @@ export default function GameMods({
       <HealthPanel detail={detail} mods={mods} reload={reload} />
 
       <ConflictsPanel detail={detail} mods={mods} />
+
+      <ClashesPanel detail={detail} mods={mods} reload={reload} />
 
       <RequirementsPanel requirements={requirements} getting={getting} onGet={onGetRequirements} />
 

@@ -7,6 +7,7 @@ import CollectionPage from "./games/CollectionPage";
 import GameMods from "./games/GameMods";
 import GameSettings from "./games/GameSettings";
 import LoadOrderPage from "./games/LoadOrderPage";
+import CCBrowser from "./games/CCBrowser";
 import PlayPrompt from "./games/PlayPrompt";
 import { errorText, installSummary, note } from "./games/shared";
 
@@ -316,6 +317,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
       <GameSidebar
         game={detail?.name ?? ""}
         hasLoadOrder={Boolean(detail?.loadOrder)}
+        hasCC={gameId === "sims4"}
         current={deeper ? null : page}
         go={go}
         showBack={deeper}
@@ -406,6 +408,8 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                   goLauncherSettings={onLauncherSettings}
                 />
               )}
+
+              {page === "cc" && !openMod && <CCBrowser detail={detail} reload={reload} />}
 
               {page === "loadorder" && !openMod && <LoadOrderPage detail={detail} onGetRequirements={(entries) => getRequirements(entries)} />}
 

@@ -18,6 +18,7 @@ function needsLooking(status: GameStatus | undefined) {
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   return [
     status.crashes ? (status.crashes === 1 ? "crashed" : plural(status.crashes, "crash report", "crash reports")) : "",
+    status.clashes ? plural(status.clashes, "mod conflict", "mod conflicts") : "",
     status.loadOrder ? "load order problem" : "",
     status.health ? plural(status.health, "mod folder problem", "mod folder problems") : "",
     status.requirements ? `${status.requirements} missing` : "",

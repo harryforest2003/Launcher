@@ -351,6 +351,12 @@ contextBridge.exposeInMainWorld("gamesAPI", {
     setAdult: (on) => ipcRenderer.invoke("games:setAdult", on),
     openUrl: (url) => ipcRenderer.invoke("games:openUrl", url),
 
+    clashes: (id) => ipcRenderer.invoke("games:clashes", id),
+    hideClash: (id, clashId, hidden) => ipcRenderer.invoke("games:hideClash", id, clashId, hidden),
+    clashLoadAfter: (id, name, after) => ipcRenderer.invoke("games:clashLoadAfter", id, name, after),
+    ccList: () => ipcRenderer.invoke("games:ccList"),
+    ccPictures: (rels) => ipcRenderer.invoke("games:ccPictures", rels),
+    ccReveal: (rel) => ipcRenderer.invoke("games:ccReveal", rel),
     conflicts: (id) => ipcRenderer.invoke("games:conflicts", id),
     chooseConflict: (id, groupId, modId) => ipcRenderer.invoke("games:chooseConflict", id, groupId, modId),
     health: (id) => ipcRenderer.invoke("games:health", id),

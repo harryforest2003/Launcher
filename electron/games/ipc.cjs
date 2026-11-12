@@ -19,6 +19,8 @@ const queue = require("./queue.cjs");
 const crashes = require("./crashes.cjs");
 const health = require("./health.cjs");
 const conflicts = require("./conflicts.cjs");
+const clashes = require("./clashes.cjs");
+const simsIndex = require("./simsIndex.cjs");
 const curseforge = require("../mods/providers/curseforge.cjs");
 const { curseforgeFetch } = require("../curseforge.cjs");
 
@@ -266,7 +268,7 @@ function registerGamesIpc() {
         const loc = detect.locate(id);
         const cached = statusCache.get(id);
         if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.value;
-        const value = { updates: 0, requirements: 0, loadOrder: 0, crashes: 0, health: 0 };
+        const value = { updates: 0, requirements: 0, loadOrder: 0, crashes: 0, health: 0, clashes: 0 };
         if (!loc.found) return value;
         const played = protect.lastPlayed(id);
         const hasMods = store.readState(id).mods.length > 0;
@@ -280,6 +282,7 @@ function registerGamesIpc() {
             })().catch(() => {}),
             (async () => (value.crashes = crashes.reports(game, loc, played?.at ? played.at - 60 * 60 * 1000 : Date.now() - 3 * 24 * 60 * 60 * 1000).length))(),
             (async () => (value.health = health.check(id).length))(),
+            clashes.check(id).then((found) => (value.clashes = found.filter((c) => c.severity === "error" && !c.hidden).length)).catch(() => {}),
         ]);
         statusCache.set(id, { at: Date.now(), value });
         return value;
@@ -320,6 +323,25 @@ function registerGamesIpc() {
         if (enabled === true && String(key).startsWith("m:")) await conflicts.resolve(id).catch(() => 0);
         return result;
     });
+    // Mods changing the same thing inside the game (tuning, records, functions, assets).
+    ipcMain.handle("games:clashes", (_e, id) => clashes.check(need(id).id));
+    ipcMain.handle("games:hideClash", (_e, id, clashId, hidden) => {
+        statusCache.delete(id);
+        return clashes.hide(need(id).id, String(clashId), hidden === true);
+    });
+    ipcMain.handle("games:clashLoadAfter", async (_e, id, name, after) => {
+        clashes.loadAfter(need(id).id, String(name), String(after));
+        statusCache.delete(id);
+        return clashes.check(id);
+    });
+    // The Sims 4's CC, with pictures.
+    ipcMain.handle("games:ccList", () => simsIndex.catalogue("sims4"));
+    ipcMain.handle("games:ccReveal", (_e, rel) => {
+        const file = simsIndex.files("sims4").find((f) => f.rel === String(rel));
+        if (!file) throw new Error("That file isn't there any more.");
+        shell.showItemInFolder(file.abs);
+    });
+    ipcMain.handle("games:ccPictures", (_e, rels) => simsIndex.pictures("sims4", (Array.isArray(rels) ? rels : []).map(String).slice(0, 80)));
     ipcMain.handle("games:conflicts", async (_e, id) => (await conflicts.list(need(id).id)).map((group) => ({ ...group, keys: undefined })));
     ipcMain.handle("games:chooseConflict", async (_e, id, groupId, modId) => {
         await conflicts.choose(need(id).id, String(groupId), modId ? String(modId) : null);
