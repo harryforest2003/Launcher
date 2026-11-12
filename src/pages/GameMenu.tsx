@@ -126,12 +126,11 @@ function HomeScreen({ onMinecraft, onGame, onModManager, onSettings }: Props) {
                     onGame(game.id);
                   }
                 }}
-                style={{ cursor: "pointer", position: "relative", overflow: "hidden" }}
+                style={{ cursor: "pointer" }}
               >
-                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 5, background: game.colour }} />
                 <h3 style={{ color: "#c084fc", marginBottom: "15px", fontSize: "1.35rem" }}>{game.name}</h3>
                 <p style={{ color: "#aaa", lineHeight: "1.6" }}>{game.tagline}. Play it, turn mods on and off, and find more.</p>
-                <p style={{ color: game.updated ? "#fcd34d" : game.found ? "#86efac" : "#6b7280", fontSize: 12, marginTop: 10, fontFamily: "system-ui, sans-serif" }}>
+                <p style={{ color: game.updated ? "#fcd34d" : "#6b7280", fontSize: 12, marginTop: 10, fontFamily: "system-ui, sans-serif" }}>
                   {gameStatus(game, navigator.platform)}
                 </p>
               </div>

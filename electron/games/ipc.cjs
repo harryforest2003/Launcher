@@ -1,5 +1,3 @@
-const fs = require("fs");
-const path = require("path");
 const { BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { GAMES, getGame } = require("./registry.cjs");
 const detect = require("./detect.cjs");
@@ -8,8 +6,8 @@ const protect = require("./protect.cjs");
 const downloads = require("./downloads.cjs");
 const nexus = require("./nexus.cjs");
 const { launch } = require("./launch.cjs");
-const { tempDir } = require("./archive.cjs");
-const { downloadFile } = require("../minecraft/net.cjs");
+const { installFromUrl } = require("./remote.cjs");
+const updates = require("./updates.cjs");
 const curseforge = require("../mods/providers/curseforge.cjs");
 const { curseforgeFetch } = require("../curseforge.cjs");
 
@@ -62,26 +60,6 @@ function summary(game) {
     };
 }
 
-/* Downloads a mod's file to a temporary folder, named as the site names it. */
-async function fetchToTemp(url, fallbackName) {
-    const dir = tempDir("unity-game-download-");
-    const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || fallbackName).replace(/[/\\:*?"<>|]/g, "_") || fallbackName;
-    const file = path.join(dir, name);
-    await downloadFile(url, file);
-    return { file, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
-}
-
-async function installFromUrl(game, url, meta, progress) {
-    progress?.(`Downloading ${meta.name}`);
-    const fetched = await fetchToTemp(url, `${meta.name}.zip`);
-    try {
-        progress?.(`Installing ${meta.name}`);
-        return await store.install(game.id, fetched.file, meta);
-    } finally {
-        fetched.cleanup();
-    }
-}
-
 /* A Nexus "Mod Manager Download" link (nxm://), from the website's button. */
 async function handleNxm(link) {
     const parsed = nexus.parseNxm(link);
@@ -93,16 +71,50 @@ async function handleNxm(link) {
     }
     let name = `Nexus mod ${parsed.modId}`;
     try {
-        send("games:nxm", { status: "started", gameId: game.id, name });
+        send("games:nxm", { status: "started", gameId: game.id, modId: parsed.modId, name });
         name = (await nexus.details(parsed.domain, parsed.modId).catch(() => null))?.name ?? name;
         const url = await nexus.downloadUrl(parsed.domain, parsed.modId, parsed.fileId, parsed);
         const result = await installFromUrl(game, url, { name, source: { provider: "nexus", modId: parsed.modId, fileId: parsed.fileId } }, (detail) =>
-            send("games:nxm", { status: "working", gameId: game.id, name, detail })
+            send("games:nxm", { status: "working", gameId: game.id, modId: parsed.modId, name, detail })
         );
-        send("games:nxm", { status: "installed", gameId: game.id, name, result });
+        send("games:nxm", { status: "installed", gameId: game.id, modId: parsed.modId, name, result });
     } catch (err) {
-        send("games:nxm", { status: "failed", gameId: game.id, name, error: err.message, notes: err.notes ?? [] });
+        send("games:nxm", { status: "failed", gameId: game.id, modId: parsed.modId, name, error: err.message, notes: err.notes ?? [] });
     }
+}
+
+/* A page of CurseForge's mods for a game. */
+async function searchCurseForge(game, { query, sort, page, size }) {
+    const params = new URLSearchParams({
+        gameId: String(game.curseforge),
+        searchFilter: query,
+        pageSize: String(size),
+        // CurseForge reaches the first 10,000 results only.
+        index: String(Math.min(page * size, 10000 - size)),
+        sortField: sort === "updated" ? "3" : sort === "new" ? "11" : sort === "downloads" ? "6" : "2",
+        sortOrder: "desc",
+    });
+    const res = await curseforgeFetch(`/mods/search?${params}`);
+    if (!res.ok) throw new Error(`CurseForge search failed (HTTP ${res.status}).`);
+    const json = await res.json();
+    return {
+        total: json.pagination?.totalCount ?? 0,
+        mods: (json.data ?? []).map((mod) => ({
+            provider: "curseforge",
+            id: String(mod.id),
+            name: mod.name,
+            summary: mod.summary ?? "",
+            picture: mod.logo?.thumbnailUrl ?? mod.logo?.url ?? null,
+            author: (mod.authors ?? []).map((a) => a.name).join(", "),
+            downloads: mod.downloadCount ?? 0,
+            endorsements: null,
+            version: "",
+            updated: mod.dateModified ?? null,
+            adult: false,
+            url: mod.links?.websiteUrl ?? null,
+            installable: mod.allowModDistribution !== false,
+        })),
+    };
 }
 
 function registerGamesIpc() {
@@ -197,44 +209,41 @@ function registerGamesIpc() {
 
     ipcMain.handle("games:setSimsOptions", (_e, options) => protect.setSimsOptions(detect.locate("sims4"), { mods: options?.mods, scripts: options?.scripts }));
 
+    // One site, or (for a game on both) Nexus Mods and CurseForge together, as Minecraft's Discover mixes its sources.
     ipcMain.handle("games:search", async (_e, id, options) => {
         const game = need(id);
-        const provider = options?.provider === "curseforge" && game.curseforge ? "curseforge" : "nexus";
-        if (provider === "curseforge") {
-            const page = Math.max(0, Number(options?.page) || 0);
-            const params = new URLSearchParams({
-                gameId: String(game.curseforge),
-                searchFilter: String(options?.query ?? ""),
-                pageSize: "24",
-                // CurseForge reaches the first 10,000 results only.
-                index: String(Math.min(page * 24, 10000 - 24)),
-                sortField: options?.sort === "updated" ? "3" : options?.sort === "new" ? "11" : options?.sort === "downloads" ? "6" : "2",
-                sortOrder: "desc",
-            });
-            const res = await curseforgeFetch(`/mods/search?${params}`);
-            if (!res.ok) throw new Error(`CurseForge search failed (HTTP ${res.status}).`);
-            const json = await res.json();
-            return {
-                total: Math.min(json.pagination?.totalCount ?? 0, 10000),
-                mods: (json.data ?? []).map((mod) => ({
-                    provider,
-                    id: String(mod.id),
-                    name: mod.name,
-                    summary: mod.summary ?? "",
-                    picture: mod.logo?.thumbnailUrl ?? mod.logo?.url ?? null,
-                    author: (mod.authors ?? []).map((a) => a.name).join(", "),
-                    downloads: mod.downloadCount ?? 0,
-                    endorsements: null,
-                    version: "",
-                    updated: mod.dateModified ?? null,
-                    adult: false,
-                    url: mod.links?.websiteUrl ?? null,
-                    installable: mod.allowModDistribution !== false,
-                })),
-            };
-        }
-        if (!game.nexus) throw new Error(`${game.name} isn't on Nexus Mods.`);
-        return nexus.search(game.nexus, { query: String(options?.query ?? ""), sort: options?.sort, page: Number(options?.page) || 0, adult: options?.adult === true });
+        const query = String(options?.query ?? "");
+        const page = Math.max(0, Number(options?.page) || 0);
+        const wanted = options?.provider === "curseforge" || options?.provider === "nexus" ? options.provider : "any";
+        const sources = [...(game.nexus && wanted !== "curseforge" ? ["nexus"] : []), ...(game.curseforge && wanted !== "nexus" ? ["curseforge"] : [])];
+        if (!sources.length) throw new Error(`${game.name} has no mods on ${wanted === "curseforge" ? "CurseForge" : "Nexus Mods"}.`);
+        // Mixed, each gives half a page.
+        const size = sources.length > 1 ? 12 : 24;
+        const run = (source) =>
+            source === "curseforge"
+                ? searchCurseForge(game, { query, sort: options?.sort, page, size })
+                : nexus.search(game.nexus, { query, sort: options?.sort, page, count: size, adult: options?.adult === true });
+        const answers = await Promise.allSettled(sources.map(run));
+        const totals = {};
+        const lists = [];
+        const warnings = [];
+        answers.forEach((answer, i) => {
+            const label = sources[i] === "curseforge" ? "CurseForge" : "Nexus Mods";
+            if (answer.status === "fulfilled") {
+                totals[sources[i]] = answer.value.total;
+                lists.push(answer.value.mods);
+            } else {
+                totals[sources[i]] = 0;
+                warnings.push(`${label}: ${answer.reason?.message ?? "couldn't be searched"}`);
+            }
+        });
+        if (warnings.length === sources.length) throw new Error(warnings.join(" "));
+        // Taking turns, so both sites' best results are near the top.
+        const mods = [];
+        for (let i = 0; lists.some((list) => i < list.length); i++) for (const list of lists) if (i < list.length) mods.push(list[i]);
+        const capped = (source) => (source === "curseforge" ? Math.min(totals[source], 10000) : totals[source]);
+        const pageCount = Math.max(1, ...sources.map((source) => Math.ceil(capped(source) / size)));
+        return { total: sources.reduce((sum, source) => sum + totals[source], 0), totals, pageCount, mods, warnings };
     });
 
     ipcMain.handle("games:details", async (_e, id, provider, modId) => {
@@ -290,6 +299,18 @@ function registerGamesIpc() {
             return { failed: err.message, notes: err.notes ?? [] };
         }
     });
+
+    // Newer versions of installed mods, updating them, and going back.
+    ipcMain.handle("games:checkUpdates", (_e, id) => updates.check(need(id).id));
+    ipcMain.handle("games:update", async (event, id, key) => {
+        need(id);
+        try {
+            return await updates.update(id, String(key), (detail) => event.sender.send("games:progress", { gameId: id, detail }));
+        } catch (err) {
+            return { failed: err.message, notes: err.notes ?? [] };
+        }
+    });
+    ipcMain.handle("games:undoUpdate", (_e, id, key) => store.undoReplace(need(id).id, String(key)));
 
     ipcMain.handle("games:nexusAccount", async () => {
         nexus.forgetAccount();

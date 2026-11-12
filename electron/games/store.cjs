@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { getGame } = require("./registry.cjs");
@@ -106,6 +107,58 @@ async function unpackNested(dir) {
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
+/* A file's MD5, which Nexus Mods can look a download up by. */
+function md5Of(file) {
+    return new Promise((resolve, reject) => {
+        const hash = crypto.createHash("md5");
+        fs.createReadStream(file)
+            .on("data", (chunk) => hash.update(chunk))
+            .on("end", () => resolve(hash.digest("hex")))
+            .on("error", reject);
+    });
+}
+
+/* Earlier copies are kept this long for Undo, one per mod. */
+const KEEP_PREVIOUS = 30 * 24 * 60 * 60 * 1000;
+
+/*
+ * Numbers in a Nexus Mods download's name that could be its mod's number, most likely
+ * first: "SkyUI_5_2_SE-12604-5-2SE-1573851403.7z" -> ["12604", "5"].
+ */
+function nexusIdsInName(fileName) {
+    const match = String(fileName ?? "").match(/^(.*)-(\d{9,11})\.(zip|7z|rar)$/i);
+    if (!match) return [];
+    return [...match[1].matchAll(/-(\d{1,7})(?=-)/g)].map((m) => m[1]).filter((id, i, all) => all.indexOf(id) === i).slice(0, 4);
+}
+
+const sameSource = (a, b) =>
+    Boolean(a?.modId) &&
+    ((a.provider === b?.provider && String(a.modId) === String(b?.modId)) || (a.provider === "nexus" && String(a.modId) === String(b?.nexus?.modId)));
+
+/* Forgets an earlier copy kept for Undo, and its files. */
+function dropPrevious(gameId, state, previous) {
+    fs.rmSync(parkedDir(gameId, previous.id), { recursive: true, force: true });
+    fs.rmSync(backupDir(gameId, previous.id), { recursive: true, force: true });
+    state.previous = (state.previous ?? []).filter((p) => p.id !== previous.id);
+}
+
+/*
+ * Sets the copy a newer one replaces aside, turned off, so Undo can bring it back.
+ * Only the latest earlier copy of each mod is kept, and only for a month.
+ */
+function setAside(gameId, previous, replacedBy) {
+    const wasEnabled = previous.enabled;
+    setEnabled(gameId, previous.id, false);
+    const state = readState(gameId);
+    const mod = state.mods.find((m) => m.id === previous.id);
+    state.mods = state.mods.filter((m) => m.id !== previous.id);
+    for (const old of [...(state.previous ?? [])]) {
+        if (old.supersededBy === previous.id || Date.now() - Date.parse(old.setAsideAt) > KEEP_PREVIOUS) dropPrevious(gameId, state, old);
+    }
+    state.previous = [...(state.previous ?? []), { ...mod, enabled: false, wasEnabled, supersededBy: replacedBy, setAsideAt: new Date().toISOString() }];
+    writeState(gameId, state);
+}
+
 /*
  * Installs a mod from a file: an archive, or a single mod file.
  * meta: { name, source: { provider, modId, fileId, url, version } }
@@ -132,19 +185,35 @@ async function install(gameId, filePath, meta = {}) {
         }
 
         const state = readState(gameId);
-        // A newer copy of the same mod replaces the old one.
-        const previous = state.mods.find((mod) => (meta.source?.modId && mod.source?.provider === meta.source.provider && String(mod.source?.modId) === String(meta.source.modId)) || (!meta.source?.modId && mod.name === modName));
-        if (previous) removeMod(gameId, previous.id);
+        // A newer copy of the same mod replaces the old one, which is kept for Undo.
+        // A Nexus download added from Downloads replaces the mod it's a newer copy of.
+        const nexusId = !meta.source?.modId ? nexusIdsInName(path.basename(filePath))[0] : null;
+        const previous = meta.replaces
+            ? state.mods.find((mod) => mod.id === meta.replaces)
+            : state.mods.find(
+                  (mod) =>
+                      sameSource(meta.source, mod.source) ||
+                      (nexusId && String(mod.source?.nexus?.modId ?? "") === nexusId) ||
+                      (!meta.source?.modId && mod.name === modName)
+              );
+        const id = newId();
+        if (previous) setAside(gameId, previous, id);
 
         const fresh = readState(gameId);
         const owners = new Map();
         for (const mod of fresh.mods.filter((m) => m.enabled)) for (const file of mod.files) owners.set(fileKey(file), mod);
 
-        const id = newId();
+        let md5 = null;
+        try {
+            md5 = await md5Of(filePath);
+        } catch {
+            // Only needed to look it up on Nexus Mods later.
+        }
         const mod = {
             id,
-            name: modName,
-            source: meta.source ?? { provider: "file", fileName: path.basename(filePath) },
+            // An update keeps the name it had (the site's, once it's been looked up).
+            name: meta.name || (previous?.source?.nexus && nexusId ? previous.name : modName),
+            source: { ...(meta.source ?? { provider: "file" }), fileName: path.basename(filePath), md5 },
             files: [],
             replaced: [],
             plugins: [],
@@ -190,7 +259,7 @@ async function install(gameId, filePath, meta = {}) {
         const notes = [...mod.notes];
         if (broken.length) notes.push(`${broken.join(", ")} inside it couldn't be opened, so ${broken.length === 1 ? "it was" : "they were"} left out.`);
         if (overwrote.length) notes.unshift(`Replaced some files from ${overwrote.join(", ")}; they come back if you turn this off.`);
-        if (previous) notes.unshift(`Replaced the copy installed before.`);
+        if (previous) notes.unshift(`Replaced the copy installed before (Undo puts it back).`);
         return { mod: describe(game, mod), placed, skipped: planned.skipped.map((s) => ({ file: path.posix.basename(s.file), reason: s.reason })), notes };
     } finally {
         unpacked.cleanup();
@@ -424,7 +493,7 @@ function removeHandAdded(gameId, key) {
 
 /* ---------------- the list ---------------- */
 
-function describe(game, mod) {
+function describe(game, mod, state = readState(game.id)) {
     const areas = {};
     for (const file of mod.files) areas[areaOf(game, file)] = (areas[areaOf(game, file)] ?? 0) + 1;
     return {
@@ -440,6 +509,8 @@ function describe(game, mod) {
         notes: mod.notes ?? [],
         hooks: hooksIntoGame(game.id, mod.files.map((file) => file.to)),
         since: mod.installedAt,
+        version: mod.source?.version ?? mod.source?.nexus?.version ?? null,
+        canUndo: (state.previous ?? []).some((previous) => previous.supersededBy === mod.id),
     };
 }
 
@@ -489,7 +560,7 @@ function list(gameId) {
     const hand = [...handAdded(game, loc, owned), ...parkedHandAdded(gameId).filter((item) => item.kind !== "plugin")];
     return {
         mods: [
-            ...state.mods.map((mod) => describe(game, mod)),
+            ...state.mods.map((mod) => describe(game, mod, state)),
             ...hand.map((item) => ({
                 key: `${item.kind === "plugin" ? "p" : "h"}:${item.base}:${item.rel}`,
                 managed: false,
@@ -508,7 +579,42 @@ function list(gameId) {
     };
 }
 
-const setModEnabled = (gameId, key, enabled) => (key.startsWith("m:") ? setEnabled(gameId, key.slice(2), enabled) : setHandAddedEnabled(gameId, key, enabled));
-const deleteMod = (gameId, key) => (key.startsWith("m:") ? removeMod(gameId, key.slice(2)) : removeHandAdded(gameId, key));
+/* Puts back the copy an update replaced. */
+function undoReplace(gameId, key) {
+    const modId = key.replace(/^m:/, "");
+    const state = readState(gameId);
+    const previous = (state.previous ?? []).find((p) => p.supersededBy === modId);
+    if (!previous) throw new Error("There's no earlier copy of that mod to go back to.");
+    removeMod(gameId, modId);
+    const fresh = readState(gameId);
+    fresh.previous = (fresh.previous ?? []).filter((p) => p.id !== previous.id);
+    const { supersededBy, setAsideAt, wasEnabled, ...mod } = previous;
+    fresh.mods.push({ ...mod, enabled: false });
+    writeState(gameId, fresh);
+    if (wasEnabled) setEnabled(gameId, previous.id, true);
+    return { restored: previous.name, version: previous.source?.version ?? previous.source?.nexus?.version ?? null };
+}
 
-module.exports = { install, list, setModEnabled, deleteMod, readState };
+/* Adds what was found out about where a mod came from (its Nexus Mods file, say), and its proper name. */
+function rememberSource(gameId, modId, patch, name = null) {
+    const state = readState(gameId);
+    const mod = state.mods.find((m) => m.id === modId);
+    if (!mod) return;
+    mod.source = { ...(mod.source ?? {}), ...patch };
+    if (name) mod.name = name;
+    writeState(gameId, state);
+}
+
+/* Deleting a mod deletes any earlier copy kept for it too. */
+function deleteManaged(gameId, modId) {
+    const result = removeMod(gameId, modId);
+    const state = readState(gameId);
+    for (const previous of (state.previous ?? []).filter((p) => p.supersededBy === modId)) dropPrevious(gameId, state, previous);
+    writeState(gameId, state);
+    return result;
+}
+
+const setModEnabled = (gameId, key, enabled) => (key.startsWith("m:") ? setEnabled(gameId, key.slice(2), enabled) : setHandAddedEnabled(gameId, key, enabled));
+const deleteMod = (gameId, key) => (key.startsWith("m:") ? deleteManaged(gameId, key.slice(2)) : removeHandAdded(gameId, key));
+
+module.exports = { install, list, setModEnabled, deleteMod, readState, undoReplace, rememberSource, nexusIdsInName };

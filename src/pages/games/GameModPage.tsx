@@ -48,7 +48,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, goL
       setMessage({
         tone: "info",
         text: mod.hasKey
-          ? `Opened on Nexus Mods. Press "Mod Manager Download" there and the launcher installs it by itself.`
+          ? `Opened ${file ? file.name : "its files"} on Nexus Mods: press the download button there and the launcher installs it by itself.`
           : `Opened on Nexus Mods. To install with the launcher, add your Nexus Mods API key in Settings → API keys, then press "Mod Manager Download" there.`,
       });
       return;
@@ -181,7 +181,9 @@ export default function GameModPage({ detail, provider, modId, afterInstall, goL
         </button>
         <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
           {viaWebsite
-            ? `Opens ${mainFile ? "its main file" : "its files"} on Nexus Mods. Press "Mod Manager Download" there and the launcher puts it in the right folders.`
+            ? mod.hasKey
+              ? `Opens ${mainFile ? "its main file's download" : "its files"} on Nexus Mods: one click on the download button there and the launcher puts it in the right folders.`
+              : `Opens it on Nexus Mods. Add your Nexus Mods key in Settings → API keys and its download there installs it here.`
             : mainFile
               ? `${mainFile.name}${mainFile.version ? ` ${mainFile.version}` : ""}. Unpacked and put in the right folders.`
               : "Unpacked and put in the right folders."}

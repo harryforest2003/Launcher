@@ -50,6 +50,35 @@ declare global {
         since: string | null;
         /* Hooks into the game and is older than the game's latest update. */
         mayNeedUpdate: boolean;
+        /* The installed version, where the site said. */
+        version?: string | null;
+        /* An update replaced an earlier copy, which Undo puts back. */
+        canUndo?: boolean;
+    };
+
+    type GameModUpdate = {
+        key: string;
+        name: string;
+        provider: "nexus" | "curseforge";
+        modId: string;
+        fromVersion: string;
+        toVersion: string;
+        toFileId: string;
+        toName: string;
+        date: string;
+        size: number;
+        /* CurseForge: only downloadable from its website. */
+        website?: boolean;
+    };
+
+    type GameUpdateCheck = {
+        updates: GameModUpdate[];
+        checked: number;
+        /* Mods that couldn't be matched to a site. */
+        unknown: number;
+        /* Nexus mods that can only be checked with a Nexus Mods key. */
+        needsKey: number;
+        error: string | null;
     };
 
     /* fits: whether what's inside looks like a mod for this game (null when it can't tell). */
@@ -63,6 +92,7 @@ declare global {
         failed?: string;
         needsWebsite?: string | null;
         reason?: string;
+        modId?: string;
     };
 
     type GameRemoteMod = {
@@ -79,6 +109,15 @@ declare global {
         adult: boolean;
         url: string | null;
         installable?: boolean;
+    };
+
+    type GameSearchPage = {
+        total: number;
+        totals?: { nexus?: number; curseforge?: number };
+        pageCount?: number;
+        mods: GameRemoteMod[];
+        /* A site that couldn't be searched, while the other could. */
+        warnings?: string[];
     };
 
     type GameModFile = {
@@ -105,6 +144,7 @@ declare global {
     type GameNxmEvent = {
         status: "started" | "working" | "installed" | "failed";
         gameId?: GameId;
+        modId?: string;
         name?: string;
         detail?: string;
         result?: GameInstallResult;
@@ -133,12 +173,16 @@ declare global {
             launch: (id: GameId, options?: { safe?: boolean }) => Promise<{ how: string; safe: boolean }>;
             setSimsOptions: (options: { mods?: boolean; scripts?: boolean }) => Promise<{ mods: boolean; scripts: boolean } | null>;
 
+            /* provider "any" (or none): every site the game's on, mixed. */
             search: (
                 id: GameId,
-                options: { provider?: "nexus" | "curseforge"; query?: string; sort?: string; page?: number; adult?: boolean }
-            ) => Promise<{ total: number; mods: GameRemoteMod[] }>;
+                options: { provider?: "any" | "nexus" | "curseforge"; query?: string; sort?: string; page?: number; adult?: boolean }
+            ) => Promise<GameSearchPage>;
             details: (id: GameId, provider: "nexus" | "curseforge", modId: string) => Promise<GameModDetails>;
             installRemote: (id: GameId, provider: "nexus" | "curseforge", modId: string, fileId: string | null, name: string) => Promise<GameInstallResult>;
+            checkUpdates: (id: GameId) => Promise<GameUpdateCheck>;
+            update: (id: GameId, key: string) => Promise<GameInstallResult>;
+            undoUpdate: (id: GameId, key: string) => Promise<{ restored: string; version: string | null }>;
             nexusAccount: () => Promise<{ name: string; premium: boolean } | null>;
             openUrl: (url: string) => Promise<void>;
 

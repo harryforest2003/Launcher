@@ -34,7 +34,7 @@ const mod = (key: string, name: string, extra: Partial<GameMod> = {}): GameMod =
 
 const MODS: Partial<Record<GameId, GameMod[]>> = {
   sims4: [
-    mod("m:mccc", "MC Command Center", { hooks: true, mayNeedUpdate: true, fileCount: 14, areas: [{ area: "Mods", count: 14 }] }),
+    mod("m:mccc", "MC Command Center", { hooks: true, mayNeedUpdate: true, fileCount: 14, areas: [{ area: "Mods", count: 14 }], version: "2025.9" }),
     mod("m:ww", "UI Cheats Extension", { hooks: true, mayNeedUpdate: true, source: { provider: "curseforge" } }),
     mod("m:hair", "Wavy Hair Pack", { source: { provider: "file", fileName: "wavy_hair.zip" }, fileCount: 6, areas: [{ area: "Mods", count: 6 }] }),
     mod("m:house", "Seaside Cottage (Tray)", { source: { provider: "file" }, areas: [{ area: "Tray", count: 5 }], fileCount: 5 }),
@@ -42,6 +42,9 @@ const MODS: Partial<Record<GameId, GameMod[]>> = {
   ],
   stardew: [mod("m:cjb", "CJB Cheats Menu", { hooks: true, areas: [{ area: "Mods", count: 3 }], fileCount: 3 })],
 };
+
+// Sample mods with a newer version.
+const updatable = new Set(["m:mccc", "m:ww"]);
 
 let simsOptions = { mods: true, scripts: true };
 let simsUpdated: GameSummary["updated"] = { from: "1.111.102.1030", to: "1.112.519.1020" };
@@ -133,10 +136,14 @@ export const gamesBridge = {
     simsOptions = { mods: options.mods ?? simsOptions.mods, scripts: options.scripts ?? simsOptions.scripts };
     return simsOptions;
   },
-  search: async (id: GameId, options: { provider?: "nexus" | "curseforge"; query?: string; page?: number }) => {
+  search: async (id: GameId, options: { provider?: "any" | "nexus" | "curseforge"; query?: string; page?: number }): Promise<GameSearchPage> => {
     const game = need(id);
-    const mods = sampleMods(game, options.provider ?? "nexus", options.query ?? "", options.page ?? 0);
-    return { total: options.query ? mods.length : 2400, mods };
+    const sources: ("nexus" | "curseforge")[] =
+      options.provider === "nexus" || options.provider === "curseforge" ? [options.provider] : game.curseforge ? ["nexus", "curseforge"] : ["nexus"];
+    const lists = sources.map((source) => sampleMods(game, source, options.query ?? "", options.page ?? 0).slice(0, sources.length > 1 ? 4 : 8));
+    const mods = lists[0].flatMap((first, i) => [first, ...lists.slice(1).map((list) => list[i]).filter(Boolean)]);
+    const totals = Object.fromEntries(sources.map((source) => [source, options.query ? 4 : 1200]));
+    return { total: Object.values(totals).reduce((a, b) => a + b, 0), totals, pageCount: options.query ? 1 : 100, mods };
   },
   details: async (id: GameId, provider: "nexus" | "curseforge", modId: string): Promise<GameModDetails> => {
     const game = need(id);
@@ -154,6 +161,38 @@ export const gamesBridge = {
     };
   },
   installRemote: async (): Promise<GameInstallResult> => ({ needsWebsite: null, reason: "The web preview can't download mods." }),
+  checkUpdates: async (id: GameId): Promise<GameUpdateCheck> => ({
+    updates: (MODS[id] ?? [])
+      .filter((m) => updatable.has(m.key))
+      .map((m) => ({ key: m.key, name: m.name, provider: "nexus" as const, modId: "123", fromVersion: "2025.9", toVersion: "2025.11", toFileId: "9", toName: m.name, date: daysAgo(3), size: 2_000_000 })),
+    checked: (MODS[id] ?? []).filter((m) => m.managed).length,
+    unknown: 0,
+    needsKey: 0,
+    error: null,
+  }),
+  update: async (_id: GameId, key: string): Promise<GameInstallResult> => {
+    for (const list of Object.values(MODS)) {
+      const found = list?.find((m) => m.key === key);
+      if (found) {
+        found.version = "2025.11";
+        found.canUndo = true;
+        found.mayNeedUpdate = false;
+      }
+    }
+    updatable.delete(key);
+    return { mod: { id: key, name: key }, placed: { Mods: 1 }, notes: ["Replaced the copy installed before (Undo puts it back)."] };
+  },
+  undoUpdate: async (_id: GameId, key: string) => {
+    for (const list of Object.values(MODS)) {
+      const found = list?.find((m) => m.key === key);
+      if (found) {
+        found.version = "2025.9";
+        found.canUndo = false;
+      }
+    }
+    updatable.add(key);
+    return { restored: key, version: "2025.9" };
+  },
   nexusAccount: async () => ({ name: "PreviewUser", premium: false }),
   openUrl: async (url: string) => {
     window.open(url, "_blank", "noopener");

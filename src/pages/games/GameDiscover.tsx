@@ -34,10 +34,11 @@ const BADGE: Record<string, { label: string; colour: string }> = {
 export default function GameDiscover({ detail, openMod, afterInstall, goLauncherSettings, goMods }: Props) {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [provider, setProvider] = useState<"nexus" | "curseforge">("nexus");
+  // Games on both sites start with both, mixed, as Minecraft's Discover does.
+  const [provider, setProvider] = useState<"any" | "nexus" | "curseforge">(detail.curseforge ? "any" : "nexus");
   const [sort, setSort] = useState("popular");
   // The last search's answer, and which search it answered: another one is loading until it's in.
-  const [loaded, setLoaded] = useState<{ key: string; result: { total: number; mods: GameRemoteMod[] } | null; error: string | null } | null>(null);
+  const [loaded, setLoaded] = useState<{ key: string; result: GameSearchPage | null; error: string | null } | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "good" | "bad" | "warn" | "info"; text: string } | null>(null);
   const [account, setAccount] = useState<{ name: string; premium: boolean } | null | undefined>(undefined);
@@ -77,7 +78,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
   }, [page]);
 
   // CurseForge lets apps reach its first 10,000 results; Nexus Mods, all of them.
-  const pageCount = result ? Math.max(1, Math.ceil((provider === "curseforge" ? Math.min(result.total, 10000) : result.total) / PAGE_SIZE)) : 1;
+  // CurseForge lets apps reach its first 10,000 results; Nexus Mods, all of them.
+  const pageCount = result ? (result.pageCount ?? Math.max(1, Math.ceil((provider === "curseforge" ? Math.min(result.total, 10000) : result.total) / PAGE_SIZE))) : 1;
   const goToPage = (next: number) => setChosenPage({ filterKey, page: next });
 
   /* The main file straight in when the site allows it; otherwise its page on the website. */
@@ -86,14 +88,17 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
     setMessage(null);
     try {
       if (mod.provider === "nexus" && !account?.premium) {
-        // Free accounts download through the website's own button, which hands the file back here.
-        await window.gamesAPI.openUrl(`${mod.url}?tab=files`);
-        setMessage({
-          tone: "info",
-          text: account
-            ? `Opened ${mod.name} on Nexus Mods. Press "Mod Manager Download" on the file you want and the launcher installs it.`
-            : `Opened ${mod.name} on Nexus Mods. Add your Nexus Mods key in Settings → API keys, then press "Mod Manager Download" there and the launcher installs it.`,
-        });
+        // Free accounts download through the website's own button, which hands the file back
+        // here: straight to the main file's download, so that's the one click left.
+        if (account) {
+          const details = await window.gamesAPI.details(detail.id, "nexus", mod.id);
+          const main = details.files.find((file) => file.category === "Main") ?? details.files[0];
+          await window.gamesAPI.openUrl(main ? `${mod.url}?tab=files&file_id=${main.id}&nmm=1` : `${mod.url}?tab=files`);
+          setMessage({ tone: "info", text: `Opened ${main ? main.name : mod.name} on Nexus Mods: press the download button there and the launcher installs it.` });
+        } else {
+          await window.gamesAPI.openUrl(`${mod.url}?tab=files`);
+          setMessage({ tone: "info", text: `Opened ${mod.name} on Nexus Mods. To install with the launcher, add your Nexus Mods key in Settings → API keys first.` });
+        }
       } else {
         let fileId: string | null = null;
         if (mod.provider === "nexus") {
@@ -121,7 +126,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
 
   const dropdownStyle = { padding: "10px 12px", borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", fontSize: 13 };
   const mods = result?.mods ?? [];
-  const label = provider === "curseforge" ? "CurseForge" : "Nexus Mods";
+  const label = provider === "curseforge" ? "CurseForge" : provider === "nexus" ? "Nexus Mods" : "Nexus Mods and CurseForge";
+  const showsNexus = provider !== "curseforge";
 
   return (
     <div>
@@ -136,7 +142,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
 
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         {detail.curseforge && (
-          <select style={dropdownStyle} value={provider} onChange={(event) => setProvider(event.target.value as "nexus" | "curseforge")} aria-label="Where to search">
+          <select style={dropdownStyle} value={provider} onChange={(event) => setProvider(event.target.value as "any" | "nexus" | "curseforge")} aria-label="Where to search">
+            <option value="any">Any source</option>
             <option value="nexus">Nexus Mods</option>
             <option value="curseforge">CurseForge</option>
           </select>
@@ -176,7 +183,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
         </div>
       )}
 
-      {provider === "nexus" && account === null && (
+      {showsNexus && account === null && (
         <div style={{ ...note("warn"), marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ flex: 1 }}>
             Searching Nexus Mods needs no key, but installing does: add your personal Nexus Mods API key in Settings → API keys.
@@ -186,10 +193,10 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
           </button>
         </div>
       )}
-      {provider === "nexus" && account && !account.premium && (
+      {showsNexus && account && !account.premium && (
         <div style={{ ...note("info"), marginTop: 16 }}>
-          Signed in to Nexus Mods as {account.name}. Nexus only lets apps download straight away for Premium accounts, so Install opens the mod's
-          files on the website: press "Mod Manager Download" there and the launcher installs it by itself.
+          Using {account.name}'s Nexus Mods key. Nexus only lets apps download straight away for Premium accounts, so Install opens the file's
+          download on the website: press the download button there and the launcher installs it by itself.
         </div>
       )}
 
@@ -198,12 +205,19 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
           {message.text}
         </div>
       )}
-      {loadError && <div style={{ ...note("warn"), marginTop: 16 }}>{loadError}</div>}
+      {[...(result?.warnings ?? []), ...(loadError ? [loadError] : [])].map((warning) => (
+        <div key={warning} style={{ ...note("warn"), marginTop: 16 }}>
+          {warning}
+        </div>
+      ))}
 
       <div ref={listTop} style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
         {result && (
           <div style={{ fontSize: 12, color: "#9ca3af" }}>
-            {result.total.toLocaleString()} on {label} • Page {page.toLocaleString()} of {pageCount.toLocaleString()}
+            {result.totals && Object.keys(result.totals).length > 1
+              ? `${(result.totals.nexus ?? 0).toLocaleString()} on Nexus Mods • ${(result.totals.curseforge ?? 0).toLocaleString()}${(result.totals.curseforge ?? 0) >= 10000 ? "+" : ""} on CurseForge`
+              : `${result.total.toLocaleString()} on ${label}`}
+            {` • Page ${page.toLocaleString()} of ${pageCount.toLocaleString()}`}
           </div>
         )}
         {result && <Pagination page={page} pageCount={pageCount} disabled={loading} onChange={goToPage} />}
@@ -265,7 +279,9 @@ export default function GameDiscover({ detail, openMod, afterInstall, goLauncher
                     installing === mod.id
                       ? "Installing..."
                       : mod.provider === "nexus" && !account?.premium
-                        ? "Open its files on Nexus Mods to download with the launcher"
+                        ? account
+                          ? "Opens its main file's download on Nexus Mods: one click there installs it"
+                          : "Opens it on Nexus Mods (add your Nexus Mods key to install with the launcher)"
                         : mod.installable === false
                           ? "Its author only allows downloads from their website: opens it"
                           : `Install into ${detail.name}`

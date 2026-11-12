@@ -24,6 +24,7 @@ async function v1(pathname) {
     const res = await fetch(`${V1}${pathname}`, { headers: nexusKey.apiHeaders(), signal: AbortSignal.timeout(30000) });
     if (res.status === 401) throw Object.assign(new Error("Nexus Mods didn't accept your API key. Check it in Settings → API keys."), { code: "BAD_KEY" });
     if (res.status === 403) throw Object.assign(new Error("Nexus Mods only gives download links to Premium accounts here. Use the Mod Manager Download button on the mod's page."), { code: "PREMIUM_REQUIRED" });
+    if (res.status === 429) throw Object.assign(new Error("Nexus Mods has had as many requests from your key as it allows for now. Try again in an hour."), { code: "RATE_LIMITED" });
     if (!res.ok) throw new Error(`Nexus Mods answered ${res.status}.`);
     return res.json();
 }
@@ -167,7 +168,7 @@ async function details(domain, modId) {
         out.hasKey = false;
         return out;
     }
-    const files = await v1(`/games/${domain}/mods/${modId}/files.json`);
+    const files = await filesOf(domain, modId);
     const order = ["MAIN", "UPDATE", "OPTIONAL", "MISCELLANEOUS", "OLD_VERSION", "ARCHIVED"];
     out.files = (files.files ?? [])
         .filter((file) => file.category_name !== "ARCHIVED")
@@ -183,6 +184,42 @@ async function details(domain, modId) {
             description: readable(file.description ?? "").text.slice(0, 400),
         }));
     return out;
+}
+
+/*
+ * A mod's files, and which file replaced which ({ files, file_updates }), as Nexus Mods
+ * lists them. Needs the key.
+ */
+async function filesOf(domain, modId) {
+    return v1(`/games/${domain}/mods/${modId}/files.json`);
+}
+
+/* The Nexus Mods file a download is, from its MD5: { modId, fileId, version, name } or null. */
+async function byMd5(domain, md5) {
+    try {
+        const found = await v1(`/games/${domain}/mods/md5_search/${md5}.json`);
+        const hit = Array.isArray(found) ? found[0] : null;
+        if (!hit?.mod?.mod_id || !hit.file_details?.file_id) return null;
+        return { modId: String(hit.mod.mod_id), fileId: String(hit.file_details.file_id), version: hit.file_details.version ?? "", name: hit.mod.name ?? null };
+    } catch (err) {
+        if (/answered 404/.test(err.message)) return null;
+        throw err;
+    }
+}
+
+/* A mod's name on Nexus Mods (no key needed). */
+async function modName(domain, modId) {
+    const data = await gql(
+        `query($ids: [CompositeDomainWithIdInput!]!) { legacyModsByDomain(ids: $ids) { nodes { name } } }`,
+        { ids: [{ gameDomain: domain, modId: Number(modId) }] }
+    );
+    return data.legacyModsByDomain.nodes[0]?.name ?? null;
+}
+
+/* Mods with new files in the last month: Map(modId -> when, in ms). One request for a whole game. */
+async function updatedThisMonth(domain) {
+    const list = await v1(`/games/${domain}/mods/updated.json?period=1m`);
+    return new Map((list ?? []).map((entry) => [String(entry.mod_id), (entry.latest_file_update ?? entry.latest_mod_activity ?? 0) * 1000]));
 }
 
 /*
@@ -209,4 +246,4 @@ const forgetAccount = () => {
     account = null;
 };
 
-module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml };
+module.exports = { search, details, downloadUrl, parseNxm, whoAmI, forgetAccount, readable, bbcodeHtml, filesOf, byMd5, updatedThisMonth, modName, hasKey: () => nexusKey.hasApiKey() };

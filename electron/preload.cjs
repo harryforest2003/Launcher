@@ -310,6 +310,9 @@ contextBridge.exposeInMainWorld("gamesAPI", {
     search: (id, options) => ipcRenderer.invoke("games:search", id, options),
     details: (id, provider, modId) => ipcRenderer.invoke("games:details", id, provider, modId),
     installRemote: (id, provider, modId, fileId, name) => ipcRenderer.invoke("games:installRemote", id, provider, modId, fileId, name),
+    checkUpdates: (id) => ipcRenderer.invoke("games:checkUpdates", id),
+    update: (id, key) => ipcRenderer.invoke("games:update", id, key),
+    undoUpdate: (id, key) => ipcRenderer.invoke("games:undoUpdate", id, key),
     nexusAccount: () => ipcRenderer.invoke("games:nexusAccount"),
     openUrl: (url) => ipcRenderer.invoke("games:openUrl", url),
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Folder, Play } from "lucide-react";
 import IconButton from "../../components/IconButton";
-import { BinIcon, DownloadIcon, PlusIcon, RefreshIcon } from "../../components/Icons";
+import { BinIcon, DownloadIcon, PlusIcon, RefreshIcon, ResetIcon } from "../../components/Icons";
 import Toggle from "../../components/Toggle";
 import { errorText, installSummary, note, panel, shortDate, sizeText, smallButton } from "./shared";
 
@@ -12,14 +12,24 @@ type Props = {
   onPlay: () => void;
   playing: string | null;
   goSettings: () => void;
+  goLauncherSettings: () => void;
+  updates: GameUpdateCheck | null;
+  checking: boolean;
+  /* The mod being updated (its key), or "all:2/5" while updating them all. */
+  updating: string | null;
+  onCheckUpdates: () => Promise<void>;
+  onUpdate: (found: GameModUpdate) => void;
+  onUpdateAll: () => void;
+  onUndo: (mod: GameMod) => void;
 };
 
-type Filter = "all" | "on" | "off" | "update";
+type Filter = "all" | "on" | "off" | "update" | "newer";
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "on", label: "On" },
   { id: "off", label: "Off" },
+  { id: "newer", label: "Updates" },
   { id: "update", label: "May need updating" },
 ];
 
@@ -29,7 +39,23 @@ const PROVIDERS: Record<string, string> = { nexus: "Nexus Mods", curseforge: "Cu
  * A game's mods: each one on or off, what it is and where its files went, the ones that
  * may need updating after a game update, and adding more from Downloads.
  */
-export default function GameMods({ detail, mods, reload, onPlay, playing, goSettings }: Props) {
+export default function GameMods({
+  detail,
+  mods,
+  reload,
+  onPlay,
+  playing,
+  goSettings,
+  goLauncherSettings,
+  updates,
+  checking,
+  updating,
+  onCheckUpdates,
+  onUpdate,
+  onUpdateAll,
+  onUndo,
+}: Props) {
+  const newer = useMemo(() => new Map((updates?.updates ?? []).map((found) => [found.key, found])), [updates]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState<string | null>(null);
@@ -68,9 +94,10 @@ export default function GameMods({ detail, mods, reload, onPlay, playing, goSett
       if (filter === "on") return mod.enabled;
       if (filter === "off") return !mod.enabled;
       if (filter === "update") return mod.mayNeedUpdate;
+      if (filter === "newer") return newer.has(mod.key);
       return true;
     });
-  }, [mods, query, filter]);
+  }, [mods, query, filter, newer]);
 
   const mayNeedUpdate = mods.filter((mod) => mod.mayNeedUpdate && mod.enabled);
   const onCount = mods.filter((mod) => mod.enabled).length;
@@ -149,7 +176,6 @@ export default function GameMods({ detail, mods, reload, onPlay, playing, goSett
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* HEADER */}
       <div style={{ ...panel, display: "flex", alignItems: "center", gap: 18 }}>
-        <div style={{ width: 8, alignSelf: "stretch", borderRadius: 4, background: detail.colour, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ margin: 0, color: "#c084fc", fontSize: 28 }}>{detail.name}</h1>
           <div style={{ color: "#9ca3af", fontSize: 13, marginTop: 6 }}>
@@ -217,9 +243,11 @@ export default function GameMods({ detail, mods, reload, onPlay, playing, goSett
             ? mayNeedUpdate.length === 1
               ? "1 mod that changes the game's code may need updating before it works again. Play asks whether to start without it."
               : `${mayNeedUpdate.length} mods that change the game's code may need updating before they work again. Play asks whether to start without them.`
-            : mods.some((mod) => mod.hooks && !mod.enabled)
-              ? "The mods that change the game's code are turned off, so the rest should carry on working."
-              : "None of your mods change the game's code, so they should carry on working."}
+            : mods.some((mod) => mod.hooks && mod.enabled)
+              ? "The mods that change the game's code are newer than the update, so they should carry on working."
+              : mods.some((mod) => mod.hooks)
+                ? "The mods that change the game's code are turned off, so the rest should carry on working."
+                : "None of your mods change the game's code, so they should carry on working."}
         </div>
       )}
 
@@ -303,9 +331,18 @@ export default function GameMods({ detail, mods, reload, onPlay, playing, goSett
           >
             {option.label}
             {option.id === "update" && mods.some((mod) => mod.mayNeedUpdate) ? ` (${mods.filter((mod) => mod.mayNeedUpdate).length})` : ""}
+            {option.id === "newer" && newer.size ? ` (${newer.size})` : ""}
           </button>
         ))}
-        <IconButton tip="Look again for mods in the game's folders" label="Refresh" onClick={() => act("refresh", reload)}>
+        <IconButton
+          tip={checking ? "Checking for updates..." : "Look again for mods in the game's folders, and check for updates"}
+          label="Refresh and check for updates"
+          variant={checking ? "ready" : ""}
+          onClick={() => act("refresh", async () => {
+            await reload();
+            await onCheckUpdates();
+          })}
+        >
           <RefreshIcon size={18} />
         </IconButton>
         <IconButton tip="Install a mod from a file you choose" label="Install from a file" onClick={() => install()}>
@@ -320,6 +357,49 @@ export default function GameMods({ detail, mods, reload, onPlay, playing, goSett
           <DownloadIcon size={16} />
           Add from Downloads
         </button>
+      </div>
+
+      {/* UPDATES */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 36 }} data-testid="updates-line">
+        <span style={{ flex: 1, fontSize: 13, color: updates?.error ? "#fca5a5" : newer.size ? "#86efac" : "#9ca3af" }}>
+          {!updates || (checking && !newer.size)
+            ? "Checking for updates..."
+            : updates.error
+              ? `Couldn't check for updates: ${updates.error}`
+              : newer.size
+                ? `${newer.size} mod${newer.size === 1 ? " has a newer version" : "s have newer versions"}.`
+                : updates.checked
+                  ? `All ${updates.checked} mod${updates.checked === 1 ? "" : "s"} from Nexus Mods and CurseForge ${updates.checked === 1 ? "is" : "are"} up to date.`
+                  : "No mods from Nexus Mods or CurseForge to check for updates yet."}
+          {updates && updates.needsKey > 0 && (
+            <>
+              {" "}
+              {updates.needsKey} from Nexus Mods can be checked once your Nexus Mods key is in{" "}
+              <button onClick={goLauncherSettings} style={{ background: "none", border: "none", padding: 0, color: "#c084fc", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
+                Settings → API keys
+              </button>
+              .
+            </>
+          )}
+          {updates && updates.unknown > 0 && !updates.error && (
+            <span style={{ color: "#6b7280" }}>
+              {" "}
+              {updates.unknown} couldn't be matched to a site.
+            </span>
+          )}
+        </span>
+        {newer.size > 0 && (
+          <button
+            className="sidebar-button"
+            data-testid="update-all"
+            style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }}
+            onClick={() => {
+              if (!updating) onUpdateAll();
+            }}
+          >
+            {updating?.startsWith("all:") ? `Updating ${updating.slice(4)}...` : `Update all (${newer.size})`}
+          </button>
+        )}
       </div>
 
       {/* DOWNLOADS */}
@@ -430,11 +510,17 @@ export default function GameMods({ detail, mods, reload, onPlay, playing, goSett
                     </span>
                   )}
                   {mod.kind === "plugin" && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#1e293b", color: "#93c5fd" }}>Plugin</span>}
+                  {newer.has(mod.key) && (
+                    <span data-testid="update-badge" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#14532d", color: "#bbf7d0" }}>
+                      Update{newer.get(mod.key)!.fromVersion || newer.get(mod.key)!.toVersion ? `: ${newer.get(mod.key)!.fromVersion || "?"} → ${newer.get(mod.key)!.toVersion || "newer"}` : " available"}
+                    </span>
+                  )}
                 </div>
                 <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3 }}>
                   {mod.managed
                     ? [
                         PROVIDERS[mod.source?.provider ?? "file"] ?? mod.source?.provider,
+                        mod.version ? `version ${mod.version}` : "",
                         mod.areas.map((a) => `${a.count} in ${a.area}`).join(", "),
                         mod.plugins.length ? `plugins: ${mod.plugins.join(", ")}` : "",
                         mod.installedAt ? `installed ${shortDate(mod.installedAt)}` : "",
@@ -449,6 +535,30 @@ export default function GameMods({ detail, mods, reload, onPlay, playing, goSett
                   </div>
                 ))}
               </div>
+              {newer.has(mod.key) && (
+                <IconButton
+                  tip={
+                    updating === mod.key
+                      ? "Updating..."
+                      : newer.get(mod.key)!.website
+                        ? "Its author only allows downloads from CurseForge's website"
+                        : `Update to ${newer.get(mod.key)!.toVersion || newer.get(mod.key)!.toName}`
+                  }
+                  label={`Update ${mod.name}`}
+                  testId="update-mod"
+                  variant={updating === mod.key ? "ready" : ""}
+                  onClick={() => {
+                    if (!updating) onUpdate(newer.get(mod.key)!);
+                  }}
+                >
+                  <DownloadIcon size={18} />
+                </IconButton>
+              )}
+              {mod.canUndo && (
+                <IconButton tip="Undo the update: put back the copy from before" label={`Undo the update to ${mod.name}`} testId="undo-update" onClick={() => onUndo(mod)}>
+                  <ResetIcon size={18} />
+                </IconButton>
+              )}
               <IconButton
                 tip={confirming === mod.key ? "Click again to delete it" : mod.managed ? "Delete this mod (what it replaced comes back)" : "Delete this from the game's folders"}
                 label={`Delete ${mod.name}`}
