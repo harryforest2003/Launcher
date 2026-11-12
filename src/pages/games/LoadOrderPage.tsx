@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, GripVertical } from "lucide-react";
 import IconButton from "../../components/IconButton";
 import Toggle from "../../components/Toggle";
-import { errorText, note, panel, smallButton } from "./shared";
+import { errorText, fixNeeded, fixSentence, note, panel, smallButton } from "./shared";
 
 type Props = { detail: GameDetail };
 
@@ -22,6 +22,7 @@ export default function LoadOrderPage({ detail }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
+  const [fixedNow, setFixedNow] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -54,7 +55,10 @@ export default function LoadOrderPage({ detail }: Props) {
 
   async function fix() {
     try {
-      setOrder(await window.gamesAPI.sortLoadOrder(detail.id));
+      const result = await window.gamesAPI.fixLoadOrder(detail.id);
+      setOrder(result);
+      setFixedNow(fixNeeded(result.done) ? `Fixed: ${fixSentence(result.done, true)}` : null);
+      setError(null);
     } catch (err) {
       setError(errorText(err));
     }
@@ -62,8 +66,8 @@ export default function LoadOrderPage({ detail }: Props) {
 
   if (!detail.found) return <div style={note("warn")}>{detail.name} wasn't found, so its load order can't be shown. Choose its folder in Settings.</div>;
 
-  const outOfOrder = order?.plugins.filter((p) => p.problems.some((x) => x.kind === "after")).length ?? 0;
   const problems = order?.plugins.filter((p) => p.problems.length).length ?? 0;
+  const canFix = fixNeeded(order?.fix);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -73,17 +77,18 @@ export default function LoadOrderPage({ detail }: Props) {
         apply the next time the game starts.
       </div>
       {error && <div style={note("bad")}>{error}</div>}
+      {fixedNow && <div style={note("good")}>{fixedNow}</div>}
 
       {order && (
         <div style={{ ...panel, display: "flex", alignItems: "center", gap: 12 }} data-testid="load-order-summary">
-          <span style={{ flex: 1, fontSize: 13, color: problems ? "#fcd34d" : "#86efac" }}>
-            {problems
-              ? `${problems} plugin${problems === 1 ? " has a problem" : "s have problems"}${outOfOrder ? `; ${outOfOrder} load${outOfOrder === 1 ? "s" : ""} before something ${outOfOrder === 1 ? "it needs" : "they need"}` : ""}.`
+          <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: canFix ? "#fcd34d" : "#86efac" }}>
+            {canFix
+              ? `${problems} plugin${problems === 1 ? " has a problem" : "s have problems"}. ${fixSentence(order.fix).replace(/^./, (c) => `Fixing ${c.toLowerCase()}`)}`
               : `${order.plugins.filter((p) => p.active).length} plugins on, all in an order that works.`}
           </span>
-          {outOfOrder > 0 && (
-            <button className="sidebar-button" data-testid="fix-order" style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }} onClick={fix}>
-              Fix order
+          {canFix && (
+            <button className="sidebar-button" data-testid="fix-order" style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa", flexShrink: 0 }} onClick={fix}>
+              Fix load order
             </button>
           )}
         </div>

@@ -482,6 +482,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                   finderIntro={finderIntro}
                   finderBusy={finderBusy}
                   finderApi={finderApi}
+                  goLoadOrder={() => go("loadorder")}
                 />
               )}
 

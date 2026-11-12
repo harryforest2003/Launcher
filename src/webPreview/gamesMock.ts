@@ -71,6 +71,20 @@ const withProblems = (list: GamePlugin[]): GamePlugin[] =>
         }),
   }));
 
+const FIXED = ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"];
+const orderNow = (): GameLoadOrder => {
+  const plugins = withProblems(skyrimOrder);
+  return {
+    fixed: FIXED,
+    plugins,
+    fix: {
+      turnOn: plugins.flatMap((p) => p.problems.filter((x) => x.kind === "off").map((x) => ({ name: x.master, for: p.name }))),
+      turnOff: plugins.flatMap((p) => p.problems.filter((x) => x.kind === "missing").map((x) => ({ name: p.name, needs: x.master, missing: true }))),
+      moved: plugins.filter((p) => p.problems.some((x) => x.kind === "after")).map((p) => p.name),
+    },
+  };
+};
+
 const backups: GameSaveBackup[] = [
   { id: "b2", at: daysAgo(1), reason: "Before playing with changed mods", size: 48_000_000, files: 12, from: "Saves" },
   { id: "b1", at: daysAgo(9), reason: "Before the first play after a game update", size: 46_500_000, files: 11, from: "Saves" },
@@ -260,15 +274,26 @@ export const gamesBridge = {
   forgetSaves: async () => {},
   openSaves: async () => {},
 
-  loadOrder: async (): Promise<GameLoadOrder> => ({ fixed: ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"], plugins: withProblems(skyrimOrder) }),
+  loadOrder: async (): Promise<GameLoadOrder> => orderNow(),
   setLoadOrder: async (_id: GameId, entries: { name: string; active: boolean }[]): Promise<GameLoadOrder> => {
     skyrimOrder = entries.map((e) => ({ ...skyrimOrder.find((p) => p.name === e.name)!, active: e.active }));
-    return { fixed: ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"], plugins: withProblems(skyrimOrder) };
+    return orderNow();
   },
-  sortLoadOrder: async (): Promise<GameLoadOrder> => {
-    const patch = skyrimOrder.find((p) => p.name === "Armor Patch.esp")!;
-    skyrimOrder = [...skyrimOrder.filter((p) => p !== patch).slice(0, 1), patch, ...skyrimOrder.filter((p) => p !== patch).slice(1)];
-    return { fixed: ["Skyrim.esm", "Update.esm", "Dawnguard.esm", "HearthFires.esm", "Dragonborn.esm"], plugins: withProblems(skyrimOrder) };
+  fixLoadOrder: async () => {
+    const done = orderNow().fix;
+    const off = new Set(done.turnOff.map((t) => t.name));
+    const on = new Set(done.turnOn.map((t) => t.name));
+    const changed = skyrimOrder.map((p) => ({ ...p, active: off.has(p.name) ? false : on.has(p.name) ? true : p.active }));
+    const masters = (p: GamePlugin) => p.masters.filter((m) => changed.some((q) => q.name === m));
+    const out: GamePlugin[] = [];
+    const place = (p: GamePlugin) => {
+      if (out.includes(p)) return;
+      masters(p).forEach((m) => place(changed.find((q) => q.name === m)!));
+      out.push(p);
+    };
+    changed.forEach(place);
+    skyrimOrder = out;
+    return { ...orderNow(), done };
   },
 
   requirements: async (id: GameId): Promise<GameRequirement[]> =>

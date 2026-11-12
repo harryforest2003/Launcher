@@ -218,4 +218,72 @@ function sorted(plugins) {
     return out;
 }
 
-module.exports = { read, activate, remove, fileFor, header, loadOrder, setOrder, sorted };
+/*
+ * What fixing the load order would change, without changing it:
+ * { turnOn: [{ name, for }], turnOff: [{ name, needs, missing }], moved: [names], order: [{ name, active }] }
+ *  - a plugin needing a master that isn't installed (or needs one that isn't) is turned
+ *    off, as the game won't start with it on;
+ *  - masters a plugin that's on needs are turned on;
+ *  - then each plugin is put after what it needs, changing as little as it can.
+ */
+function fixPlan(game, loc) {
+    const { fixed, plugins } = loadOrder(game, loc);
+    const fixedSet = new Set(fixed.map((n) => n.toLowerCase()));
+    const byLower = new Map(plugins.map((p) => [p.name.toLowerCase(), p]));
+    const exists = (lower) => fixedSet.has(lower) || byLower.has(lower);
+
+    // Plugins that can't load: a master missing, or a master that can't load.
+    const unavailable = new Map();
+    const check = (plugin, seen = new Set()) => {
+        const lower = plugin.name.toLowerCase();
+        if (unavailable.has(lower)) return unavailable.get(lower);
+        if (seen.has(lower)) return null;
+        seen.add(lower);
+        let missing = null;
+        for (const master of plugin.masters) {
+            const m = master.toLowerCase();
+            if (fixedSet.has(m)) continue;
+            if (!exists(m)) {
+                missing = master;
+                break;
+            }
+            if (check(byLower.get(m), seen)) {
+                missing = master;
+                break;
+            }
+        }
+        unavailable.set(lower, missing);
+        return missing;
+    };
+    plugins.forEach((plugin) => check(plugin));
+
+    const active = new Map(plugins.map((p) => [p.name.toLowerCase(), p.active]));
+    const turnOff = [];
+    for (const plugin of plugins) {
+        const needs = unavailable.get(plugin.name.toLowerCase());
+        if (plugin.active && needs) {
+            active.set(plugin.name.toLowerCase(), false);
+            // Missing: not installed; otherwise installed but it can't load either.
+            turnOff.push({ name: plugin.name, needs, missing: !exists(needs.toLowerCase()) });
+        }
+    }
+    const turnOn = [];
+    const switchOn = (plugin, forName) => {
+        for (const master of plugin.masters) {
+            const m = master.toLowerCase();
+            const needed = byLower.get(m);
+            if (!needed || active.get(m)) continue;
+            active.set(m, true);
+            turnOn.push({ name: needed.name, for: forName });
+            switchOn(needed, needed.name);
+        }
+    };
+    for (const plugin of plugins) if (active.get(plugin.name.toLowerCase())) switchOn(plugin, plugin.name);
+
+    const order = sorted(plugins);
+    // The ones that loaded before something they need (the rest only shift along).
+    const moved = plugins.filter((p) => p.problems.some((x) => x.kind === "after") && active.get(p.name.toLowerCase())).map((p) => p.name);
+    return { turnOn, turnOff, moved, order: order.map((p) => ({ name: p.name, active: active.get(p.name.toLowerCase()) })) };
+}
+
+module.exports = { read, activate, remove, fileFor, header, loadOrder, setOrder, sorted, fixPlan };

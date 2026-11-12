@@ -306,24 +306,31 @@ function registerGamesIpc() {
     });
 
     // Skyrim's and Fallout 4's load order.
+    // The order, and what fixing it would change (nothing, when it's fine).
+    const withFix = (game, loc) => {
+        const order = plugins.loadOrder(game, loc);
+        const plan = plugins.fixPlan(game, loc);
+        return { ...order, fix: { turnOn: plan.turnOn, turnOff: plan.turnOff, moved: plan.moved } };
+    };
     ipcMain.handle("games:loadOrder", (_e, id) => {
         const game = need(id);
         if (!game.bethesda) throw new Error(`${game.name} has no load order to set.`);
-        return plugins.loadOrder(game, detect.locate(id));
+        return withFix(game, detect.locate(id));
+    });
+    ipcMain.handle("games:fixLoadOrder", (_e, id) => {
+        const game = need(id);
+        const loc = detect.locate(id);
+        const plan = plugins.fixPlan(game, loc);
+        plugins.setOrder(game, loc, plan.order);
+        store.touch(id);
+        return { ...withFix(game, loc), done: { turnOn: plan.turnOn, turnOff: plan.turnOff, moved: plan.moved } };
     });
     ipcMain.handle("games:setLoadOrder", (_e, id, entries) => {
         const game = need(id);
         const loc = detect.locate(id);
         plugins.setOrder(game, loc, (entries ?? []).map((e) => ({ name: String(e.name), active: e.active === true })));
         store.touch(id);
-        return plugins.loadOrder(game, loc);
-    });
-    ipcMain.handle("games:sortLoadOrder", (_e, id) => {
-        const game = need(id);
-        const loc = detect.locate(id);
-        plugins.setOrder(game, loc, plugins.sorted(plugins.loadOrder(game, loc).plugins));
-        store.touch(id);
-        return plugins.loadOrder(game, loc);
+        return withFix(game, loc);
     });
 
     // What mods need that isn't installed, and getting it.

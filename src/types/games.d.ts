@@ -128,7 +128,9 @@ declare global {
         masters: string[];
         problems: { kind: "missing" | "off" | "after"; master: string }[];
     };
-    type GameLoadOrder = { fixed: string[]; plugins: GamePlugin[] };
+    /* What fixing the load order changes: masters turned on, plugins that can't load turned off, and ones moved after what they need. */
+    type GameLoadOrderFix = { turnOn: { name: string; for: string }[]; turnOff: { name: string; needs: string; missing: boolean }[]; moved: string[] };
+    type GameLoadOrder = { fixed: string[]; plugins: GamePlugin[]; fix: GameLoadOrderFix };
 
     type GameRequirement = {
         key: string;
@@ -249,7 +251,7 @@ declare global {
 
             loadOrder: (id: GameId) => Promise<GameLoadOrder>;
             setLoadOrder: (id: GameId, entries: { name: string; active: boolean }[]) => Promise<GameLoadOrder>;
-            sortLoadOrder: (id: GameId) => Promise<GameLoadOrder>;
+            fixLoadOrder: (id: GameId) => Promise<GameLoadOrder & { done: GameLoadOrderFix }>;
 
             requirements: (id: GameId) => Promise<GameRequirement[]>;
             requirementsBefore: (id: GameId, modId: string) => Promise<GameRequirement[]>;

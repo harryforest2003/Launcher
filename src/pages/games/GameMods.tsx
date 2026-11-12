@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Bug, Folder, Play } from "lucide-react";
 import SearchDropdown from "../../components/SearchDropdown";
 import FinderPanel from "./FinderPanel";
+import LoadOrderNotice from "./LoadOrderNotice";
 import RequirementsPanel from "./RequirementsPanel";
 import SetMenu from "./SetMenu";
 import IconButton from "../../components/IconButton";
@@ -42,6 +43,7 @@ type Props = {
   finderIntro: boolean;
   finderBusy: boolean;
   finderApi: { intro: () => void; cancelIntro: () => void; start: () => void; answer: (happened: boolean) => void; stop: (keepOff: string | null) => void };
+  goLoadOrder: () => void;
 };
 
 const ALL = "All mods";
@@ -88,6 +90,7 @@ export default function GameMods({
   finderIntro,
   finderBusy,
   finderApi,
+  goLoadOrder,
 }: Props) {
   // A set shown on its own ("All mods" for every one), and naming a new set or renaming one.
   const [setShown, setSetShown] = useState(ALL);
@@ -529,6 +532,8 @@ export default function GameMods({
           <span style={{ fontSize: 12, color: "#6b7280" }}>Add mods to it with the tag button on each one.</span>
         )}
       </div>
+
+      <LoadOrderNotice detail={detail} mods={mods} goLoadOrder={goLoadOrder} />
 
       <RequirementsPanel requirements={requirements} getting={getting} onGet={onGetRequirements} />
 
