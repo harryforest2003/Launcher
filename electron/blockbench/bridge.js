@@ -15,7 +15,8 @@
   // the window, with whatever Blockbench has to say.
   const ready = () => window.unityLauncher.ready().catch(() => {});
 
-  if (!window.Blockbench?.setup_successful) return ready();
+  // Blockbench didn't start: the launcher starts another one.
+  if (!window.Blockbench?.setup_successful) return window.unityLauncher.failed().catch(ready);
 
   /*
    * The side panels take these shares of the editor's width when something opens, and
@@ -136,11 +137,28 @@
    * already dealt with unsaved changes, and this window waits for the next thing.
    */
   let closed = null;
+
+  // Closes everything open, carrying on past anything that won't close.
+  const closeAll = async () => {
+    let all = true;
+    for (const project of [...(window.ModelProject?.all ?? [])]) {
+      try {
+        await project.close(true);
+      } catch {
+        all = false;
+      }
+    }
+    return all;
+  };
+
   window.__unityLauncherClose = async () => {
-    for (const project of [...ModelProject.all]) await project.close(true);
-    job = null;
-    closed?.();
-    return true;
+    try {
+      return await closeAll();
+    } finally {
+      // Whatever happened, it's ready for the next thing.
+      job = null;
+      closed?.();
+    }
   };
 
   const open = async () => {
@@ -158,7 +176,14 @@
         layer_template: false,
       });
     } else {
-      loadModelFile({ name: `${job.name}.bbmodel`, path: `${job.name}.bbmodel`, content: job.model });
+      // Tried twice: once in a while Blockbench isn't quite ready for it.
+      const before = window.Project;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        await loadModelFile({ name: `${job.name}.bbmodel`, path: `${job.name}.bbmodel`, content: job.model });
+        if (window.Project && window.Project !== before) break;
+        await pause(300);
+      }
+      if (!window.Project || window.Project === before) throw new Error("Blockbench couldn't read the model file.");
     }
 
     if (window.Project) {
@@ -176,13 +201,23 @@
 
   // One thing at a time: open it, show it, then wait for Done before taking the next.
   for (;;) {
+    let next;
+    try {
+      next = await window.unityLauncher.job();
+    } catch {
+      await pause(1000);
+      continue;
+    }
+    job = next;
     const waitForClose = new Promise((resolve) => (closed = resolve));
-    job = await window.unityLauncher.job();
-
-    // The width the launcher gives it: hidden, it may not know its own yet.
-    setPanelShares(job.width || innerWidth || 1200);
 
     try {
+      // Anything left open from before (a close that didn't finish) goes first.
+      if (window.ModelProject?.all.length) await closeAll();
+
+      // The width the launcher gives it: hidden, it may not know its own yet.
+      setPanelShares(job.width || innerWidth || 1200);
+
       await open();
     } catch (err) {
       Blockbench.showMessageBox({

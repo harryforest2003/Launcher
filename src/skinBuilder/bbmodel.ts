@@ -3,15 +3,21 @@ import type { DisplayTable, ModelElement } from "./types";
 
 /*
  * A Blockbench project in its generic ("free") format with the textures embedded,
- * so the file opens on its own. UVs stay on Minecraft's 0-16 scale, which works
- * for a non-square texture because uv_width and uv_height describe that scale
- * rather than the image's size.
+ * so the file opens on its own. Each texture's UV size is its size in pixels, so
+ * Blockbench shows it exactly as it is, one UV unit to a pixel; the model's own UVs
+ * (Minecraft's 0-16 scale) are scaled to match, and back again when it's saved
+ * (blockbenchEdit.ts).
  *
  * The glow is embedded as its still frame. Blockbench assumes an animation's frames
  * are square, and a skin's usually aren't.
  */
 
 const FACE_NAMES = ["north", "east", "south", "west", "up", "down"] as const;
+
+/* A face's UVs from Minecraft's 0-16 scale to the texture's pixels. */
+function toPixels(uv: number[], width: number, height: number) {
+  return uv.map((value, i) => +((value * (i % 2 === 0 ? width : height)) / 16).toFixed(4));
+}
 
 function uuid() {
   return crypto.randomUUID();
@@ -26,8 +32,8 @@ function textureEntry(name: string, id: number, png: Uint8Array, width: number, 
     id: String(id),
     width,
     height,
-    uv_width: 16,
-    uv_height: 16,
+    uv_width: width,
+    uv_height: height,
     particle: id === 0,
     use_as_default: false,
     layers_enabled: false,
@@ -64,9 +70,13 @@ export function buildBbmodel(options: {
     for (const faceName of FACE_NAMES) {
       const face = element.faces[faceName];
       // A face the game does not draw is switched off, not given a blank texture.
-      faces[faceName] = face
-        ? { uv: face.uv, texture: face.texture === "#g" ? 1 : 0 }
-        : { uv: [0, 0, 0, 0], texture: null };
+      if (!face) {
+        faces[faceName] = { uv: [0, 0, 0, 0], texture: null };
+        continue;
+      }
+      const onGlow = face.texture === "#g" && glow;
+      const [width, height] = onGlow ? [glow.width, glow.height] : [textureWidth, textureHeight];
+      faces[faceName] = { uv: toPixels(face.uv, width, height), texture: onGlow ? 1 : 0 };
     }
 
     return {
@@ -102,7 +112,7 @@ export function buildBbmodel(options: {
     variable_placeholder_buttons: [],
     timeline_setups: [],
     unhandled_root_fields: {},
-    resolution: { width: 16, height: 16 },
+    resolution: { width: textureWidth, height: textureHeight },
     elements: cubes,
     outliner: [
       {

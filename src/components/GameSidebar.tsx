@@ -38,7 +38,8 @@ export default function GameSidebar({ game, hasLoadOrder = false, hasCC = false,
         position: "relative",
         display: "flex",
         flexDirection: "column",
-        boxSizing: "border-box",
+        // 300px plus its padding, the same as the launcher's and Minecraft's sidebars.
+        boxSizing: "content-box",
       }}
     >
       <h1 style={{ color: "#a855f7", lineHeight: "1.1", marginBottom: "14px" }}>

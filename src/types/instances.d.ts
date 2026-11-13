@@ -323,6 +323,8 @@ declare global {
         showSnapshots: boolean;
         cloudFolder: string;
         downloadConcurrency: number;
+        /** The Library's groups of instances: { group name: instance names }. */
+        instanceGroups?: Record<string, string[]>;
         system: {
             totalRamGb: number;
             maxRecommendedGb: number;

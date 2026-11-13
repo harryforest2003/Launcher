@@ -101,6 +101,18 @@ export async function applyBlockbenchEdit(meta: SkinMeta, saved: BlockbenchModel
     /glow/i.test(texture.name) ? "#g" : "#s"
   );
 
+  // Blockbench's UVs are in each texture's UV size (its pixels, or 16 in older files);
+  // Minecraft's are 0-16 whatever the texture's size.
+  const resolution = { width: project.resolution?.width || 16, height: project.resolution?.height || 16 };
+  const uvSizeOf = (index: number | null | undefined) => {
+    const texture = index === null || index === undefined ? null : project.textures?.[index];
+    return { width: texture?.uv_width || resolution.width, height: texture?.uv_height || resolution.height };
+  };
+  const toSixteenths = (uv: number[], index: number | null | undefined) => {
+    const size = uvSizeOf(index);
+    return uv.map((value, i) => +((value * 16) / (i % 2 === 0 ? size.width : size.height)).toFixed(4));
+  };
+
   const elements: ModelElement[] = (project.elements ?? [])
     .filter((element: { type?: string; visibility?: boolean }) => (element.type ?? "cube") === "cube" && element.visibility !== false)
     .map((element: {
@@ -116,7 +128,7 @@ export async function applyBlockbenchEdit(meta: SkinMeta, saved: BlockbenchModel
       for (const direction of DIRECTIONS) {
         const face = element.faces?.[direction];
         if (face && face.texture !== null && face.texture !== undefined && keyByIndex[face.texture]) {
-          faces[direction] = { uv: face.uv, texture: keyByIndex[face.texture] };
+          faces[direction] = { uv: toSixteenths(face.uv, face.texture), texture: keyByIndex[face.texture] };
         }
       }
 

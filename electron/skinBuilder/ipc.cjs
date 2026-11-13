@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { readSettings, writeSettings } = require("../minecraft/settings.cjs");
+const { fitUvToTextures } = require("./uvFit.cjs");
 
 /*
  * Storage and file output for the Skin Builder. All the image and model work
@@ -261,8 +262,16 @@ function registerSkinBuilderIpc() {
         const meta = readLibrary().skins.find((skin) => skin.id === id);
         const { openEditor } = require("../blockbench/index.cjs");
 
+        // Its UV size is fitted to its textures, so they show in Blockbench exactly as they are.
+        let model = fs.readFileSync(file, "utf8");
+        try {
+            model = JSON.stringify(fitUvToTextures(JSON.parse(model)));
+        } catch {
+            // Opened as it is: Blockbench says what's wrong with it.
+        }
+
         return openEditor(
-            { kind: "model", name: meta?.name ?? "Skin", model: fs.readFileSync(file, "utf8") },
+            { kind: "model", name: meta?.name ?? "Skin", model },
             async (saved) => {
                 if (typeof saved?.model !== "string" || !Array.isArray(saved?.textures)) {
                     throw new Error("Blockbench didn't send the model back.");

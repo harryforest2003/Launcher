@@ -158,6 +158,7 @@ function destroy(editor) {
     editor.done = true;
 
     clearTimeout(editor.showAnyway);
+    clearInterval(editor.watch);
     editors.delete(editor.contentsId);
     if (editorsByWindow.get(editor.windowId) === editor) editorsByWindow.delete(editor.windowId);
     if (spares.get(editor.windowId) === editor) spares.delete(editor.windowId);
@@ -181,11 +182,12 @@ function finish(editor) {
     if (editor.done || !editor.job) return;
 
     clearTimeout(editor.showAnyway);
+    clearInterval(editor.watch);
     editor.view.setVisible(false);
     editorsByWindow.delete(editor.windowId);
 
     const { resolve, last } = editor;
-    Object.assign(editor, { job: null, onSave: null, last: null, resolve: null, shown: false, showAnyway: null, placed: false });
+    Object.assign(editor, { job: null, onSave: null, last: null, resolve: null, reject: null, shown: false, showAnyway: null, watch: null, placed: false, tries: 0 });
     resolve?.(last);
 
     // Ready for the next open straight away: Blockbench only asks what to open once
@@ -219,25 +221,78 @@ function openEditor(job, onSave, host) {
         throw new Error("Blockbench is already open. Press Done there first.");
     }
 
-    // The one started ahead of time, or a new one if there isn't one yet.
-    const editor = spares.get(host.id) ?? createEditor(host);
+    // The one started ahead of time, unless it's stopped working, or a new one.
+    let editor = spares.get(host.id);
     spares.delete(host.id);
+    if (editor && (editor.done || editor.view.webContents.isDestroyed() || editor.view.webContents.isCrashed())) {
+        destroy(editor);
+        editor = null;
+    }
+    editor ??= createEditor(host);
     editorsByWindow.set(host.id, editor);
 
-    editor.job = job;
-    editor.onSave = onSave;
-    editor.view.setBounds(fitBounds(spaceByWindow.get(host.id) ?? editor.view.getBounds()));
-    editor.showAnyway = setTimeout(() => reveal(editor), SHOW_ANYWAY_MS);
+    return new Promise((resolve, reject) => start(editor, { job, onSave, resolve, reject }));
+}
 
-    const opened = new Promise((resolve) => (editor.resolve = resolve));
+let jobCount = 0;
+
+/* Gives an editor something to open, and watches that it does. */
+function start(editor, { job, onSave, resolve, reject, last = null, tries = 0 }) {
+    Object.assign(editor, { job: { ...job, id: ++jobCount }, onSave, resolve, reject, last, tries, shown: false, openedAt: Date.now() });
+    editor.view.setBounds(fitBounds(spaceByWindow.get(editor.windowId) ?? editor.view.getBounds()));
+    editor.showAnyway = setTimeout(() => reveal(editor), SHOW_ANYWAY_MS);
 
     // Blockbench sizes its panels from its width, so it's told what to open once the
     // page has said where it goes. The first time, the page's bar appears just after this.
-    editor.placed = spaceByWindow.has(host.id);
+    editor.placed = spaceByWindow.has(editor.windowId);
     if (editor.placed) handOver(editor);
     else setTimeout(() => place(editor), PLACE_WAIT_MS);
 
-    return opened;
+    watch(editor);
+}
+
+/*
+ * Blockbench is kept running between things, so if it ever gets stuck (its page crashed,
+ * closing the last thing failed, or it never finished starting), everything after would
+ * open in a Blockbench that can't. So each open is watched: if Blockbench hasn't taken
+ * what to open in time, or hasn't opened it, a fresh one is started with the same thing.
+ */
+const TAKE_WAIT_MS = 4 * 1000; // a Blockbench that's running takes it in a fraction of a second
+const START_WAIT_MS = 45 * 1000; // one that's starting takes a few seconds
+const OPEN_WAIT_MS = 40 * 1000; // a big model takes a few seconds to open
+const TRIES = 2;
+
+function watch(editor) {
+    clearInterval(editor.watch);
+    editor.watch = setInterval(() => {
+        if (editor.done || !editor.job || editor.readyFor === editor.job.id) {
+            clearInterval(editor.watch);
+            return;
+        }
+        const waited = Date.now() - editor.openedAt;
+        const taken = editor.taken === editor.job.id;
+        if (!editor.placed) return;
+        if ((!taken && waited > (editor.alive ? TAKE_WAIT_MS : START_WAIT_MS)) || (taken && waited > OPEN_WAIT_MS)) replace(editor);
+    }, 1000);
+}
+
+/* Swaps a stuck Blockbench for a fresh one, which opens the same thing. */
+function replace(old) {
+    const { host, job, onSave, resolve, reject, last } = old;
+    const tries = (old.tries ?? 0) + 1;
+    Object.assign(old, { job: null, resolve: null, reject: null });
+    destroy(old);
+    if (host.isDestroyed()) return resolve?.(last);
+
+    if (tries > TRIES) {
+        reject?.(new Error("Blockbench didn't open the model. Press the Blockbench button to try again."));
+        setTimeout(() => warmUp(host), RESTART_SPARE_MS);
+        return;
+    }
+
+    const fresh = createEditor(host);
+    editorsByWindow.set(host.id, fresh);
+    start(fresh, { job, onSave, resolve, reject, last, tries });
 }
 
 // The longest Blockbench waits to hear where it goes before opening anyway.
@@ -291,6 +346,9 @@ function createEditor(host) {
         contents.executeJavaScript(BRIDGE).catch(() => {});
     });
 
+    // Its page crashed: what it was opening goes to a fresh one, and a spare is started again.
+    contents.on("render-process-gone", () => broken(editor));
+
     const editor = {
         job: null,
         onSave: null,
@@ -305,6 +363,13 @@ function createEditor(host) {
         showAnyway: null,
         // Blockbench asking what to open, before anything has been chosen.
         waitingForJob: [],
+        // Its bridge has asked for something to open, so Blockbench is running.
+        alive: false,
+        // The id of the last thing it took to open, and the last it said was open.
+        taken: null,
+        readyFor: null,
+        watch: null,
+        tries: 0,
     };
 
     editors.set(editor.contentsId, editor);
@@ -312,6 +377,15 @@ function createEditor(host) {
 
     contents.loadURL(START_PAGE);
     return editor;
+}
+
+/* A Blockbench that's stopped working: replaced if it was opening something, else started again later. */
+function broken(editor) {
+    if (editor.done) return;
+    if (editor.job) return replace(editor);
+    const { host } = editor;
+    destroy(editor);
+    setTimeout(() => warmUp(host), RESTART_SPARE_MS);
 }
 
 function editorFor(event) {
@@ -323,14 +397,26 @@ function editorFor(event) {
 function registerBridgeIpc() {
     // What to open, with the width it's shown at: while hidden, its page can't measure
     // itself. A spare waits here until something is chosen.
+    // Each thing is handed over once, so it's never opened twice.
     ipcMain.handle("blockbench-bridge:job", async (event) => {
         const editor = editorFor(event);
-        if (!editor.job || !editor.placed) await new Promise((resolve) => editor.waitingForJob.push(resolve));
+        editor.alive = true;
+        while (!editor.job || !editor.placed || editor.taken === editor.job.id) {
+            await new Promise((resolve) => editor.waitingForJob.push(resolve));
+        }
+        editor.taken = editor.job.id;
         return { ...editor.job, width: editor.view.getBounds().width };
     });
 
     // What's being edited is open, so the editor can be shown.
-    ipcMain.handle("blockbench-bridge:ready", (event) => reveal(editorFor(event)));
+    ipcMain.handle("blockbench-bridge:ready", (event) => {
+        const editor = editorFor(event);
+        if (editor.job) editor.readyFor = editor.job.id;
+        reveal(editor);
+    });
+
+    // Blockbench didn't start properly.
+    ipcMain.handle("blockbench-bridge:failed", (event) => broken(editorFor(event)));
 
     ipcMain.handle("blockbench-bridge:save", async (event, result) => {
         const editor = editorFor(event);

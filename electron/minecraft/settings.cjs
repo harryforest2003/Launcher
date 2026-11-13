@@ -20,6 +20,7 @@ const DEFAULTS = {
     showSnapshots: false,
     cloudFolder: "",           // a synced folder (OneDrive, Dropbox, iCloud...)
     downloadConcurrency: 16,
+    instanceGroups: {},        // the Library's groups: { name: [instance names] }
 };
 
 function settingsPath() {
