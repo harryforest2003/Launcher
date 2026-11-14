@@ -186,7 +186,7 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
           {downloads.left > 0 && <span className="ui-shell__badge ui-shell__label">{downloads.left}</span>}
         </button>
         <div className="ui-shell__account">
-          <AccountSwitcher compact rail={collapsed} />
+          <AccountSwitcher compact rail={collapsed} game={inMinecraft ? "minecraft" : openGame} />
         </div>
         {!inGame && item("settings", "Settings", <Settings size={16} />, () => go({ kind: "settings" }), { aria: "Launcher settings" })}
       </div>
