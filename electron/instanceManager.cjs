@@ -1,4 +1,5 @@
 const EventEmitter = require("events");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -87,7 +88,7 @@ function getInstances() {
         }
 
         const instance = readInstance(folder);
-        if (instance) instances.push(instance);
+        if (instance) instances.push(withRunState(instance));
     }
 
     return instances;
@@ -147,7 +148,8 @@ async function createInstance(config, { onProgress } = {}) {
             ? Number(config.ram)
             : launcherSettings.readSettings().defaultRam,
         // Extra Java arguments typed when creating it; the instance's settings can change them.
-        ...(typeof config.jvmArgs === "string" && config.jvmArgs.trim() ? { jvmArgs: config.jvmArgs.trim() } : {}),
+        // Only arguments the launcher passes on (settings.cjs checkJvmArgs says which).
+        ...(typeof config.jvmArgs === "string" && config.jvmArgs.trim() ? { jvmArgs: launcherSettings.checkJvmArgs(config.jvmArgs) } : {}),
         created: new Date().toISOString(),
         gameDirectory: path.join(folder, ".minecraft"),
         installed: false,
@@ -289,6 +291,7 @@ function deleteInstance(name) {
 const EDITABLE = ["ram", "jvmArgs", "javaPath", "notes"];
 
 function updateInstance(name, patch) {
+    if (!patch || typeof patch !== "object") throw new Error("Those settings couldn't be read.");
     const folder = instanceFolder(name);
     const instance = getInstance(name);
 
@@ -307,6 +310,24 @@ function updateInstance(name, patch) {
             }
 
             next.ram = Math.floor(ram);
+            continue;
+        }
+
+        // The Java it runs: "" (automatic) or a real java program (see settings.cjs).
+        if (key === "javaPath") {
+            next.javaPath = launcherSettings.checkJavaPath(patch.javaPath);
+            continue;
+        }
+
+        // Pages are told which Java arguments aren't used (minecraft/ipc.cjs checks first);
+        // anything else saved here keeps only the ones that are.
+        if (key === "jvmArgs") {
+            next.jvmArgs = launcherSettings.cleanJvmArgs(String(patch.jvmArgs ?? "").slice(0, 8000));
+            continue;
+        }
+
+        if (key === "notes") {
+            next.notes = String(patch.notes ?? "").slice(0, 8000);
             continue;
         }
 
@@ -419,9 +440,11 @@ async function duplicateInstance(name, newName) {
 
 // Turns "Fabric 1.21.4" into a name not already taken.
 function uniqueName(desired) {
-    const base = String(desired ?? "Instance")
-        .replace(/[/\\:*?"<>|]/g, "-")
-        .trim() || "Instance";
+    const cleaned = String(desired ?? "Instance")
+        .replace(/[\u0000-\u001f/\\:*?"<>|]/g, "-")
+        .trim();
+    // "." and ".." (or only dots) would name the instances folder or the one above it.
+    const base = /^\.*$/.test(cleaned) ? "Instance" : cleaned;
 
     if (!instanceExists(base)) return base;
 
@@ -435,7 +458,26 @@ function uniqueName(desired) {
 
 /* ---------------- LAUNCH ---------------- */
 
+/*
+ * Any number of instances can be open at once, each as its own account. One account
+ * can't be in two games at once: Minecraft allows one online session per account, and
+ * a second would end the first. Offline play (no account) has no such limit.
+ */
 const running = new Map();
+
+// Who each open or starting game plays as: { id, name } of a signed-in account, or null
+// offline. Set from pressing Play until the game is gone.
+const players = new Map();
+
+/*
+ * Forgets an instance's game. Given proc, only if that is still its game: one stopped
+ * earlier was forgotten then, and a newer one may be starting or running in its place.
+ */
+function forgetRun(name, proc) {
+    if (proc && running.get(name) !== proc) return;
+    running.delete(name);
+    players.delete(name);
+}
 
 /*
  * A child process that died without emitting "close" (killed externally,
@@ -448,7 +490,7 @@ function pruneDead(name) {
     if (!proc) return false;
 
     if (proc.exitCode !== null || proc.signalCode !== null || proc.killed) {
-        running.delete(name);
+        forgetRun(name);
         return false;
     }
 
@@ -457,7 +499,7 @@ function pruneDead(name) {
         process.kill(proc.pid, 0);
         return true;
     } catch {
-        running.delete(name);
+        forgetRun(name);
         return false;
     }
 }
@@ -470,14 +512,14 @@ const instanceEvents = new EventEmitter();
 const runs = new Map();
 const MAX_LOG_LINES = 5000;
 
-function recordLog(name, text) {
-    const run = runs.get(name);
+function recordLog(name, text, run = runs.get(name)) {
     if (!run) return;
     const parts = (run.partial + text).split(/\r?\n/);
     run.partial = parts.pop();
     run.lines.push(...parts);
     if (run.lines.length > MAX_LOG_LINES) run.lines.splice(0, run.lines.length - MAX_LOG_LINES);
-    instanceEvents.emit("log", { name, text });
+    // A stopped game's last words don't go into the log of the one started after it.
+    if (runs.get(name) === run) instanceEvents.emit("log", { name, text });
 }
 
 /*
@@ -486,13 +528,23 @@ function recordLog(name, text) {
  * installers.
  */
 async function chooseJava(instance, need, { onProgress, note }) {
-    if (instance.javaPath && fs.existsSync(instance.javaPath)) {
+    // Only a real java program, even if something else was saved before these checks.
+    const isJava = (javaPath) => {
+        try {
+            return Boolean(launcherSettings.checkJavaPath(javaPath));
+        } catch {
+            if (javaPath) note(`Not using ${javaPath}: it isn't a Java program.`);
+            return false;
+        }
+    };
+
+    if (instance.javaPath && isJava(instance.javaPath)) {
         note(`Using this instance's Java: ${instance.javaPath}`);
         return instance.javaPath;
     }
 
     const chosen = launcherSettings.readSettings().javaPath?.trim();
-    if (chosen && fs.existsSync(chosen)) {
+    if (chosen && isJava(chosen)) {
         note(`Using the Java chosen in Settings: ${chosen}`);
         return chosen;
     }
@@ -510,6 +562,36 @@ async function chooseJava(instance, need, { onProgress, note }) {
 // Instances between pressing Launch and Minecraft starting (Java may be downloading).
 const starting = new Set();
 
+const isOpen = (name) => starting.has(name) || pruneDead(name);
+
+/* The instance whose game is open or starting as this signed-in account, or null. */
+function instanceUsing(accountId) {
+    if (!accountId) return null;
+    for (const [name, player] of players) {
+        if (player?.id === accountId && isOpen(name)) return name;
+    }
+    return null;
+}
+
+/* Every open or starting game's player: { [instance]: { id, name } | null }. No tokens. */
+function playing() {
+    const result = {};
+    for (const [name, player] of players) {
+        if (isOpen(name)) result[name] = player ? { ...player } : null;
+    }
+    return result;
+}
+
+/* An instance as pages see it: whether its game is open, and as whom. */
+function withRunState(instance) {
+    const open = isOpen(instance.name);
+    return { ...instance, running: open && !starting.has(instance.name), playingAs: open ? players.get(instance.name) ?? null : null };
+}
+
+/*
+ * account is what accountForLaunch gives: id is the saved account's id (null offline).
+ * Throws, saying which game has it, when that account is already in one.
+ */
 async function launchInstance(name, account, { onProgress } = {}) {
     const instance = getInstance(name);
     const folder = instanceFolder(name);
@@ -522,6 +604,13 @@ async function launchInstance(name, account, { onProgress } = {}) {
 
     if (pruneDead(name) || starting.has(name)) {
         throw new Error(`"${name}" is already running.`);
+    }
+
+    const busy = account?.online ? instanceUsing(account.id) : null;
+    if (busy) {
+        throw new Error(
+            `${account.name} is already playing "${busy}". Minecraft allows one game per account at a time, so play this one as another account, or close "${busy}" first.`
+        );
     }
 
     const versionPath = path.join(
@@ -553,47 +642,61 @@ async function launchInstance(name, account, { onProgress } = {}) {
 
     // Per-instance overrides win; otherwise the launcher-wide settings apply. The Minecraft
     // Launcher's garbage collection settings come first, unless they choose their own.
-    const ownJvmArgs = launcherSettings.parseJvmArgs(instance.jvmArgs || global.jvmArgs);
+    // Only the arguments the launcher passes on: any saved before these checks that could
+    // run a program or write a file are left out, and the log says so.
+    const { args: ownJvmArgs, refused: refusedJvmArgs } = launcherSettings.safeJvmArgs(instance.jvmArgs || global.jvmArgs);
     const extraJvmArgs = launcherSettings.withDefaultGc(ownJvmArgs);
 
-    runs.set(name, { lines: [], partial: "", running: true, startedAt: Date.now(), endedAt: null, exitCode: null });
-    const note = (text) => recordLog(name, `[Unity Launcher] ${text}\n`);
+    // This run's own record, so a game stopped and started again keeps its two runs apart.
+    const run = { id: crypto.randomUUID(), lines: [], partial: "", running: true, startedAt: Date.now(), endedAt: null, exitCode: null };
+    runs.set(name, run);
+    const player = account?.online && account.id ? { id: account.id, name: account.name } : null;
+    const note = (text) => recordLog(name, `[Unity Launcher] ${text}\n`, run);
+    if (refusedJvmArgs.length) {
+        note(`Left out Java arguments the launcher doesn't use (they could run a program or write a file): ${refusedJvmArgs.map((entry) => entry.arg).join(" ")}. Remove them in Settings.`);
+    }
     if (restored) note(`Put back ${restored} of Minecraft's own libraries that an earlier install left out.`);
     if (!launcherSettings.choosesGc(ownJvmArgs)) note("Using the Minecraft Launcher's garbage collection settings, for fewer stutters.");
 
+    // Held from here, so a second Play with the same account waits its turn.
     starting.add(name);
-    let javaPath;
+    players.set(name, player);
+    let proc;
     try {
         const progress = (update) => {
             instanceEvents.emit("progress", { name, ...update });
             onProgress?.(update);
         };
-        javaPath = await chooseJava(instance, requiredJava(folder, instance), { onProgress: progress, note });
+        const javaPath = await chooseJava(instance, requiredJava(folder, instance), { onProgress: progress, note });
+
+        proc = launch({
+            versionJson,
+            instanceFolder: folder,
+            gameDirectory: instance.gameDirectory ?? path.join(folder, ".minecraft"),
+            account,
+            ram: instance.ram,
+            javaPath,
+            extraJvmArgs,
+            onLog: (text) => recordLog(name, text, run),
+            onExit: (code) => {
+                // A game stopped and started again: only the newest one is "running".
+                const superseded = runs.get(name) !== run;
+                forgetRun(name, proc);
+                if (run.partial) run.lines.push(run.partial);
+                Object.assign(run, { partial: "", running: false, endedAt: Date.now(), exitCode: code });
+                instanceEvents.emit("exit", { name, code, session: run.id, superseded });
+            },
+        });
+    } catch (err) {
+        players.delete(name);
+        Object.assign(run, { running: false, endedAt: Date.now() });
+        throw err;
     } finally {
         starting.delete(name);
     }
 
-    const proc = launch({
-        versionJson,
-        instanceFolder: folder,
-        gameDirectory: instance.gameDirectory ?? path.join(folder, ".minecraft"),
-        account,
-        ram: instance.ram,
-        javaPath,
-        extraJvmArgs,
-        onLog: (text) => recordLog(name, text),
-        onExit: (code) => {
-            running.delete(name);
-            const run = runs.get(name);
-            if (run) {
-                if (run.partial) run.lines.push(run.partial);
-                Object.assign(run, { partial: "", running: false, endedAt: Date.now(), exitCode: code });
-            }
-            instanceEvents.emit("exit", { name, code });
-        },
-    });
-
     running.set(name, proc);
+    instanceEvents.emit("started", { name, session: run.id, account: player, pid: proc.pid, at: run.startedAt });
 
     // Record last played for the library view.
     try {
@@ -609,7 +712,7 @@ async function launchInstance(name, account, { onProgress } = {}) {
         // non-fatal
     }
 
-    return { launched: true, name, pid: proc.pid };
+    return { launched: true, name, pid: proc.pid, account: player };
 }
 
 /*
@@ -672,7 +775,7 @@ function stopInstance(name) {
     const proc = running.get(name);
 
     proc.kill();
-    running.delete(name);
+    forgetRun(name);
 
     return { stopped: name };
 }
@@ -721,6 +824,9 @@ module.exports = {
     instanceEvents,
     stopInstance,
     isRunning,
+    instanceUsing,
+    playing,
+    withRunState,
     getInstancesStorage,
     instanceFolder,
     INSTANCE_DIR,

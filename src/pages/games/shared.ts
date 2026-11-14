@@ -56,8 +56,8 @@ export function installSummary(result: GameInstallResult) {
 }
 
 export const panel: React.CSSProperties = {
-  background: "rgba(21, 21, 21, 0.88)",
-  border: "1px solid #6d28d9",
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
   borderRadius: 12,
   padding: 16,
 };
@@ -68,10 +68,10 @@ export const note = (tone: "warn" | "bad" | "good" | "info"): React.CSSPropertie
   fontSize: 13,
   lineHeight: 1.5,
   ...{
-    warn: { background: "#2a1a05", border: "1px solid #b45309", color: "#fcd34d" },
-    bad: { background: "#2a0d0d", border: "1px solid #ef4444", color: "#fca5a5" },
-    good: { background: "#0d2a12", border: "1px solid #166534", color: "#86efac" },
-    info: { background: "#17141f", border: "1px solid #6d28d9", color: "#d8b4fe" },
+    warn: { background: "var(--color-warning-bg)", border: "1px solid var(--color-warning-border)", color: "var(--color-warning-text)" },
+    bad: { background: "var(--color-danger-bg)", border: "1px solid var(--color-danger-border)", color: "var(--color-danger-text)" },
+    good: { background: "var(--color-success-bg)", border: "1px solid var(--color-success-border)", color: "var(--color-success-text)" },
+    info: { background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-accent-text)" },
   }[tone],
 });
 

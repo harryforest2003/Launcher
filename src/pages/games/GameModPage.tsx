@@ -13,7 +13,7 @@ type Props = {
 };
 
 const SITE = { nexus: "https://www.nexusmods.com/", curseforge: "https://www.curseforge.com/" };
-const BADGE = { nexus: { label: "NEXUS MODS", colour: "#d97706" }, curseforge: { label: "CURSEFORGE", colour: "#f97316" } };
+const BADGE = { nexus: { label: "NEXUS MODS", colour: "var(--color-warning-solid)" }, curseforge: { label: "CURSEFORGE", colour: "var(--color-warning-solid)" } };
 
 /* A mod's page, laid out as Minecraft's: what it is, its files, its pictures, and installing it. */
 export default function GameModPage({ detail, provider, modId, afterInstall, openOnNexus, goLauncherSettings }: Props) {
@@ -85,10 +85,10 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
   }
 
   if (failed) return <div style={note("bad")}>{failed}</div>;
-  if (!mod) return <div style={{ color: "#9ca3af" }}>Loading...</div>;
+  if (!mod) return <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>;
 
   const tabButton = (id: typeof tab, label: string) => (
-    <button onClick={() => setTab(id)} className="sidebar-button" style={tab === id ? { background: "#6d28d9" } : undefined}>
+    <button onClick={() => setTab(id)} className="sidebar-button" style={tab === id ? { background: "var(--color-accent-subtle)" } : undefined}>
       {label}
     </button>
   );
@@ -98,20 +98,20 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
       {viewing && (
         <div
           onClick={() => setViewing(null)}
-          style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0, 0, 0, 0.85)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30, cursor: "zoom-out" }}
+          style={{ position: "fixed", inset: 0, zIndex: 9000, background: "var(--color-scrim)", display: "flex", alignItems: "center", justifyContent: "center", padding: 30, cursor: "zoom-out" }}
         >
           <img src={viewing} alt="" style={{ maxWidth: "100%", maxHeight: "100%", borderRadius: 10 }} />
         </div>
       )}
       {/* LEFT */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", gap: 20, background: "#151515", padding: 20, borderRadius: 12, border: "1px solid #6d28d9", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 20, background: "var(--color-surface)", padding: 20, borderRadius: 12, border: "1px solid var(--color-border)", alignItems: "center" }}>
           {mod.picture ? <img src={mod.picture} alt="" style={{ width: provider === "nexus" ? 190 : 110, height: 110, objectFit: "cover", borderRadius: 16, flexShrink: 0 }} /> : null}
           <div style={{ minWidth: 0 }}>
-            <h1 style={{ margin: 0, color: "#c084fc", fontSize: 30 }}>{mod.name}</h1>
-            <p style={{ color: "#888", marginTop: 6 }}>{mod.author}</p>
+            <h1 style={{ margin: 0 }}>{mod.name}</h1>
+            <p style={{ color: "var(--color-text-muted)", marginTop: 6 }}>{mod.author}</p>
             <span style={{ display: "inline-block", marginTop: 10, padding: "4px 10px", borderRadius: 8, background: BADGE[provider].colour, fontSize: 12, fontWeight: 700 }}>{BADGE[provider].label}</span>
-            <p style={{ marginTop: 14, color: "#bbb" }}>{mod.summary}</p>
+            <p style={{ marginTop: 14, color: "var(--color-text-secondary)" }}>{mod.summary}</p>
           </div>
         </div>
 
@@ -123,7 +123,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
 
         <div style={{ marginTop: 20 }}>
           {tab === "desc" && (
-            <div style={{ color: "#ddd", lineHeight: 1.7, overflowX: "hidden", wordBreak: "break-word" }}>
+            <div style={{ color: "var(--color-text-secondary)", lineHeight: 1.7, overflowX: "hidden", wordBreak: "break-word" }}>
               <div
                 className="mod-description"
                 onClick={(event) => {
@@ -155,17 +155,17 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
                 </div>
               ) : (
                 mod.files.map((file) => (
-                  <div key={file.id} style={{ background: "#1b1b1b", padding: 12, borderRadius: 10, border: "1px solid #333", display: "flex", gap: 12, alignItems: "center" }}>
+                  <div key={file.id} style={{ background: "var(--color-surface-sunken)", padding: 12, borderRadius: 10, border: "1px solid var(--color-border)", display: "flex", gap: 12, alignItems: "center" }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <h4 style={{ color: "#c084fc", margin: 0 }}>{file.name}</h4>
-                      <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 4 }}>
+                      <h4 style={{ color: "var(--color-accent-text)", margin: 0 }}>{file.name}</h4>
+                      <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 4 }}>
                         {[file.category, file.version && `version ${file.version}`, sizeText(file.size), shortDate(file.date)].filter(Boolean).join(" • ")}
                       </div>
-                      {file.description && <div style={{ color: "#aaa", fontSize: 12, marginTop: 6, whiteSpace: "pre-wrap" }}>{file.description}</div>}
+                      {file.description && <div style={{ color: "var(--color-text-secondary)", fontSize: 12, marginTop: 6, whiteSpace: "pre-wrap" }}>{file.description}</div>}
                     </div>
                     <button
                       className="sidebar-button"
-                      style={{ padding: "8px 14px", flexShrink: 0, ...(file.category === "Main" || file.category === "File" ? { background: "#7c3aed", borderColor: "#a78bfa" } : {}) }}
+                      style={{ padding: "8px 14px", flexShrink: 0, ...(file.category === "Main" || file.category === "File" ? { background: "var(--color-accent-subtle)", borderColor: "var(--color-accent-line)" } : {}) }}
                       onClick={() => install(file)}
                     >
                       {installing === file.id ? "Installing..." : viaWebsite ? "Get" : "Install"}
@@ -179,7 +179,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
           {tab === "gallery" && (
             <div data-testid="mod-gallery">
               {provider === "nexus" && mod.url && (
-                <div style={{ color: "#9ca3af", fontSize: 13, marginBottom: 12 }}>
+                <div style={{ color: "var(--color-text-muted)", fontSize: 13, marginBottom: 12 }}>
                   Nexus Mods only shares a mod's main picture and the ones in its description with apps.{" "}
                   <a
                     href={`${mod.url}?tab=images`}
@@ -187,7 +187,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
                       event.preventDefault();
                       window.gamesAPI.openUrl(`${mod.url}?tab=images`).catch(() => {});
                     }}
-                    style={{ color: "#8ab4ff" }}
+                    style={{ color: "var(--color-info-text)" }}
                   >
                     See its whole gallery on Nexus Mods
                   </a>
@@ -195,7 +195,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
               )}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10 }}>
                 {mod.images.length === 0 ? (
-                  <div style={{ color: "#9ca3af" }}>No pictures.</div>
+                  <div style={{ color: "var(--color-text-muted)" }}>No pictures.</div>
                 ) : (
                   mod.images.map((src) => (
                     <img
@@ -204,7 +204,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
                       alt=""
                       loading="lazy"
                       onClick={() => setViewing(src)}
-                      style={{ width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: 10, border: "1px solid #333", cursor: "zoom-in" }}
+                      style={{ width: "100%", aspectRatio: "16 / 9", objectFit: "cover", borderRadius: 10, border: "1px solid var(--color-border)", cursor: "zoom-in" }}
                     />
                   ))
                 )}
@@ -215,16 +215,16 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
       </div>
 
       {/* RIGHT */}
-      <div style={{ position: "relative", width: 320, flexShrink: 0, background: "rgba(21, 21, 21, 0.85)", borderRadius: 12, padding: 20, border: "1px solid #333", boxSizing: "border-box" }}>
+      <div style={{ position: "relative", width: 320, flexShrink: 0, background: "var(--color-surface)", borderRadius: 12, padding: 20, border: "1px solid var(--color-border)", boxSizing: "border-box" }}>
         <button
           className="sidebar-button"
           data-testid="mod-install"
           onClick={() => install(mainFile)}
-          style={{ width: "100%", padding: 14, fontSize: 15, background: "#7c3aed", borderColor: "#a78bfa" }}
+          style={{ width: "100%", padding: 14, fontSize: 15, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
         >
           {installing ? "Installing..." : viaWebsite ? "Install from Nexus Mods" : `Install into ${detail.name}`}
         </button>
-        <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
           {viaWebsite
             ? mod.hasKey
               ? `Opens ${mainFile ? "its main file's download" : "its files"} on Nexus Mods: one click on the download button there and the launcher puts it in the right folders.`
@@ -245,7 +245,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
           </div>
         )}
 
-        <hr style={{ margin: "20px 0", borderColor: "#333" }} />
+        <hr style={{ margin: "20px 0", borderColor: "var(--color-border)" }} />
 
         <p><b>Downloads</b></p>
         <p>{mod.downloads?.toLocaleString() ?? "Unknown"}</p>
@@ -270,7 +270,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
         {mod.url && (
           <>
             <p><b>Website</b></p>
-            <a href={mod.url} onClick={(event) => { event.preventDefault(); window.gamesAPI.openUrl(mod.url!).catch(() => {}); }} style={{ color: "#8ab4ff" }}>
+            <a href={mod.url} onClick={(event) => { event.preventDefault(); window.gamesAPI.openUrl(mod.url!).catch(() => {}); }} style={{ color: "var(--color-info-text)" }}>
               Open on {provider === "nexus" ? "Nexus Mods" : "CurseForge"}
             </a>
           </>

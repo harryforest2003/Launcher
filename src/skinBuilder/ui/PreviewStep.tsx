@@ -81,9 +81,9 @@ export default function PreviewStep({
       </div>
 
       <div style={{ ...panelStyle, flex: "0 0 300px" }}>
-        <div style={{ color: "#c084fc", fontSize: 16, marginBottom: 12 }}>Your skin</div>
+        <div style={{ color: "var(--color-accent-text)", fontSize: 16, marginBottom: 12 }}>Your skin</div>
 
-        <label style={{ display: "block", fontSize: 13, color: "#ccc", marginBottom: 12 }}>
+        <label style={{ display: "block", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
           Name
           <input
             aria-label="Skin name"
@@ -94,7 +94,7 @@ export default function PreviewStep({
           />
         </label>
 
-        <label style={{ display: "block", fontSize: 13, color: "#ccc", marginBottom: 14 }}>
+        <label style={{ display: "block", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 14 }}>
           Group
           <select
             aria-label="Group"
@@ -110,7 +110,7 @@ export default function PreviewStep({
           </select>
         </label>
 
-        <div data-testid="preview-stats" style={{ fontSize: 13, color: "#ccc", lineHeight: 1.7, marginBottom: 16 }}>
+        <div data-testid="preview-stats" style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.7, marginBottom: 16 }}>
           <div>Applies to: {appliesTo}</div>
           <div>Texture: {built.raster.width} x {built.raster.height} px{built.glow ? ", plus glow" : ""}</div>
           <div>Atlas space: {built.atlasPixels.toLocaleString()} px</div>

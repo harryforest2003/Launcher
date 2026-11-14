@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+import { Badge, Button, type Tone } from "./ui";
+import { color, font, radius, shadow, space, z } from "../theme/tokens";
 
 type Props = {
   instanceName: string;
@@ -15,10 +18,11 @@ type Props = {
 const message = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
-const CHANNEL: Record<ContentVersion["channel"], { label: string; colour: string }> = {
-  release: { label: "Release", colour: "#22c55e" },
-  beta: { label: "Beta", colour: "#f59e0b" },
-  alpha: { label: "Alpha", colour: "#ef4444" },
+// How finished each version is, as a word with a status colour behind it.
+const CHANNEL: Record<ContentVersion["channel"], { label: string; tone: Tone }> = {
+  release: { label: "Release", tone: "success" },
+  beta: { label: "Beta", tone: "warning" },
+  alpha: { label: "Alpha", tone: "danger" },
 };
 
 function formatBytes(bytes: number) {
@@ -113,10 +117,11 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
     <div
       data-testid="version-picker"
       onClick={() => !busy && onClose()}
-      style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0, 0, 0, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{ position: "fixed", inset: 0, zIndex: z.modal, background: color.scrim, display: "flex", alignItems: "center", justifyContent: "center", padding: space[6] }}
     >
       <div
         role="dialog"
+        aria-modal="true"
         aria-label={`Choose a version of ${name}`}
         onClick={(e) => e.stopPropagation()}
         style={{
@@ -124,85 +129,104 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
           maxHeight: "min(760px, 90vh)",
           display: "flex",
           flexDirection: "column",
-          background: "#17141f",
-          border: "1px solid #6d28d9",
-          borderRadius: 14,
-          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6)",
-          textAlign: "left",
-          color: "#e4e4e7",
+          background: color.surfaceRaised,
+          borderRadius: radius.lg,
+          boxShadow: `${shadow.lg}, ${shadow.edge}`,
+          textAlign: "start",
+          color: color.text,
+          fontFamily: font.ui,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid #2e2640" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: space[3], padding: `${space[4]} ${space[5]}`, borderBottom: `1px solid ${color.border}` }}>
           {icon ? (
-            <img src={icon} alt="" width={36} height={36} style={{ borderRadius: 8, objectFit: "cover" }} />
+            <img src={icon} alt="" width={36} height={36} style={{ borderRadius: radius.md, objectFit: "cover" }} />
           ) : (
-            <div style={{ width: 36, height: 36, borderRadius: 8, background: "#2b1d47" }} />
+            <div style={{ width: 36, height: 36, borderRadius: radius.md, background: color.accentSubtle }} />
           )}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 600, color: "#e9d5ff" }}>{name}</div>
-            <div style={{ fontSize: 12, color: "#9ca3af" }}>
+            <div style={{ fontSize: font.size.lg, fontWeight: font.weight.semibold, color: color.text }}>{name}</div>
+            <div style={{ fontSize: font.size.xs, color: color.textMuted }}>
               {installed ? `You have ${installed.number}. ` : ""}Choose any version that works on this instance.
             </div>
           </div>
-          <button aria-label="Close" disabled={busy} onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "#9ca3af", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>
-            ×
+          <button
+            type="button"
+            aria-label="Close"
+            disabled={busy}
+            onClick={onClose}
+            style={{ marginLeft: "auto", width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", borderRadius: radius.sm, color: color.textSecondary, cursor: "pointer" }}
+          >
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
-        <div style={{ overflowY: "auto", padding: "10px 14px", flex: 1 }}>
+        <div role="radiogroup" aria-label="Versions" style={{ overflowY: "auto", padding: `${space[3]} ${space[4]}`, flex: 1 }}>
           {loadError ? (
-            <div style={{ color: "#fca5a5", fontSize: 13, padding: 8 }}>{loadError}</div>
+            <div style={{ color: color.dangerText, fontSize: font.size.sm, padding: space[2] }}>{loadError}</div>
           ) : !versions ? (
-            <div style={{ color: "#9ca3af", fontSize: 13, padding: 8 }}>Finding versions...</div>
+            <div style={{ color: color.textMuted, fontSize: font.size.sm, padding: space[2] }}>Finding versions...</div>
           ) : !versions.length ? (
-            <div style={{ color: "#9ca3af", fontSize: 13, padding: 8 }}>No versions of this work on this instance.</div>
+            <div style={{ color: color.textMuted, fontSize: font.size.sm, padding: space[2] }}>No versions of this work on this instance.</div>
           ) : (
             versions.map((version, index) => {
               const selected = version.id === chosen;
               const channel = CHANNEL[version.channel] ?? CHANNEL.release;
               return (
-                <div key={version.id} data-testid="version-row" style={{ marginBottom: 6 }}>
+                <div key={version.id} data-testid="version-row" style={{ marginBottom: space[1.5] }}>
                   <div
                     role="radio"
                     aria-checked={selected}
                     tabIndex={0}
                     onClick={() => !busy && choose(version.id)}
-                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && choose(version.id)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      choose(version.id);
+                    }}
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 10,
-                      padding: "8px 12px",
-                      borderRadius: 10,
+                      gap: space[3],
+                      padding: `${space[2]} ${space[3]}`,
+                      borderRadius: radius.sm,
                       cursor: "pointer",
-                      background: selected ? "#2b1d47" : "#100e16",
-                      border: `1px solid ${selected ? "#7c3aed" : "#231d31"}`,
+                      background: selected ? color.accentSubtle : color.surface,
+                      boxShadow: selected ? `inset var(--rail-width) 0 0 ${color.accentLine}` : shadow.edge,
                     }}
                   >
                     <span
                       aria-hidden="true"
-                      style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `2px solid ${selected ? "#a78bfa" : "#52525b"}`, background: selected ? "#a78bfa" : "transparent" }}
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: radius.full,
+                        flexShrink: 0,
+                        boxSizing: "border-box",
+                        border: `2px solid ${selected ? color.accentLine : color.borderStrong}`,
+                        background: selected ? color.accentLine : "transparent",
+                      }}
                     />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: 600, fontSize: 14 }}>{version.number}</span>
-                        <span style={{ fontSize: 10, color: channel.colour, border: `1px solid ${channel.colour}`, borderRadius: 6, padding: "0 6px" }}>{channel.label}</span>
-                        {version.installed && <span style={{ fontSize: 10, color: "#e9d5ff", background: "#6d28d9", borderRadius: 6, padding: "1px 6px" }}>Installed</span>}
-                        {index === 0 && !version.installed && <span style={{ fontSize: 10, color: "#86efac" }}>Newest</span>}
+                      <div style={{ display: "flex", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
+                        <span style={{ fontWeight: font.weight.semibold, fontSize: font.size.sm, fontFamily: font.mono }}>{version.number}</span>
+                        <Badge tone={channel.tone}>{channel.label}</Badge>
+                        {version.installed && <Badge tone="accent">Installed</Badge>}
+                        {index === 0 && !version.installed && <span style={{ fontSize: font.size.xs, fontWeight: font.weight.semibold, color: color.successText }}>Newest</span>}
                       </div>
-                      <div style={{ fontSize: 11, color: "#9ca3af" }}>
+                      <div style={{ fontSize: font.size.xs, color: color.textMuted }}>
                         {new Date(version.published).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
-                        {version.size ? ` · ${formatBytes(version.size)}` : ""}
+                        {version.size ? `, ${formatBytes(version.size)}` : ""}
                       </div>
                     </div>
                     <button
+                      type="button"
                       data-testid="changelog-toggle"
                       aria-expanded={version.id in open}
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleChangelog(version.id);
                       }}
-                      style={{ background: "none", border: "none", color: "#c4b5fd", cursor: "pointer", fontSize: 12, whiteSpace: "nowrap" }}
+                      style={{ background: "none", border: "none", color: color.accentText, cursor: "pointer", fontFamily: font.ui, fontSize: font.size.xs, fontWeight: font.weight.semibold, whiteSpace: "nowrap", padding: space[1] }}
                     >
                       Changelog {version.id in open ? "▾" : "▸"}
                     </button>
@@ -210,7 +234,20 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
                   {version.id in open && (
                     <div
                       data-testid="changelog"
-                      style={{ margin: "4px 0 2px 36px", padding: "8px 12px", maxHeight: 220, overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12, color: "#d4d4d8", background: "#0b0a10", border: "1px solid #231d31", borderRadius: 8 }}
+                      style={{
+                        margin: `${space[1]} 0 ${space[0.5]} 36px`,
+                        padding: `${space[2]} ${space[3]}`,
+                        maxHeight: 220,
+                        overflowY: "auto",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        fontFamily: font.body,
+                        fontSize: font.size.xs,
+                        lineHeight: font.leading.relaxed,
+                        color: color.textSecondary,
+                        background: color.surfaceSunken,
+                        borderRadius: radius.sm,
+                      }}
                     >
                       {open[version.id] ?? "Loading..."}
                     </div>
@@ -222,38 +259,53 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
         </div>
 
         {problems && (
-          <div role="alert" style={{ margin: "0 20px", padding: "10px 12px", borderRadius: 10, background: "#2a1a05", border: "1px solid #b45309", color: "#fcd34d", fontSize: 13 }}>
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>This version probably won't work with the rest of the instance:</div>
-            <ul style={{ margin: "0 0 0 18px", padding: 0 }}>
+          <div
+            role="alert"
+            style={{
+              margin: `0 ${space[5]}`,
+              padding: `${space[3]} ${space[3]} ${space[3]} ${space[4]}`,
+              borderRadius: radius.sm,
+              background: color.warningBg,
+              boxShadow: `inset var(--rail-width) 0 0 ${color.warningBorder}`,
+              color: color.text,
+              fontSize: font.size.sm,
+            }}
+          >
+            <div style={{ fontWeight: font.weight.semibold, marginBottom: space[1], color: color.warningText }}>This version probably won't work with the rest of the instance:</div>
+            <ul style={{ margin: `0 0 0 ${space[4]}`, padding: 0 }}>
               {problems.map((problem) => (
                 <li key={problem}>{problem}</li>
               ))}
             </ul>
           </div>
         )}
-        {error && <div role="alert" style={{ margin: "8px 20px 0", color: "#fca5a5", fontSize: 13 }}>{error}</div>}
+        {error && (
+          <div role="alert" style={{ margin: `${space[2]} ${space[5]} 0`, color: color.dangerText, fontSize: font.size.sm }}>
+            {error}
+          </div>
+        )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid #2e2640" }}>
-          <span style={{ fontSize: 12, color: "#9ca3af", marginRight: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: space[2], padding: `${space[3]} ${space[5]}`, borderTop: `1px solid ${color.border}` }}>
+          <span style={{ fontSize: font.size.xs, color: color.textMuted, marginRight: "auto" }}>
             {picked && !picked.installed ? `${goingBack ? "Going back to" : "Updating to"} ${picked.number}` : "Pick a version"}
           </span>
-          <button className="sidebar-button" disabled={busy} onClick={onClose} style={{ padding: "8px 14px", fontSize: 13 }}>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={onClose}>
             Cancel
-          </button>
+          </Button>
           {problems ? (
-            <button className="sidebar-button" data-testid="install-anyway" disabled={busy} onClick={() => install(true)} style={{ padding: "8px 14px", fontSize: 13, background: "#b45309", borderColor: "#b45309" }}>
-              {busy ? "Installing..." : "Install anyway"}
-            </button>
-          ) : (
-            <button
-              className="sidebar-button"
-              data-testid="install-version"
-              disabled={busy || !picked || picked.installed}
-              onClick={() => install(false)}
-              style={{ padding: "8px 14px", fontSize: 13, background: picked && !picked.installed ? "#16a34a" : undefined, borderColor: picked && !picked.installed ? "#16a34a" : undefined }}
+            <Button
+              size="sm"
+              data-testid="install-anyway"
+              disabled={busy}
+              onClick={() => install(true)}
+              style={{ background: color.warningSolid, color: color.onWarning }}
             >
+              {busy ? "Installing..." : "Install anyway"}
+            </Button>
+          ) : (
+            <Button size="sm" variant="primary" data-testid="install-version" disabled={busy || !picked || picked.installed} onClick={() => install(false)}>
               {busy ? "Checking..." : picked && !picked.installed ? `${goingBack ? "Go back to" : "Install"} ${picked.number}` : "Install"}
-            </button>
+            </Button>
           )}
         </div>
       </div>

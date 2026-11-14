@@ -23,13 +23,21 @@ type Listener = (data: any) => void;
 const STORAGE_KEY = "unity-web-preview-state";
 const PLAYER_NAME = "PreviewPlayer";
 
+type PreviewAccount = { name: string; uuid: string };
+
 type PreviewState = {
   instances: Instance[];
   mods: Record<string, InstanceMod[]>;
   settings: LauncherSettings;
-  account: { name: string; uuid: string } | null;
+  /** Simulated sign-ins: "Add another account" adds the next name. */
+  accounts: PreviewAccount[];
+  /** The active account's uuid. */
+  active: string | null;
   hasNexusKey: boolean;
 };
+
+// Names for the simulated accounts, in the order they're added.
+const PREVIEW_PLAYERS = [PLAYER_NAME, "PreviewAlex", "PreviewSam", "PreviewRiley"];
 
 function sampleMod(name: string, fileName: string, size: number, enabled = true): InstanceMod {
   return {
@@ -104,7 +112,8 @@ function initialState(): PreviewState {
         arch: "arm64",
       },
     },
-    account: null,
+    accounts: [],
+    active: null,
     hasNexusKey: false,
   };
 }
@@ -112,7 +121,15 @@ function initialState(): PreviewState {
 function loadState(): PreviewState {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return { ...initialState(), ...JSON.parse(saved) };
+    if (saved) {
+      const { account, ...rest } = JSON.parse(saved);
+      const loaded: PreviewState = { ...initialState(), ...rest };
+      // Saved before there could be several accounts.
+      if (account && !rest.accounts) Object.assign(loaded, { accounts: [account], active: account.uuid });
+      // No game outlives the page: timers that would close them are gone.
+      loaded.instances = loaded.instances.map((instance) => ({ ...instance, running: false, playingAs: null }));
+      return loaded;
+    }
   } catch {
     // Storage can be blocked or hold old data; start from the samples instead.
   }
@@ -335,29 +352,56 @@ function findInstance(name: string) {
   return instance;
 }
 
-async function launch(nameOrInstance: string | { name: string }) {
+const activeAccount = () => state.accounts.find((account) => account.uuid === state.active) ?? null;
+
+// Each simulated game closes itself after a while, unless stopped first.
+const GAME_MS = 60_000;
+const closing = new Map<string, ReturnType<typeof setTimeout>>();
+
+function endGame(name: string) {
+  clearTimeout(closing.get(name));
+  closing.delete(name);
+  const instance = state.instances.find((i) => i.name === name);
+  if (instance) Object.assign(instance, { running: false, playingAs: null });
+  persist();
+  emit("instance:exit", { name, code: 0 });
+}
+
+/* As the desktop app: any instance alongside others, each as a signed-in account, one game per account. */
+async function launch(nameOrInstance: string | { name: string }, accountId?: string) {
   const name = typeof nameOrInstance === "string" ? nameOrInstance : nameOrInstance.name;
   const instance = findInstance(name);
+  if (instance.running) throw new Error(`"${name}" is already running.`);
 
-  instance.running = true;
-  instance.lastPlayed = new Date().toISOString();
+  const account = accountId ? state.accounts.find((entry) => entry.uuid === accountId) : activeAccount();
+  if (accountId && !account) throw new Error("That account isn't signed in any more.");
+  const busy = account && state.instances.find((other) => other.running && other.playingAs?.id === account.uuid);
+  if (account && busy) {
+    throw new Error(
+      `${account.name} is already playing "${busy.name}". Minecraft allows one game per account at a time, so play this one as another account, or close "${busy.name}" first.`
+    );
+  }
+
+  const player = account ? { id: account.uuid, name: account.name } : null;
+  Object.assign(instance, { running: true, playingAs: player, lastPlayed: new Date().toISOString() });
   persist();
 
-  emit("instance:log", { name, line: "[web preview] Minecraft was not started." });
-
-  setTimeout(() => {
-    instance.running = false;
-    persist();
-    emit("instance:exit", { name, code: 0 });
-  }, 8000);
+  emit("instance:log", { name, text: "[web preview] Minecraft was not started.\n" });
+  emit("instance:started", { name, account: player });
+  closing.set(name, setTimeout(() => endGame(name), GAME_MS));
 
   return {
     launched: true,
     name,
     pid: 0,
-    online: Boolean(state.account),
-    playerName: state.account?.name ?? PLAYER_NAME,
+    online: Boolean(account),
+    playerName: account?.name ?? PLAYER_NAME,
+    account: player,
   };
+}
+
+function playing() {
+  return Object.fromEntries(state.instances.filter((i) => i.running).map((i) => [i.name, i.playingAs ?? null]));
 }
 
 // A short stand-in for the starter mods list, which lives in the desktop app's profile.
@@ -404,18 +448,28 @@ async function createInstance(
 }
 
 function previewAccounts() {
-  return state.account ? [{ ...state.account, skin: null, savedAt: new Date().toISOString(), active: true }] : [];
+  return state.accounts.map((account) => ({ ...account, skin: null, savedAt: new Date().toISOString(), active: account.uuid === state.active }));
 }
 
+// Each sign-in adds the next simulated player and makes it active, as Microsoft's would.
 async function signIn() {
-  state.account = { name: PLAYER_NAME, uuid: "00000000000000000000000000000000" };
+  const n = state.accounts.length;
+  const account = {
+    name: PREVIEW_PLAYERS[n] ?? `${PLAYER_NAME}${n + 1}`,
+    uuid: (n + 1).toString(16).padStart(32, "0"),
+  };
+  state.accounts = [...state.accounts, account];
+  state.active = account.uuid;
   persist();
 
-  return {
-    name: PLAYER_NAME,
-    uuid: state.account.uuid,
-    skin: makeSampleSkin(),
-  };
+  return { ...account, skin: makeSampleSkin() };
+}
+
+function removePreviewAccount(uuid: string | null) {
+  state.accounts = state.accounts.filter((account) => account.uuid !== uuid);
+  if (state.active === uuid) state.active = state.accounts[state.accounts.length - 1]?.uuid ?? null;
+  persist();
+  return previewAccounts();
 }
 
 const launcherBridge = {
@@ -483,11 +537,11 @@ const instanceBridge = {
   },
   launch,
   stop: async (name: string) => {
-    findInstance(name).running = false;
-    persist();
-    emit("instance:exit", { name, code: 0 });
+    if (!findInstance(name).running) throw new Error(`"${name}" is not running.`);
+    endGame(name);
     return { stopped: name };
   },
+  playing: async () => playing(),
   openFolder: async (name: string) => `/preview/instances/${name}`,
 
   content: async (name: string) => {
@@ -632,20 +686,19 @@ const instanceBridge = {
   setApiKey: async () => {
     throw new Error("Keys can only be saved in the desktop app. For this preview, use .env.local.");
   },
-  getAccount: async () => state.account,
+  getAccount: async () => activeAccount(),
   clearAccount: async () => {
-    state.account = null;
-    persist();
+    removePreviewAccount(state.active);
     return true;
   },
-  // The preview has at most the one simulated account.
   listAccounts: async () => previewAccounts(),
-  switchAccount: async () => previewAccounts(),
-  removeAccount: async () => {
-    state.account = null;
+  switchAccount: async (uuid: string) => {
+    if (!state.accounts.some((account) => account.uuid === uuid)) throw new Error("That account isn't signed in any more.");
+    state.active = uuid;
     persist();
-    return [];
+    return previewAccounts();
   },
+  removeAccount: async (uuid: string) => removePreviewAccount(uuid),
 
   // Files, logs, Java, updates and exports belong to the desktop app; the preview shows
   // them empty.
@@ -758,6 +811,7 @@ const instanceBridge = {
   onProgress: (callback: Listener) => subscribe("instance:progress", callback),
   onLog: (callback: Listener) => subscribe("instance:log", callback),
   onExit: (callback: Listener) => subscribe("instance:exit", callback),
+  onStarted: (callback: Listener) => subscribe("instance:started", callback),
 };
 
 function sampleGame(id: string, name: string, source: string): DetectedGame {
@@ -1017,8 +1071,210 @@ const skinBridge = {
   deleteSaved: needsDesktop,
 };
 
+/*
+ * Home dashboard. Simulated play time, activity and news so the page can be built here.
+ * Add ?dashboard=empty to the address to see a launcher with no history yet, or
+ * ?dashboard=offline to see every news source fail.
+ */
+const dashboardMode = () => new URLSearchParams(location.search).get("dashboard") ?? "";
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const DAY_MS = 86_400_000;
+
+function localDay(time: number) {
+  const d = new Date(time);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/* The same made-up numbers on every load: a small seeded generator, not Math.random. */
+function seeded(seed: number) {
+  let value = seed;
+  return () => {
+    value = (value * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return value / 2_147_483_648;
+  };
+}
+
+function previewThumb(from: string, to: string) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="640" height="360" fill="url(#g)"/></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function previewStats(): DashboardStats {
+  const now = Date.now();
+  const empty = dashboardMode() === "empty";
+  const names = state.instances.map((instance) => instance.name);
+  const random = seeded(26);
+  const daily: DashboardDay[] = [];
+
+  for (let i = 89; i >= 0; i--) {
+    const byInstance: Record<string, number> = {};
+    if (!empty && i < 70) {
+      names.forEach((name, index) => {
+        const chance = index === 0 ? 0.45 : 0.25;
+        if (random() < chance) byInstance[name] = Math.round((20 + random() * 160) * 60);
+      });
+    }
+    const seconds = Object.values(byInstance).reduce((sum, value) => sum + value, 0);
+    daily.push({ date: localDay(now - i * DAY_MS), seconds, byInstance });
+  }
+
+  const instances: DashboardInstanceStat[] = state.instances.map((instance, index) => {
+    const played = daily.filter((day) => day.byInstance[instance.name]);
+    const seconds = played.reduce((sum, day) => sum + day.byInstance[instance.name], 0);
+    return {
+      name: instance.name,
+      version: instance.version,
+      loader: instance.loader,
+      loaderVersion: instance.loaderVersion || undefined,
+      modCount: (state.mods[instance.name] ?? []).length,
+      created: instance.created,
+      lastPlayed: empty ? undefined : instance.lastPlayed,
+      playSeconds: empty ? null : seconds,
+      sessions: empty ? 0 : played.length,
+      since: empty || !played.length ? undefined : played[0].date,
+      // Worlds keep their own play time, which can be more than the sessions (an imported world).
+      worldPlaySeconds: empty ? null : Math.round(seconds * 0.7) + (index === 0 ? 96 * 3600 : 0),
+      worlds: empty ? 0 : index === 0 ? 3 : 1,
+    };
+  });
+
+  const sum = (pick: (instance: DashboardInstanceStat) => number | null) => {
+    const known = instances.map(pick).filter((value): value is number => value !== null);
+    return known.length ? known.reduce((total, value) => total + value, 0) : null;
+  };
+  return {
+    generatedAt: new Date(now).toISOString(),
+    instances,
+    totals: {
+      instances: instances.length,
+      mods: instances.reduce((sum, instance) => sum + instance.modCount, 0),
+      playSeconds: sum((instance) => instance.playSeconds),
+      sessions: instances.reduce((total, instance) => total + instance.sessions, 0),
+      worldPlaySeconds: sum((instance) => instance.worldPlaySeconds),
+    },
+    daily,
+    sources: { tracked: !empty, logs: !empty, worldStats: !empty },
+    since: empty ? undefined : daily.find((day) => day.seconds > 0)?.date,
+  };
+}
+
+function previewActivity(limit = 20): ActivityItem[] {
+  if (dashboardMode() === "empty") return [];
+  const [first = "Fabric 26.2", second = "All The Mods"] = state.instances.map((instance) => instance.name);
+  const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+  const items: ActivityItem[] = [
+    { at: ago(2), kind: "played", instance: first, title: `Played ${first}`, detail: "1 h 42 min" },
+    { at: ago(5), kind: "mods-updated", instance: first, title: "Updated 3 mods", detail: "Sodium, Fabric API, Iris Shaders" },
+    { at: ago(26), kind: "launcher-updated", title: "Launcher updated", detail: "Version 0.0.0 (simulated)" },
+    { at: ago(30), kind: "crash", instance: second, title: `${second} crashed`, detail: "crash-2026-11-12_18.22.04-client.txt" },
+    { at: ago(31), kind: "played", instance: second, title: `Played ${second}`, detail: "38 min" },
+    { at: ago(52), kind: "mods-installed", instance: second, title: "Added 2 mods", detail: "JEI, Jade" },
+    { at: ago(75), kind: "loader-updated", instance: first, title: "Loader updated", detail: "Fabric 0.19.2 to 0.19.3" },
+    { at: ago(140), kind: "instance-created", instance: first, title: `Created ${first}`, detail: "Minecraft 26.2 with Fabric" },
+    { at: ago(300), kind: "error", instance: second, title: "Couldn't finish installing", detail: "Simulated error message" },
+  ];
+  return items.slice(0, Math.max(1, Math.min(100, limit)));
+}
+
+function previewNews(): NewsResult {
+  const fetchedAt = new Date().toISOString();
+  if (dashboardMode() === "offline") {
+    return { items: [], failed: ["Minecraft.net", "Java Edition", "Bedrock Edition", "Fabric", "NeoForge", "Forge"], fetchedAt, fromCache: false };
+  }
+  const ago = (days: number) => new Date(Date.now() - days * DAY_MS).toISOString();
+  const sample = (
+    id: string, category: NewsCategory, source: string, days: number, title: string, image: string | null, url: string,
+  ): NewsItem => ({
+    id, category, source, date: ago(days), title, url, image,
+    summary: "Simulated summary for the web preview. The desktop app shows the real article's opening lines here.",
+  });
+  return {
+    items: [
+      sample("p1", "minecraft", "Minecraft.net", 0.5, "Sample feature article: a new drop is on the way", previewThumb("#4c1d95", "#0f172a"), "https://www.minecraft.net/en-us/articles"),
+      sample("p2", "snapshot", "Java Edition", 1, "Sample snapshot notes: Minecraft 26.3 Snapshot 2", previewThumb("#1e3a8a", "#111827"), "https://www.minecraft.net/en-us/articles"),
+      sample("p3", "java", "Java Edition", 4, "Sample release notes: Minecraft Java Edition 26.2.1", previewThumb("#14532d", "#111827"), "https://www.minecraft.net/en-us/articles"),
+      sample("p4", "bedrock", "Bedrock Edition", 2, "Sample Bedrock update notes: 1.26.40", previewThumb("#7c2d12", "#111827"), "https://www.minecraft.net/en-us/articles"),
+      sample("p5", "fabric", "Fabric", 3, "Sample Fabric post: Fabric for Minecraft 26.3", null, "https://fabricmc.net/blog/"),
+      sample("p6", "neoforge", "NeoForge", 6, "Sample NeoForge news: 26.2 released", null, "https://neoforged.net/"),
+      sample("p7", "forge", "Forge", 9, "Sample Forge release: Forge for 26.2", null, "https://files.minecraftforge.net/"),
+      sample("p8", "minecraft", "Minecraft.net", 12, "Sample community story with a longer headline to check wrapping in small cards", previewThumb("#831843", "#111827"), "https://www.minecraft.net/en-us/articles"),
+    ],
+    failed: [],
+    fetchedAt,
+    fromCache: false,
+  };
+}
+
+function previewGamingNews(): NewsResult {
+  const fetchedAt = new Date().toISOString();
+  if (dashboardMode() === "offline") {
+    return { items: [], failed: ["PC Gamer", "Eurogamer", "Rock Paper Shotgun", "GameSpot", "IGN", "The Verge"], fetchedAt, fromCache: false };
+  }
+  const ago = (hours: number) => new Date(Date.now() - hours * 3600_000).toISOString();
+  const item = (id: string, source: string, hours: number, title: string, from: string, to: string): NewsItem => ({
+    id, category: "gaming", source, date: ago(hours), title, url: "https://www.pcgamer.com/", image: previewThumb(from, to),
+    summary: "Simulated gaming news for the web preview. The desktop app shows real headlines from gaming sites here.",
+  });
+  return {
+    items: [
+      item("g1", "PC Gamer", 1, "Sample headline: a big open-world sequel gets a release date", "#7c2d12", "#111827"),
+      item("g2", "Eurogamer", 3, "Sample review: an indie roguelike that keeps you up all night", "#14532d", "#111827"),
+      item("g3", "IGN", 5, "Sample news: a classic shooter returns with a remaster", "#1e3a8a", "#111827"),
+      item("g4", "Rock Paper Shotgun", 8, "Sample feature: the best co-op games to play this weekend", "#4c1d95", "#0f172a"),
+      item("g5", "GameSpot", 12, "Sample news: a surprise shadow-drop at last night's showcase", "#831843", "#111827"),
+      item("g6", "The Verge", 20, "Sample story: handheld PCs keep getting better", "#0f766e", "#111827"),
+    ],
+    failed: [],
+    fetchedAt,
+    fromCache: false,
+  };
+}
+
+function previewDeals(): DealsResult {
+  const fetchedAt = new Date().toISOString();
+  if (dashboardMode() === "offline") return { items: [], failed: ["Steam"], fetchedAt, fromCache: false };
+  const deal = (id: number, name: string, percent: number, original: number, from: string, to: string, days: number): SteamDeal => ({
+    id, name: `${name} (sample)`, discountPercent: percent, originalPrice: original, finalPrice: Math.round(original * (100 - percent)) / 100,
+    currency: "GBP", image: previewThumb(from, to), url: `https://store.steampowered.com/app/${id}/`,
+    endsAt: new Date(Date.now() + days * DAY_MS).toISOString(), platforms: { windows: true, mac: id % 2 === 0, linux: false },
+  });
+  return {
+    items: [
+      deal(1001, "Sky Forge Tactics", 60, 24.99, "#1e3a8a", "#0f172a", 2),
+      deal(1002, "Hollow Lantern", 35, 14.99, "#4c1d95", "#111827", 5),
+      deal(1003, "Rally Circuit 26", 75, 39.99, "#7c2d12", "#111827", 1),
+      deal(1004, "Starfield Gardens", 20, 19.49, "#14532d", "#111827", 6),
+      deal(1005, "Deep Station", 50, 29.99, "#0f766e", "#111827", 3),
+      deal(1006, "Pixel Kingdoms", 40, 9.99, "#831843", "#111827", 4),
+    ],
+    failed: [],
+    fetchedAt,
+    fromCache: false,
+  };
+}
+
+const dashboardBridge = {
+  stats: async () => {
+    await pause(250);
+    return previewStats();
+  },
+  activity: async (limit?: number) => {
+    await pause(200);
+    return previewActivity(typeof limit === "number" ? limit : 20);
+  },
+  news: async (opts?: { feed?: NewsFeed }) => {
+    await pause(400);
+    return opts?.feed === "gaming" ? previewGamingNews() : previewNews();
+  },
+  deals: async () => {
+    await pause(450);
+    return previewDeals();
+  },
+};
+
 if (!window.launcherAPI) {
   const target = window as unknown as Record<string, unknown>;
+  target.dashboardAPI = withFallback("dashboardAPI", dashboardBridge);
   target.launcherAPI = withFallback("launcherAPI", launcherBridge);
   target.instanceAPI = withFallback("instanceAPI", instanceBridge);
   target.modAPI = withFallback("modAPI", modBridge);

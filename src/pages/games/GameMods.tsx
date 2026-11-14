@@ -239,19 +239,19 @@ export default function GameMods({
         <FinderPanel detail={detail} finder={finder} busy={finderBusy} playing={playing} onPlay={onPlay} onAnswer={finderApi.answer} onStop={finderApi.stop} />
       )}
       {!finder.active && finderIntro && (
-        <div style={{ padding: 16, borderRadius: 12, background: "#17141f", border: "1px solid #a855f7" }} data-testid="finder-intro">
+        <div style={{ padding: 16, borderRadius: 12, background: "var(--color-surface)", border: "1px solid var(--color-accent-line)" }} data-testid="finder-intro">
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <Bug size={20} color="#c084fc" />
-            <span style={{ fontSize: 16, fontWeight: 600, color: "#e9d5ff" }}>Find the mod that's breaking {detail.name}</span>
+            <Bug size={20} color="var(--color-accent-text)" />
+            <span style={{ fontSize: 16, fontWeight: 600, color: "var(--color-accent-text)" }}>Find the mod that's breaking {detail.name}</span>
           </div>
-          <div style={{ fontSize: 13, color: "#d4d4d8", lineHeight: 1.6 }}>
+          <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
             First every mod is turned off, to check it's a mod at all. Then half of them are turned off at a time: each round, play, try whatever went
             wrong, and say whether it happened. With {mods.filter((m) => m.enabled).length} mods on that's about{" "}
             {Math.ceil(Math.log2(Math.max(mods.filter((m) => m.enabled).length, 2))) + 1} plays. Your saves are backed up first, and stopping at any point
             puts every mod back as it was.
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            <button className="sidebar-button" data-testid="finder-start" style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }} onClick={() => !finderBusy && finderApi.start()}>
+            <button className="sidebar-button" data-testid="finder-start" style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }} onClick={() => !finderBusy && finderApi.start()}>
               {finderBusy ? "Starting..." : "Start"}
             </button>
             <button className="sidebar-button" style={smallButton} onClick={finderApi.cancelIntro}>
@@ -264,13 +264,13 @@ export default function GameMods({
       {/* HEADER */}
       <div style={{ ...panel, display: "flex", alignItems: "center", gap: 18 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ margin: 0, color: "#c084fc", fontSize: 28 }}>{detail.name}</h1>
-          <div style={{ color: "#9ca3af", fontSize: 13, marginTop: 6 }}>
+          <h1 style={{ margin: 0 }}>{detail.name}</h1>
+          <div style={{ color: "var(--color-text-muted)", fontSize: 13, marginTop: 6 }}>
             {detail.found ? `Found via ${detail.source}` : "Not found on this computer"}
             {detail.version ? ` • ${/^\d/.test(detail.version) ? `Version ${detail.version}` : detail.version}` : ""}
             {detail.lastPlayed ? ` • Last played from here ${shortDate(detail.lastPlayed)}` : ""}
           </div>
-          <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>
+          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 4 }}>
             {onCount} of {mods.length} mod{mods.length === 1 ? "" : "s"} on
           </div>
         </div>
@@ -301,7 +301,7 @@ export default function GameMods({
             className="sidebar-button"
             data-testid="game-play"
             onClick={onPlay}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", fontSize: 15, background: "#7c3aed", borderColor: "#a78bfa" }}
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", fontSize: 15, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
           >
             <Play size={18} fill="currentColor" />
             {playing ?? "Play"}
@@ -375,7 +375,7 @@ export default function GameMods({
           {detail.problems.slice(0, 4).map((problem) => {
             const matches = namedMods(problem.mods);
             return (
-              <div key={problem.file + problem.time} style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255, 255, 255, 0.08)" }}>
+              <div key={problem.file + problem.time} style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--color-border)" }}>
                 <div style={{ fontSize: 12, opacity: 0.9 }}>
                   {problem.file} • {shortDate(problem.time)}
                   {problem.mods.length ? ` • names ${problem.mods.join(", ")}` : " • no mod named"}
@@ -418,14 +418,14 @@ export default function GameMods({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search your mods..."
-          style={{ flex: "1 1 220px", padding: 12, borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9" }}
+          style={{ flex: "1 1 220px", padding: 12, borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}
         />
         {FILTERS.filter((option) => counts[option.id] !== 0).map((option) => (
           <button
             key={option.id}
             className="sidebar-button"
             onClick={() => setFilter(option.id)}
-            style={{ fontSize: 12, padding: "8px 12px", opacity: activeFilter === option.id ? 1 : 0.6, ...(activeFilter === option.id ? { background: "#6d28d9" } : {}) }}
+            style={{ fontSize: 12, padding: "8px 12px", opacity: activeFilter === option.id ? 1 : 0.6, ...(activeFilter === option.id ? { background: "var(--color-accent-subtle)" } : {}) }}
           >
             {option.label}
             {counts[option.id] ? ` (${counts[option.id]})` : ""}
@@ -458,7 +458,7 @@ export default function GameMods({
           className="sidebar-button"
           data-testid="add-from-downloads"
           onClick={() => setShowDownloads((open) => !open)}
-          style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", ...(showDownloads ? { background: "#6d28d9" } : {}) }}
+          style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", ...(showDownloads ? { background: "var(--color-accent-subtle)" } : {}) }}
         >
           <DownloadIcon size={16} />
           Add from Downloads
@@ -467,7 +467,7 @@ export default function GameMods({
 
       {/* SETS */}
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }} data-testid="sets-bar">
-        <span style={{ fontSize: 13, color: "#9ca3af" }}>Showing</span>
+        <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Showing</span>
         <div style={{ width: 230 }}>
           <SearchDropdown
             compact
@@ -501,7 +501,7 @@ export default function GameMods({
               onChange={(event) => setNaming({ ...naming, name: event.target.value })}
               placeholder={naming.id ? "New name..." : "Name the set..."}
               maxLength={40}
-              style={{ padding: "8px 10px", borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", fontSize: 13 }}
+              style={{ padding: "8px 10px", borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 13 }}
             />
             <button type="submit" className="sidebar-button" style={{ ...smallButton, padding: "8px 12px" }}>
               {naming.id ? "Rename" : "Make set"}
@@ -515,7 +515,7 @@ export default function GameMods({
             <button
               className="sidebar-button"
               data-testid="use-set"
-              style={{ ...smallButton, padding: "8px 12px", ...(confirming === `use:${currentSet.id}` ? { background: "#7f1d1d", borderColor: "#ef4444" } : {}) }}
+              style={{ ...smallButton, padding: "8px 12px", ...(confirming === `use:${currentSet.id}` ? { background: "var(--color-danger-solid)", borderColor: "var(--color-danger-border)" } : {}) }}
               onClick={() => {
                 if (confirming !== `use:${currentSet.id}`) return setConfirming(`use:${currentSet.id}`);
                 setConfirming(null);
@@ -548,7 +548,7 @@ export default function GameMods({
           </button>
         )}
         {currentSet && !currentSet.keys.some((key) => mods.some((m) => m.key === key)) && (
-          <span style={{ fontSize: 12, color: "#6b7280" }}>Add mods to it with the tag button on each one.</span>
+          <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Add mods to it with the tag button on each one.</span>
         )}
       </div>
 
@@ -564,7 +564,7 @@ export default function GameMods({
 
       {/* UPDATES */}
       <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 36 }} data-testid="updates-line">
-        <span style={{ flex: 1, fontSize: 13, color: updates?.error ? "#fca5a5" : newer.size ? "#86efac" : "#9ca3af" }}>
+        <span style={{ flex: 1, fontSize: 13, color: updates?.error ? "var(--color-danger-text)" : newer.size ? "var(--color-success-text)" : "var(--color-text-muted)" }}>
           {!updates || (checking && !newer.size)
             ? "Checking for updates..."
             : updates.error
@@ -578,14 +578,14 @@ export default function GameMods({
             <>
               {" "}
               {updates.needsKey} from Nexus Mods can be checked once your Nexus Mods key is in{" "}
-              <button onClick={goLauncherSettings} style={{ background: "none", border: "none", padding: 0, color: "#c084fc", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
+              <button onClick={goLauncherSettings} style={{ background: "none", border: "none", padding: 0, color: "var(--color-accent-text)", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
                 Settings → API keys
               </button>
               .
             </>
           )}
           {updates && updates.unknown > 0 && !updates.error && (
-            <span style={{ color: "#6b7280" }}>
+            <span style={{ color: "var(--color-text-muted)" }}>
               {" "}
               {updates.unknown} couldn't be matched to a site.
             </span>
@@ -595,7 +595,7 @@ export default function GameMods({
           <button
             className="sidebar-button"
             data-testid="update-all"
-            style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }}
+            style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
             onClick={() => {
               if (!updating) onUpdateAll();
             }}
@@ -609,12 +609,12 @@ export default function GameMods({
       {showDownloads && (
         <div style={panel} data-testid="downloads-panel">
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-            <div style={{ color: "#c084fc", fontWeight: 600, flex: 1 }}>From your Downloads folder</div>
+            <div style={{ color: "var(--color-accent-text)", fontWeight: 600, flex: 1 }}>From your Downloads folder</div>
             {picked.size > 0 && (
               <button
                 className="sidebar-button"
                 data-testid="install-picked"
-                style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }}
+                style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
                 onClick={() => {
                   if (!busy) installPicked();
                 }}
@@ -623,18 +623,18 @@ export default function GameMods({
               </button>
             )}
           </div>
-          <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 10 }}>
+          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginBottom: 10 }}>
             Zips, 7z and RAR archives are unpacked and each file goes where {detail.name} needs it. Newest first, from the last 90 days; new ones that
             look like {detail.name} mods are ticked.
           </div>
           {downloads === null ? (
-            <div style={{ color: "#9ca3af" }}>Looking...</div>
+            <div style={{ color: "var(--color-text-muted)" }}>Looking...</div>
           ) : downloads.length === 0 ? (
-            <div style={{ color: "#9ca3af" }}>Nothing in Downloads looks like a mod for {detail.name}.</div>
+            <div style={{ color: "var(--color-text-muted)" }}>Nothing in Downloads looks like a mod for {detail.name}.</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
               {downloads.map((file) => (
-                <div key={file.path} data-testid="download-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "#1b1b1b", borderRadius: 8, opacity: file.fits === false ? 0.6 : 1 }}>
+                <div key={file.path} data-testid="download-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "var(--color-surface-sunken)", borderRadius: 8, opacity: file.fits === false ? 0.6 : 1 }}>
                   <input
                     type="checkbox"
                     aria-label={`Tick ${file.name} to install`}
@@ -647,17 +647,17 @@ export default function GameMods({
                         return next;
                       })
                     }
-                    style={{ width: 16, height: 16, accentColor: "#7c3aed", flexShrink: 0, cursor: "pointer" }}
+                    style={{ width: 16, height: 16, accentColor: "var(--color-accent)", flexShrink: 0, cursor: "pointer" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</div>
-                    <div style={{ color: "#6b7280", fontSize: 11 }}>
+                    <div style={{ color: "var(--color-text-muted)", fontSize: 11 }}>
                       {sizeText(file.size)} • {shortDate(file.modified)}
                       {file.installed ? " • installed" : ""}
                       {file.fits === false ? ` • doesn't look like a ${detail.name} mod` : ""}
                     </div>
                   </div>
-                  <button className="sidebar-button" style={{ ...smallButton, ...(file.installed ? {} : { background: "#7c3aed", borderColor: "#a78bfa" }) }} onClick={() => install(file.path)}>
+                  <button className="sidebar-button" style={{ ...smallButton, ...(file.installed ? {} : { background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }) }} onClick={() => install(file.path)}>
                     {busy === file.path ? "Installing..." : file.installed ? "Reinstall" : "Install"}
                   </button>
                 </div>
@@ -670,7 +670,7 @@ export default function GameMods({
       {/* LIST */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid="mod-list">
         {shown.length === 0 ? (
-          <div style={{ color: "#9ca3af", padding: 20, textAlign: "center" }}>
+          <div style={{ color: "var(--color-text-muted)", padding: 20, textAlign: "center" }}>
             {mods.length === 0
               ? detail.found
                 ? "No mods yet. Add one from Downloads, or find some in Discover Mods."
@@ -687,8 +687,8 @@ export default function GameMods({
                 alignItems: "center",
                 gap: 14,
                 padding: "12px 14px",
-                background: "rgba(27, 27, 27, 0.9)",
-                border: `1px solid ${mod.mayNeedUpdate && mod.enabled ? "#b45309" : "#2e2e2e"}`,
+                background: "var(--color-surface)",
+                border: `1px solid ${mod.mayNeedUpdate && mod.enabled ? "var(--color-warning-border)" : "var(--color-border)"}`,
                 borderRadius: 10,
                 opacity: mod.enabled ? 1 : 0.65,
               }}
@@ -701,32 +701,32 @@ export default function GameMods({
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 600, color: mod.enabled ? "#e9d5ff" : "#a1a1aa" }}>{mod.name}</span>
+                  <span style={{ fontWeight: 600, color: mod.enabled ? "var(--color-accent-text)" : "var(--color-text-muted)" }}>{mod.name}</span>
                   {mod.mayNeedUpdate && (
-                    <span data-tip="It changes the game's code and is older than the game's latest update" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#78350f", color: "#fde68a" }}>
+                    <span data-tip="It changes the game's code and is older than the game's latest update" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-warning-bg)", color: "var(--color-warning-text)" }}>
                       May need updating
                     </span>
                   )}
                   {mod.hooks && !mod.mayNeedUpdate && (
-                    <span data-tip="It changes the game's code, so game updates can break it" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#2e1065", color: "#d8b4fe" }}>
+                    <span data-tip="It changes the game's code, so game updates can break it" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-accent-subtle)", color: "var(--color-accent-text)" }}>
                       Script mod
                     </span>
                   )}
-                  {mod.kind === "plugin" && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#1e293b", color: "#93c5fd" }}>Plugin</span>}
+                  {mod.kind === "plugin" && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-info-bg)", color: "var(--color-info-text)" }}>Plugin</span>}
                   {sets
                     .filter((set) => set.keys.includes(mod.key))
                     .map((set) => (
-                      <span key={set.id} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, border: "1px solid #4c1d95", color: "#c4b5fd" }}>
+                      <span key={set.id} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, border: "1px solid var(--color-border)", color: "var(--color-accent-text)" }}>
                         {set.name}
                       </span>
                     ))}
                   {newer.has(mod.key) && (
-                    <span data-testid="update-badge" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#14532d", color: "#bbf7d0" }}>
+                    <span data-testid="update-badge" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-success-bg)", color: "var(--color-success-text)" }}>
                       Update{newer.get(mod.key)!.fromVersion || newer.get(mod.key)!.toVersion ? `: ${newer.get(mod.key)!.fromVersion || "?"} → ${newer.get(mod.key)!.toVersion || "newer"}` : " available"}
                     </span>
                   )}
                 </div>
-                <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3 }}>
+                <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3 }}>
                   {mod.managed
                     ? [
                         PROVIDERS[mod.source?.provider ?? "file"] ?? mod.source?.provider,
@@ -740,7 +740,7 @@ export default function GameMods({
                     : [`In ${mod.where}`, PROVIDERS.hand, mod.since ? `changed ${shortDate(mod.since)}` : ""].filter(Boolean).join(" • ")}
                 </div>
                 {mod.notes.slice(0, 2).map((line) => (
-                  <div key={line} style={{ color: "#fcd34d", fontSize: 11, marginTop: 2 }}>
+                  <div key={line} style={{ color: "var(--color-warning-text)", fontSize: 11, marginTop: 2 }}>
                     {line}
                   </div>
                 ))}

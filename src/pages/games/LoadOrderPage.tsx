@@ -111,8 +111,8 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <h1 style={{ color: "#c084fc", margin: 0 }}>Load Order</h1>
-      <div style={{ color: "#9ca3af", fontSize: 13, lineHeight: 1.5 }}>
+      <h1 style={{ margin: 0 }}>Load Order</h1>
+      <div style={{ color: "var(--color-text-muted)", fontSize: 13, lineHeight: 1.5 }}>
         Plugins load top to bottom, and a later one wins where two change the same thing. Each must load after the plugins it needs. Changes
         apply the next time the game starts.
       </div>
@@ -121,13 +121,13 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
 
       {order && (
         <div style={{ ...panel, display: "flex", alignItems: "center", gap: 12 }} data-testid="load-order-summary">
-          <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: canFix ? "#fcd34d" : "#86efac" }}>
+          <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: canFix ? "var(--color-warning-text)" : "var(--color-success-text)" }}>
             {canFix
               ? `${problems} plugin${problems === 1 ? " has a problem" : "s have problems"}. ${fixSentence(order.fix).replace(/^./, (c) => `Fixing ${c.toLowerCase()}`)}`
               : `${order.plugins.filter((p) => p.active).length} plugins on, all in an order that works.`}
           </span>
           {canFix && (
-            <button className="sidebar-button" data-testid="fix-order" style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa", flexShrink: 0 }} onClick={fix}>
+            <button className="sidebar-button" data-testid="fix-order" style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)", flexShrink: 0 }} onClick={fix}>
               Fix load order
             </button>
           )}
@@ -138,7 +138,7 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
       {order && order.plugins.length > 1 && (
         <div style={{ ...panel, display: "flex", flexDirection: "column", gap: 10 }} data-testid="loot">
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: "#d4d4d8" }}>
+            <span style={{ flex: 1, fontSize: 13, lineHeight: 1.5, color: "var(--color-text-secondary)" }}>
               {sorted
                 ? sorted.count
                   ? `Sorted by LOOT's rules: ${sorted.count} plugin${sorted.count === 1 ? "" : "s"} moved.`
@@ -161,17 +161,17 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
           {lootPlan && (
             <div data-testid="loot-plan">
               {lootPlan.moved.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#86efac" }}>Already in the order LOOT's rules give: nothing to move.</div>
+                <div style={{ fontSize: 13, color: "var(--color-success-text)" }}>Already in the order LOOT's rules give: nothing to move.</div>
               ) : (
                 <>
-                  <div style={{ fontSize: 13, color: "#e9d5ff", marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, color: "var(--color-accent-text)", marginBottom: 6 }}>
                     This moves {lootPlan.moved.length} plugin{lootPlan.moved.length === 1 ? "" : "s"}:
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3, maxHeight: 220, overflowY: "auto", marginBottom: 8 }}>
                     {lootPlan.moved.map((move) => (
-                      <div key={move.name} style={{ fontSize: 12, color: "#d4d4d8" }}>
-                        <b style={{ color: "#e9d5ff", fontWeight: 600 }}>{move.name}</b>
-                        <span style={{ color: "#9ca3af" }}>
+                      <div key={move.name} style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+                        <b style={{ color: "var(--color-accent-text)", fontWeight: 600 }}>{move.name}</b>
+                        <span style={{ color: "var(--color-text-muted)" }}>
                           {" — "}
                           {[move.group !== "default" ? `in LOOT's ${move.group} group` : "", move.after.length ? `after ${move.after.join(", ")}` : ""].filter(Boolean).join(", ") ||
                             "to make room for the others"}
@@ -182,14 +182,14 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
                 </>
               )}
               {lootPlan.loops.length > 0 && (
-                <div style={{ fontSize: 12, color: "#fcd34d", marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: "var(--color-warning-text)", marginBottom: 8 }}>
                   LOOT's rules contradict each other around {lootPlan.loops.join(", ")}, so {lootPlan.loops.length === 1 ? "it stays" : "they stay"} as near
                   as possible to where {lootPlan.loops.length === 1 ? "it is" : "they are"}.
                 </div>
               )}
               <div style={{ display: "flex", gap: 10 }}>
                 {lootPlan.moved.length > 0 && (
-                  <button className="sidebar-button" data-testid="loot-sort" style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }} onClick={sortLoot}>
+                  <button className="sidebar-button" data-testid="loot-sort" style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }} onClick={sortLoot}>
                     {lootBusy ? "Sorting..." : "Sort"}
                   </button>
                 )}
@@ -199,7 +199,7 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
               </div>
             </div>
           )}
-          <div style={{ fontSize: 11, color: "#6b7280" }}>
+          <div style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
             Rules from{" "}
             <a
               href="https://loot.github.io"
@@ -207,7 +207,7 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
                 event.preventDefault();
                 window.open("https://loot.github.io", "_blank", "noopener");
               }}
-              style={{ color: "#8ab4ff" }}
+              style={{ color: "var(--color-info-text)" }}
             >
               LOOT
             </a>
@@ -217,14 +217,14 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
       )}
 
       {order && order.fixed.length > 0 && (
-        <div style={{ fontSize: 12, color: "#6b7280" }}>Always loaded first, by the game: {order.fixed.join(", ")}</div>
+        <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Always loaded first, by the game: {order.fixed.join(", ")}</div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-testid="load-order">
         {!order ? (
-          !error && <div style={{ color: "#9ca3af" }}>Loading...</div>
+          !error && <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>
         ) : order.plugins.length === 0 ? (
-          <div style={{ color: "#9ca3af", padding: 20, textAlign: "center" }}>No plugins yet besides the game's own.</div>
+          <div style={{ color: "var(--color-text-muted)", padding: 20, textAlign: "center" }}>No plugins yet besides the game's own.</div>
         ) : (
           order.plugins.map((plugin, index) => (
             <div
@@ -255,30 +255,30 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
                 alignItems: "center",
                 gap: 12,
                 padding: "8px 12px",
-                background: "rgba(27, 27, 27, 0.92)",
-                border: `1px solid ${over === index && dragging !== null && dragging !== index ? "#c084fc" : plugin.problems.length ? "#b45309" : "#2e2e2e"}`,
+                background: "var(--color-surface)",
+                border: `1px solid ${over === index && dragging !== null && dragging !== index ? "var(--color-accent-line)" : plugin.problems.length ? "var(--color-warning-border)" : "var(--color-border)"}`,
                 borderRadius: 10,
                 opacity: dragging === index ? 0.5 : plugin.active ? 1 : 0.65,
               }}
             >
-              <span style={{ color: "#6b7280", cursor: "grab", display: "flex" }} aria-hidden="true">
+              <span style={{ color: "var(--color-text-muted)", cursor: "grab", display: "flex" }} aria-hidden="true">
                 <GripVertical size={18} />
               </span>
-              <span style={{ color: "#6b7280", fontSize: 12, width: 28, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{index + 1}</span>
+              <span style={{ color: "var(--color-text-muted)", fontSize: 12, width: 28, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{index + 1}</span>
               <Toggle on={plugin.active} label={plugin.active ? `Turn off ${plugin.name}` : `Turn on ${plugin.name}`} onChange={(on) => write(order.plugins.map((p, i) => (i === index ? { ...p, active: on } : p)))} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ color: plugin.active ? "#e9d5ff" : "#a1a1aa", fontWeight: 600 }}>{plugin.name}</span>
-                  {plugin.master && <span data-tip="Loads before the plugins that aren't masters" style={{ fontSize: 10, padding: "1px 6px", borderRadius: 5, background: "#1e293b", color: "#93c5fd" }}>{plugin.light ? "Light master" : "Master"}</span>}
-                  {!plugin.master && plugin.light && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 5, background: "#1e293b", color: "#93c5fd" }}>Light</span>}
+                  <span style={{ color: plugin.active ? "var(--color-accent-text)" : "var(--color-text-muted)", fontWeight: 600 }}>{plugin.name}</span>
+                  {plugin.master && <span data-tip="Loads before the plugins that aren't masters" style={{ fontSize: 10, padding: "1px 6px", borderRadius: 5, background: "var(--color-info-bg)", color: "var(--color-info-text)" }}>{plugin.light ? "Light master" : "Master"}</span>}
+                  {!plugin.master && plugin.light && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 5, background: "var(--color-info-bg)", color: "var(--color-info-text)" }}>Light</span>}
                 </div>
                 {plugin.problems.map((problem) => (
-                  <div key={`${problem.kind}${problem.master}`} style={{ color: "#fcd34d", fontSize: 12, marginTop: 2 }}>
+                  <div key={`${problem.kind}${problem.master}`} style={{ color: "var(--color-warning-text)", fontSize: 12, marginTop: 2 }}>
                     {PROBLEM[problem.kind](problem.master)}
                   </div>
                 ))}
                 {!plugin.problems.length && plugin.masters.length > 0 && (
-                  <div style={{ color: "#6b7280", fontSize: 11, marginTop: 2 }}>Needs {plugin.masters.join(", ")}</div>
+                  <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginTop: 2 }}>Needs {plugin.masters.join(", ")}</div>
                 )}
               </div>
               <IconButton tip="Load earlier" label={`Move ${plugin.name} up`} disabled={index === 0} style={{ width: 34, height: 34 }} onClick={() => move(index, index - 1)}>

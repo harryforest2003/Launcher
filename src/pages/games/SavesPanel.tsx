@@ -51,16 +51,16 @@ export default function SavesPanel({ detail }: Props) {
 
   return (
     <div style={panel} data-testid="saves-panel">
-      <div style={{ color: "#c084fc", fontWeight: 600, marginBottom: 6 }}>Saves</div>
-      <div style={{ color: "#9ca3af", fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
+      <div style={{ color: "var(--color-accent-text)", fontWeight: 600, marginBottom: 6 }}>Saves</div>
+      <div style={{ color: "var(--color-text-muted)", fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
         Before a risky play (the first after a game update, the first after your mods change, and the first from the launcher) your saves are
         copied here, so a save loaded with a broken mod can be put back. The last 8 copies are kept.
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid #262626" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--color-border)" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div>Saves folder</div>
-          <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3, wordBreak: "break-all" }}>{info === null ? "Looking..." : info.dir ?? "Not found yet: it appears once the game has saved, or choose it."}</div>
+          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3, wordBreak: "break-all" }}>{info === null ? "Looking..." : info.dir ?? "Not found yet: it appears once the game has saved, or choose it."}</div>
         </div>
         {info?.dir && (
           <button className="sidebar-button" style={smallButton} onClick={() => act("open", () => window.gamesAPI.openSaves(detail.id))}>
@@ -74,7 +74,7 @@ export default function SavesPanel({ detail }: Props) {
           <button
             className="sidebar-button"
             data-testid="backup-now"
-            style={{ ...smallButton, background: "#7c3aed", borderColor: "#a78bfa" }}
+            style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
             onClick={() => act("backup", () => window.gamesAPI.backupSaves(detail.id), "Your saves are backed up.")}
           >
             {busy === "backup" ? "Backing up..." : "Back up now"}
@@ -87,10 +87,10 @@ export default function SavesPanel({ detail }: Props) {
       {(info?.backups.length ?? 0) > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }} data-testid="backups">
           {info!.backups.map((backup) => (
-            <div key={backup.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "#1b1b1b", borderRadius: 8 }}>
+            <div key={backup.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "var(--color-surface-sunken)", borderRadius: 8 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13 }}>{when(backup.at)}</div>
-                <div style={{ color: "#6b7280", fontSize: 11 }}>
+                <div style={{ color: "var(--color-text-muted)", fontSize: 11 }}>
                   {backup.reason} • {backup.files} file{backup.files === 1 ? "" : "s"} • {sizeText(backup.size)}
                 </div>
               </div>

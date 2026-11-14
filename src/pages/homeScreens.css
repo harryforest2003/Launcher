@@ -1,0 +1,832 @@
+/*
+ * The Minecraft home, More Games and its per-game Mod Manager. Tokens only (src/theme/tokens.css):
+ * every colour follows the one the user picked. Home's dashboard lives in ./dashboard/dashboard.css.
+ */
+
+
+/* ================= Minecraft home ================= */
+
+.mh-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--space-8);
+  align-items: start;
+  max-width: 1240px;
+}
+
+@media (max-width: 1080px) {
+  .mh-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mh-account {
+    grid-row: 1;
+  }
+}
+
+.mh-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.mh-version {
+  font-family: var(--font-mono);
+}
+
+.mh-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+}
+
+.mh-section-title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+/* Other instances, most recently played first. */
+.mh-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mh-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.mh-row:first-child {
+  border-top-right-radius: var(--cut-size);
+  corner-shape: var(--corner-cut);
+}
+
+.mh-row:hover {
+  background: var(--color-surface-raised);
+}
+
+.mh-monogram {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-cut);
+  corner-shape: var(--corner-cut);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+}
+
+.mh-row__name {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mh-row__facts {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.mh-row__when {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Ways into the rest of Minecraft: mods and packs, skins, models, instances. */
+.mh-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.mh-link {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4);
+  border: 0;
+  font: inherit;
+  text-align: start;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-radius: var(--radius-cut);
+  corner-shape: var(--corner-cut);
+  box-shadow: var(--edge-highlight);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.mh-link:hover {
+  background: var(--color-surface-raised);
+  box-shadow: var(--edge-highlight), inset var(--rail-width) 0 0 var(--color-accent-line);
+}
+
+.mh-link:active {
+  transform: translateY(1px);
+}
+
+.mh-link__icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+.mh-link__title {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.mh-link__lead {
+  display: block;
+  margin-top: var(--space-0-5);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* The account column. */
+.mh-account {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.mh-account .ui-panel__title {
+  margin: 0;
+}
+
+.mh-skin {
+  display: grid;
+  place-items: center;
+  height: 280px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--space-4);
+}
+
+.mh-skin--live {
+  padding: 0;
+}
+
+.mh-details {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.mh-details dt {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.mh-details dd {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.mh-details dd.mh-uuid {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.mh-tip {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-text-secondary);
+}
+
+/* ================= More Games and its Mod Manager ================= */
+
+.mg-back {
+  margin-bottom: var(--space-4);
+}
+
+.mg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-5);
+}
+
+.mg-toolbar__end {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.mg-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+  max-width: var(--content-max);
+}
+
+.mg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-4);
+  max-width: var(--content-max);
+}
+
+.mg-game {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  border: 0;
+  font: inherit;
+  text-align: start;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-radius: var(--radius-cut-lg);
+  corner-shape: var(--corner-cut);
+  box-shadow: var(--edge-highlight);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.mg-game:hover {
+  background: var(--color-surface-raised);
+  box-shadow: var(--edge-highlight), inset var(--rail-width) 0 0 var(--color-accent-line);
+}
+
+.mg-game__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.mg-game__name {
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-semibold);
+}
+
+.mg-game__source {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.mg-path {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.mg-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+  margin-top: auto;
+  padding-top: var(--space-1);
+}
+
+.mg-empty {
+  max-width: var(--reading-max);
+}
+
+.mg-empty p {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-text-secondary);
+}
+
+.mg-empty code {
+  font-family: var(--font-mono);
+  color: var(--color-accent-text);
+}
+
+.mg-muted {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* Underline tabs: Installed / Browse online. */
+.mg-tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-4);
+  box-shadow: inset 0 calc(-1 * var(--border-width)) 0 var(--color-border);
+}
+
+.mg-tab {
+  position: relative;
+  min-height: var(--control-md);
+  padding: 0 var(--space-3);
+  border: 0;
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out);
+}
+
+.mg-tab:hover {
+  color: var(--color-text);
+  background: var(--color-hover);
+}
+
+.mg-tab[aria-selected="true"] {
+  color: var(--color-text);
+  box-shadow: inset 0 calc(-1 * var(--rail-width)) 0 var(--color-accent-line);
+}
+
+.mg-count {
+  margin-left: var(--space-1-5);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.mg-search {
+  width: 100%;
+  max-width: var(--content-max);
+  margin-bottom: var(--space-3);
+}
+
+.mg-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  max-width: var(--content-max);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+
+.mg-row:hover {
+  background: var(--color-surface-raised);
+}
+
+.mg-row--off .mg-row__name {
+  color: var(--color-text-secondary);
+}
+
+.mg-row__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.mg-row__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.mg-row__meta {
+  margin-top: var(--space-0-5);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.mg-row__summary {
+  margin-top: var(--space-0-5);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mg-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.mg-thumb {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.mg-progress {
+  height: 4px;
+  margin-top: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-sunken);
+}
+
+.mg-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent-line);
+  transition: width var(--duration-base) var(--ease-out);
+}
+
+/* A button whose words may run to two lines (the sign-in button while it waits). */
+.mh-wrap {
+  white-space: normal;
+  line-height: var(--leading-tight);
+  padding-block: var(--space-2);
+  text-align: center;
+}
+
+/* Signed out: a short placeholder where the skin will show. */
+.mh-skin--empty {
+  height: auto;
+  min-height: 132px;
+  gap: var(--space-2);
+  align-content: center;
+}
+
+/* Instance rows with play time: a 30-day trend and the total, where known. */
+.mh-row--stats {
+  grid-template-columns: 40px minmax(0, 1fr) auto auto auto;
+}
+
+.mh-row__trend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.mh-row__time {
+  min-width: 64px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Minecraft home: layout without the account column (signed out) ---- */
+.mh-page {
+  container: mh / inline-size;
+}
+
+.mh-layout--solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mh-main {
+  gap: var(--space-5);
+}
+
+/* Signed out: one slim line with the sign-in button. */
+.mh-signin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-radius: var(--radius-cut);
+  corner-shape: var(--corner-cut);
+  box-shadow: var(--edge-highlight), inset var(--rail-width) 0 0 var(--color-accent-line);
+}
+
+.mh-signin__icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+.mh-signin__text {
+  flex: 1 1 320px;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.mh-signin__text strong {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.mh-signin__error {
+  flex-basis: 100%;
+}
+
+/* Instances beside recent activity. */
+.mh-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@container mh (max-width: 860px) {
+  .mh-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mh-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mh-cards > li {
+  display: flex;
+  min-width: 0;
+}
+
+.mh-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+  border-radius: var(--radius-cut-lg);
+  corner-shape: var(--corner-cut);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.mh-card:hover {
+  background: var(--color-surface-raised);
+  box-shadow: var(--edge-highlight), var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.mh-card .mh-card__art {
+  width: 100%;
+  height: 64px;
+  border-radius: 0;
+}
+
+.mh-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+
+.mh-card__name {
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mh-card__stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.mh-card__play {
+  align-self: flex-start;
+  margin: 0 var(--space-4) var(--space-3);
+}
+
+.mh-card--new {
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-1);
+  min-height: 160px;
+  margin: 0;
+  padding: var(--space-4);
+  border: 0;
+  font: inherit;
+  text-align: start;
+  color: var(--color-accent-text);
+  background: color-mix(in oklab, var(--color-surface) 55%, transparent);
+  cursor: pointer;
+}
+
+.mh-card--new .mh-card__name {
+  white-space: normal;
+}
+
+/* ---- Minecraft home: the last-played card with the player beside it ---- */
+.mh-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+
+.mh-top {
+  display: grid;
+  grid-template-rows: auto;
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 300px);
+  gap: var(--space-4);
+  align-items: stretch;
+  margin-bottom: var(--space-5);
+}
+
+.mh-top__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mh-top__main .mh-head {
+  margin-bottom: var(--space-4);
+}
+
+@container mh (max-width: 760px) {
+  .mh-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mh-top > .mh-player {
+    contain: none;
+    min-height: 320px;
+  }
+}
+
+/* The signed-in player: their own skin in 3D on top, who they are, then the account controls. */
+.mh-player {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  height: 100%;
+  box-sizing: border-box;
+  /* The card is exactly as tall as the welcome and last-played card beside it: its own
+     contents never stretch the row. */
+  contain: size;
+  min-height: 240px;
+  padding: var(--space-3) var(--space-4) var(--space-3);
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background:
+    radial-gradient(90% 70% at 50% 34%, var(--color-accent-subtle) 0%, transparent 70%),
+    var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.mh-player__figure {
+  position: relative;
+  flex: 1 1 0;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  margin: 0 calc(-1 * var(--space-4));
+  color: var(--color-text-muted);
+}
+
+/* The 3D view fills whatever height the card has, so the player stands as tall as the
+   welcome and last-played card beside it. */
+.mh-player__figure > div {
+  position: absolute !important;
+  inset: 0;
+  height: auto !important;
+}
+
+.mh-player__figure canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* Without 3D graphics: the flat front view, scaled to the space the figure has. */
+.mh-player__flat {
+  position: absolute;
+  inset: var(--space-2) 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mh-player__flat canvas {
+  height: 100%;
+  width: auto;
+}
+
+.mh-player__info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  text-align: center;
+}
+
+.mh-player__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.mh-player__name {
+  max-width: 100%;
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mh-player__uuid {
+  max-width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mh-player__switch > * {
+  width: 100%;
+}
+
+.mh-player__actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* Signed out: the same slot holds the way to sign in. */
+.mh-signin--card {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  height: 100%;
+  border-radius: var(--radius-lg);
+}

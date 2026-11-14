@@ -1,7 +1,9 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const unzipper = require("unzipper");
+// Unzipped by the same code as the game sections' mods, which never writes outside its folder.
+const { unzip } = require("../games/archive.cjs");
 
 const { readManifest, writeManifest } = require("./modLibrary.cjs");
 
@@ -21,12 +23,15 @@ const { readManifest, writeManifest } = require("./modLibrary.cjs");
 
 const ARCHIVE_EXTENSIONS = [".zip", ".ts4script"];
 
+// A name for one file or folder: no separators, and never "." or ".." (or only dots),
+// which would mean this folder or the one above it.
 function sanitize(name) {
-    return String(name)
-        .replace(/[/\\:*?"<>|]/g, "_")
+    const clean = String(name)
+        .replace(/[\u0000-\u001f/\\:*?"<>|]/g, "_")
         .replace(/\s+/g, " ")
         .trim()
-        .slice(0, 120) || "mod";
+        .slice(0, 120);
+    return /^\.*$/.test(clean) ? "mod" : clean;
 }
 
 function tempDir() {
@@ -37,7 +42,9 @@ function tempDir() {
    DOWNLOAD
 ========================================================= */
 
-async function downloadTo(url, destination, onProgress) {
+async function downloadTo(url, destination, onProgress, { sha1 } = {}) {
+    if (new URL(url).protocol !== "https:") throw new Error("That download isn't from a secure (https) address.");
+
     const res = await fetch(url, {
         headers: { "User-Agent": "UnityLauncher/1.0" },
         redirect: "follow",
@@ -63,7 +70,14 @@ async function downloadTo(url, destination, onProgress) {
         }
     }
 
-    fs.writeFileSync(destination, Buffer.concat(chunks));
+    const data = Buffer.concat(chunks);
+
+    // Checked against the site's own SHA-1 of the file, when it gives one.
+    if (sha1 && crypto.createHash("sha1").update(data).digest("hex") !== String(sha1).toLowerCase()) {
+        throw new Error("The download didn't match the file on the site. Try again.");
+    }
+
+    fs.writeFileSync(destination, data);
 
     return destination;
 }
@@ -80,9 +94,8 @@ function isArchive(filePath) {
 async function extractArchive(archivePath, outputDir) {
     fs.mkdirSync(outputDir, { recursive: true });
 
-    await fs.createReadStream(archivePath)
-        .pipe(unzipper.Extract({ path: outputDir }))
-        .promise();
+    // Entries naming a path outside outputDir ("../", absolute paths) are skipped.
+    await unzip(archivePath, outputDir);
 
     return outputDir;
 }
@@ -285,7 +298,7 @@ async function installFromUrl(game, modDir, url, meta = {}, onProgress) {
 
         const downloaded = path.join(staging, fileName);
 
-        await downloadTo(url, downloaded, onProgress);
+        await downloadTo(url, downloaded, onProgress, { sha1: meta.sha1 });
 
         return await installLocalFile(game, modDir, downloaded, meta);
 

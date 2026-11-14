@@ -54,11 +54,11 @@ export default function ConflictsPanel({ detail, mods }: Props) {
           {open ? "Hide" : "See which"}
         </button>
       </div>
-      {error && <div style={{ fontSize: 12, marginTop: 8, color: "#fca5a5" }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, marginTop: 8, color: "var(--color-danger-text)" }}>{error}</div>}
       {open && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
           {groups.map((group) => (
-            <div key={group.id} style={{ padding: "8px 10px", background: "rgba(0, 0, 0, 0.25)", borderRadius: 8 }} data-testid="conflict">
+            <div key={group.id} style={{ padding: "8px 10px", background: "var(--color-hover)", borderRadius: 8 }} data-testid="conflict">
               <div style={{ fontSize: 13 }}>
                 {list(group.mods.map((m) => m.name))} all have{" "}
                 <button onClick={() => setShowFiles((now) => (now === group.id ? null : group.id))} style={{ background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
@@ -66,7 +66,7 @@ export default function ConflictsPanel({ detail, mods }: Props) {
                 </button>
                 .
               </div>
-              <div style={{ fontSize: 12, marginTop: 3, color: "#c4b5fd" }}>
+              <div style={{ fontSize: 12, marginTop: 3, color: "var(--color-accent-text)" }}>
                 Using {nameOf(group, group.suggested)}'s: {group.reason.charAt(0).toLowerCase() + group.reason.slice(1)}.
                 {group.live !== group.suggested && " (Being sorted out.)"}
               </div>

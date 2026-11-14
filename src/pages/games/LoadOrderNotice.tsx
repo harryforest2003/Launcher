@@ -65,7 +65,7 @@ export default function LoadOrderNotice({ detail, mods, goLoadOrder, onGetRequir
       <button
         className="sidebar-button"
         data-testid="fix-load-order"
-        style={{ ...smallButton, padding: "6px 12px", fontSize: 12, background: "#7c3aed", borderColor: "#a78bfa", color: "white", flexShrink: 0 }}
+        style={{ ...smallButton, padding: "6px 12px", fontSize: 12, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)", flexShrink: 0 }}
         onClick={fix}
       >
         Fix load order

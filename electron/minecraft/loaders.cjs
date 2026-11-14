@@ -3,7 +3,7 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
-const { fetchJson, downloadFile } = require("./net.cjs");
+const { fetchJson, downloadFile, publishedSha1 } = require("./net.cjs");
 const { parseVersion, compare } = require("./compat.cjs");
 
 /*
@@ -175,6 +175,9 @@ async function installJsonLoader(loader, mcVersion, loaderVersion) {
 ========================================================= */
 
 function installerUrl(loader, loaderVersion) {
+    // A version as the loaders name them ("1.20.1-47.3.0", "21.1.77"), never a path.
+    if (!/^[\w.+-]{1,64}$/.test(String(loaderVersion))) throw new Error(`"${loaderVersion}" isn't a ${loader} version.`);
+
     if (loader === "neoforge") {
         return `https://maven.neoforged.net/releases/net/neoforged/neoforge/` +
             `${loaderVersion}/neoforge-${loaderVersion}-installer.jar`;
@@ -295,7 +298,10 @@ async function installJarLoader(
     try {
         if (onLog) onLog(`Downloading ${loader} installer...`);
 
-        await downloadFile(installerUrl(loader, loaderVersion), jarPath);
+        // The installer runs as a program, so it's checked against the checksum its Maven
+        // repository publishes beside it before it does.
+        const url = installerUrl(loader, loaderVersion);
+        await downloadFile(url, jarPath, { sha1: await publishedSha1(url), requireHash: true });
 
         // The Java this Minecraft version needs, downloaded first if it isn't here yet.
         const javaPath = await getJava();

@@ -16,13 +16,13 @@ const message = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
 const card: React.CSSProperties = {
-  background: "#151515",
-  border: "1px solid #6d28d9",
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
   borderRadius: 12,
   padding: 14,
 };
 
-const COLOURS: Record<Level, string> = { info: "#e4e4e7", warn: "#fcd34d", error: "#fca5a5", launcher: "#c084fc" };
+const COLOURS: Record<Level, string> = { info: "var(--color-text-secondary)", warn: "var(--color-warning-text)", error: "var(--color-danger-text)", launcher: "var(--color-accent-text)" };
 
 const HEADER = /^(?:\[[^\]]*\] )?\[[^\]]*\/(TRACE|DEBUG|INFO|WARN|WARNING|ERROR|FATAL)\]/;
 const EXCEPTION = /^\s*(?:Caused by: |Suppressed: )?(?:[a-zA-Z_$][\w$]*\.)+[\w$]*(?:Exception|Error|Throwable)(?::.*)?$/;
@@ -194,16 +194,16 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
     <div
       key={item.title}
       data-testid="crash-cause"
-      style={{ background: main ? "transparent" : "#151515", borderRadius: 10, padding: main ? 0 : 12, display: "flex", flexDirection: "column", gap: 10 }}
+      style={{ background: main ? "transparent" : "var(--color-surface)", borderRadius: 10, padding: main ? 0 : 12, display: "flex", flexDirection: "column", gap: 10 }}
     >
-      <div style={{ color: main ? "#ffffff" : "#fecaca", fontSize: main ? 19 : 15, fontWeight: 600 }}>{item.title}</div>
+      <div style={{ color: main ? "var(--color-text)" : "var(--color-danger-text)", fontSize: main ? 19 : 15, fontWeight: 600 }}>{item.title}</div>
 
-      {item.detail && <div style={{ color: "#d4d4d8", fontSize: 13, lineHeight: 1.5 }}>{item.detail}</div>}
+      {item.detail && <div style={{ color: "var(--color-text-secondary)", fontSize: 13, lineHeight: 1.5 }}>{item.detail}</div>}
 
       {item.evidence && (
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ color: "#9ca3af", fontSize: 12 }}>{SOURCE_LABEL[item.evidence.source]}</span>
+            <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>{SOURCE_LABEL[item.evidence.source]}</span>
             {item.evidence.source === "log" ? (
               <button className="sidebar-button" style={{ padding: "2px 10px", fontSize: 11, marginLeft: "auto" }} onClick={() => showInLog(item.evidence!.index)}>
                 Show in Log
@@ -223,9 +223,9 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
             style={{
               fontFamily: "ui-monospace, Menlo, Consolas, monospace",
               fontSize: 12,
-              color: "#fca5a5",
-              background: "#0b0b0b",
-              border: "1px solid #3f1d1d",
+              color: "var(--color-danger-text)",
+              background: "var(--color-surface-sunken)",
+              border: "1px solid var(--color-danger-border)",
               borderRadius: 8,
               padding: "8px 10px",
               whiteSpace: "pre-wrap",
@@ -239,27 +239,27 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
 
       {item.mods.length > 0 ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ color: "#9ca3af", fontSize: 12 }}>{item.mods.length === 1 ? "Mod:" : "Mods:"}</span>
+          <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>{item.mods.length === 1 ? "Mod:" : "Mods:"}</span>
           {item.mods.map((mod) => (
-            <span key={mod.fileName} style={{ display: "inline-flex", gap: 6, alignItems: "center", background: "#232323", borderRadius: 8, padding: "4px 4px 4px 10px", fontSize: 12 }}>
+            <span key={mod.fileName} style={{ display: "inline-flex", gap: 6, alignItems: "center", background: "var(--color-surface-raised)", borderRadius: 8, padding: "4px 4px 4px 10px", fontSize: 12 }}>
               <span title={mod.fileName}>{mod.name}</span>
               {mod.enabled ? (
                 <button className="sidebar-button" style={{ padding: "2px 10px", fontSize: 11 }} onClick={() => disable(mod)}>
                   Disable
                 </button>
               ) : (
-                <span style={{ color: "#6b7280", padding: "0 6px" }}>disabled</span>
+                <span style={{ color: "var(--color-text-muted)", padding: "0 6px" }}>disabled</span>
               )}
             </span>
           ))}
         </div>
       ) : (
-        NOT_A_MOD.has(item.kind) && <div style={{ color: "#9ca3af", fontSize: 12 }}>Not caused by a mod.</div>
+        NOT_A_MOD.has(item.kind) && <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>Not caused by a mod.</div>
       )}
 
       {item.fix && (
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", background: "#0f1f14", border: "1px solid #14532d", borderRadius: 8, padding: "8px 10px" }}>
-          <span style={{ color: "#86efac", fontSize: 13, flex: "1 1 240px" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", background: "var(--color-success-bg)", border: "1px solid var(--color-success-border)", borderRadius: 8, padding: "8px 10px" }}>
+          <span style={{ color: "var(--color-success-text)", fontSize: 13, flex: "1 1 240px" }}>
             <b>How to fix it: </b>
             {item.fix}
           </span>
@@ -286,24 +286,24 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
   return (
     <div data-testid="log-tab" style={{ display: "flex", flexDirection: "column", gap: 14, textAlign: "left" }}>
       {help?.crashed && (
-        <div data-testid="crash-help" style={{ ...card, borderColor: "#ef4444", background: "#1f0b0b", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div data-testid="crash-help" style={{ ...card, borderColor: "var(--color-danger-border)", background: "var(--color-danger-bg)", display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ color: "#f87171", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>MINECRAFT CRASHED</span>
-            {help.description && <span style={{ color: "#9ca3af", fontSize: 12 }}>while {help.description.toLowerCase()}</span>}
+            <span style={{ color: "var(--color-danger-text)", fontSize: 12, fontWeight: 700, letterSpacing: 1 }}>MINECRAFT CRASHED</span>
+            {help.description && <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>while {help.description.toLowerCase()}</span>}
           </div>
 
           {cause(help.causes[0], true)}
 
           {help.causes.length > 1 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ color: "#9ca3af", fontSize: 12 }}>Also found:</div>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>Also found:</div>
               {help.causes.slice(1).map((item) => cause(item, false))}
             </div>
           )}
 
           {lastBatch && (
-            <div data-testid="crash-undo" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "#151515", border: "1px solid #3b3150", borderRadius: 8, padding: "8px 10px" }}>
-              <span style={{ color: "#d4d4d8", fontSize: 13, flex: "1 1 260px" }}>
+            <div data-testid="crash-undo" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, padding: "8px 10px" }}>
+              <span style={{ color: "var(--color-text-secondary)", fontSize: 13, flex: "1 1 260px" }}>
                 Did this start after the last update ({lastBatch.names.length === 1 ? lastBatch.names[0] : `${lastBatch.names.length} items`},{" "}
                 {new Date(lastBatch.time).toLocaleString()})? Undoing it puts the previous versions back.
               </span>
@@ -330,15 +330,15 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
         </div>
       )}
 
-      {notice && <div style={{ color: "#86efac", fontSize: 13 }}>{notice}</div>}
+      {notice && <div style={{ color: "var(--color-success-text)", fontSize: 13 }}>{notice}</div>}
       {error && (
-        <div role="alert" style={{ color: "#fca5a5", fontSize: 13 }}>
+        <div role="alert" style={{ color: "var(--color-danger-text)", fontSize: 13 }}>
           {error}
         </div>
       )}
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <span data-testid="log-status" style={{ color: log?.running ? "#86efac" : "#9ca3af", fontSize: 13, marginRight: "auto" }}>
+        <span data-testid="log-status" style={{ color: log?.running ? "var(--color-success-text)" : "var(--color-text-muted)", fontSize: 13, marginRight: "auto" }}>
           {status}
         </span>
         <input
@@ -349,9 +349,9 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
           }}
           placeholder="Filter..."
           aria-label="Filter the log"
-          style={{ padding: "6px 10px", borderRadius: 8, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", width: 160 }}
+          style={{ padding: "6px 10px", borderRadius: 8, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", width: 160 }}
         />
-        <label style={{ color: "#d4d4d8", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
+        <label style={{ color: "var(--color-text-secondary)", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
           <input
             type="checkbox"
             checked={errorsOnly}
@@ -362,7 +362,7 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
           />
           Errors only
         </label>
-        <label style={{ color: "#d4d4d8", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
+        <label style={{ color: "var(--color-text-secondary)", fontSize: 12, display: "flex", gap: 6, alignItems: "center" }}>
           <input
             type="checkbox"
             checked={follow}
@@ -418,14 +418,14 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
               data-line={index}
               style={{
                 color: COLOURS[level],
-                ...(index === highlight ? { background: "#4c1d1d", outline: "1px solid #ef4444", borderRadius: 3 } : null),
+                ...(index === highlight ? { background: "var(--color-danger-bg)", outline: "1px solid var(--color-danger-border)", borderRadius: 3 } : null),
               }}
             >
               {line || " "}
             </div>
           ))
         ) : (
-          <div style={{ color: "#6b7280" }}>{log && log.lines.length ? "Nothing matches." : "Nothing here yet."}</div>
+          <div style={{ color: "var(--color-text-muted)" }}>{log && log.lines.length ? "Nothing matches." : "Nothing here yet."}</div>
         )}
       </div>
     </div>

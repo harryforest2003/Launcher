@@ -23,6 +23,7 @@ const starterMods = require("./starterMods.cjs");
 const curseforge = require("../curseforge.cjs");
 const launcherSettings = require("./settings.cjs");
 const { clearSecret, getSecret, isPersonal, secretStatus, setSecret } = require("../secrets.cjs");
+const { assertGranted, grantPaths } = require("../security.cjs");
 
 /*
  * IPC for instance management and per-instance mods.
@@ -95,20 +96,35 @@ function keyChanged(name) {
     if (name === "nexus") require("../mods/providers/nexus.cjs").setApiKey(getSecret("nexus"));
 }
 
+/*
+ * Starts an instance's game as one signed-in account (its id), or the active one when none
+ * is given. The id has to be a saved account's. An account already in another game is
+ * refused before its sign-in is renewed, and again, finally, as the game starts.
+ */
+async function launchAs(name, accountId) {
+    const instance = instanceManager.getInstance(name);
+    const id = account.checkAccountId(accountId) ?? account.listAccounts().find((entry) => entry.active)?.uuid ?? null;
+
+    const busy = instanceManager.instanceUsing(id);
+    if (busy && busy !== instance.name) {
+        const who = account.listAccounts().find((entry) => entry.uuid === id)?.name ?? "That account";
+        throw new Error(`${who} is already playing "${busy}". Minecraft allows one game per account at a time, so play this one as another account, or close "${busy}" first.`);
+    }
+
+    const acct = await account.accountForLaunch(instance.name, id);
+    const result = await instanceManager.launchInstance(name, acct);
+
+    return { ...result, online: acct.online, playerName: acct.name };
+}
+
 function registerInstanceIpc() {
 
     /* ---------------- instances ---------------- */
 
     ipcMain.handle("instance:list", () => instanceManager.getInstances());
 
-    ipcMain.handle("instance:get", (_e, name) => {
-        const instance = instanceManager.getInstance(name);
-
-        return {
-            ...instance,
-            running: instanceManager.isRunning(name),
-        };
-    });
+    // With whether its game is open, and as whom.
+    ipcMain.handle("instance:get", (_e, name) => instanceManager.withRunState(instanceManager.getInstance(name)));
 
     ipcMain.handle("instance:create", async (event, config) => {
         const onProgress = (progress) => send(event, "instance:progress", { name: config.name, ...progress });
@@ -146,18 +162,17 @@ function registerInstanceIpc() {
         }
     };
     instanceManager.instanceEvents.on("log", (payload) => broadcast("instance:log", payload));
-    instanceManager.instanceEvents.on("exit", (payload) => broadcast("instance:exit", payload));
+    // A game stopped and started again before it had closed: pages only hear of the newest.
+    instanceManager.instanceEvents.on("exit", ({ superseded, ...payload }) => {
+        if (!superseded) broadcast("instance:exit", payload);
+    });
+    instanceManager.instanceEvents.on("started", ({ name, account: player }) => broadcast("instance:started", { name, account: player }));
     instanceManager.instanceEvents.on("progress", (payload) => broadcast("instance:progress", payload));
 
-    ipcMain.handle("instance:launch", async (_event, name) => {
-        const instance = instanceManager.getInstance(name);
+    ipcMain.handle("instance:launch", (_event, name, accountId) => launchAs(name, accountId));
 
-        const acct = await account.accountForLaunch(instance.name);
-
-        const result = await instanceManager.launchInstance(name, acct);
-
-        return { ...result, online: acct.online, playerName: acct.name };
-    });
+    // Which account each open game plays as: { [instance]: { id, name } | null }.
+    ipcMain.handle("instance:playing", () => instanceManager.playing());
 
     // A Java for this instance alone, chosen in a file dialog. Null if cancelled.
     ipcMain.handle("instance:pickJava", async (event, name) => {
@@ -165,9 +180,10 @@ function registerInstanceIpc() {
             title: `Choose a Java for ${name}`,
             properties: ["openFile"],
         });
-        if (picked.canceled) return null;
-        instanceManager.updateInstance(name, { javaPath: picked.filePaths[0] });
-        return picked.filePaths[0];
+        if (picked.canceled || !picked.filePaths.length) return null;
+        const javaPath = launcherSettings.checkJavaPath(picked.filePaths[0]);
+        instanceManager.updateInstance(name, { javaPath });
+        return javaPath;
     });
 
     // Which Java automatic would use for this instance, and whether it's downloaded yet.
@@ -316,6 +332,8 @@ function registerInstanceIpc() {
             ? path.resolve(gameDir, /^hs_err_pid\d+\.log$/.test(file) ? "" : "crash-reports", path.basename(String(file)))
             : path.join(gameDir, "logs");
         if (!target.startsWith(path.resolve(gameDir) + path.sep)) throw new Error("That isn't part of this instance.");
+        // A crash report or log opens in its default app; anything else could be a program.
+        if (file && !/\.(txt|log)$/i.test(target)) throw new Error("Only crash reports and logs can be opened from here.");
         if (!file) fs.mkdirSync(target, { recursive: true });
         const failed = await shell.openPath(target);
         if (failed) throw new Error(failed);
@@ -511,9 +529,11 @@ function registerInstanceIpc() {
         return { ...result, dependencies: installedDeps, missingDependencies: check.notFound, disabledDependencies: check.disabled };
     });
 
-    ipcMain.handle("instance:update", (_e, { name, patch }) =>
-        instanceManager.updateInstance(name, patch)
-    );
+    // Java arguments the launcher won't use are refused here, saying which.
+    ipcMain.handle("instance:update", (_e, { name, patch }) => {
+        if (patch && typeof patch === "object" && "jvmArgs" in patch) launcherSettings.checkJvmArgs(patch.jvmArgs);
+        return instanceManager.updateInstance(name, patch);
+    });
 
     /* ---------------- modpacks ---------------- */
 
@@ -607,21 +627,28 @@ function registerInstanceIpc() {
 
     /* ---------------- importing ---------------- */
 
-    ipcMain.handle("import:scan", () => importer.scanLaunchers());
+    // Each folder found or chosen here is one the page may then ask to import (see security.cjs).
+    ipcMain.handle("import:scan", () => {
+        const found = importer.scanLaunchers();
+        grantPaths("import-folder", (Array.isArray(found) ? found : []).map((entry) => entry?.gameDir));
+        return found;
+    });
 
-    ipcMain.handle("import:pickFolder", async () => {
-        const picked = await dialog.showOpenDialog({
+    ipcMain.handle("import:pickFolder", async (event) => {
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
             title: "Choose a Minecraft instance folder",
             properties: ["openDirectory"],
         });
 
         if (picked.canceled) return null;
 
-        return importer.inspectFolder(picked.filePaths[0]);
+        const entry = importer.inspectFolder(picked.filePaths[0]);
+        grantPaths("import-folder", entry?.gameDir);
+        return entry;
     });
 
-    ipcMain.handle("import:pickZip", async () => {
-        const picked = await dialog.showOpenDialog({
+    ipcMain.handle("import:pickZip", async (event) => {
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
             title: "Choose a modpack or exported instance",
             properties: ["openFile"],
             filters: [
@@ -632,6 +659,7 @@ function registerInstanceIpc() {
         if (picked.canceled) return null;
 
         const file = picked.filePaths[0];
+        grantPaths("import-zip", file);
 
         // Could be a modpack or one of our own exports.
         try {
@@ -656,7 +684,9 @@ function registerInstanceIpc() {
      * user pointed at, copying its mods, configs and saves across.
      */
     ipcMain.handle("import:instance", async (event, payload) => {
-        const { entry, name: requestedName, version: overrideVersion } = payload;
+        const { entry, name: requestedName, version: overrideVersion } = payload ?? {};
+        // Only a folder the scan or the folder dialog offered.
+        assertGranted("import-folder", entry?.gameDir);
 
         let mcVersion = overrideVersion || entry.mcVersion;
 
@@ -707,7 +737,10 @@ function registerInstanceIpc() {
         );
     });
 
-    ipcMain.handle("import:modpackFile", async (event, { file, name }) => {
+    ipcMain.handle("import:modpackFile", async (event, request) => {
+        const { name } = request ?? {};
+        // Only a file the import dialog offered.
+        const file = assertGranted("import-zip", request?.file);
         const info = await modpack.inspectModpack(file);
 
         if (!info.mcVersion) {
@@ -757,10 +790,15 @@ function registerInstanceIpc() {
     const cloudFolderInUse = () =>
         launcherSettings.readSettings().cloudFolder || cloud.defaultCloudFolder();
 
-    ipcMain.handle("cloud:detect", () => cloud.detectCloudFolders());
+    // Each folder found is one the page may then choose (see security.cjs and settings.cjs checkFolder).
+    ipcMain.handle("cloud:detect", () => {
+        const found = cloud.detectCloudFolders();
+        grantPaths("cloud-folder", (Array.isArray(found) ? found : []).map((entry) => entry?.path));
+        return found;
+    });
 
-    ipcMain.handle("cloud:pickFolder", async () => {
-        const picked = await dialog.showOpenDialog({
+    ipcMain.handle("cloud:pickFolder", async (event) => {
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
             title: "Choose a cloud-synced folder",
             properties: ["openDirectory", "createDirectory"],
         });
@@ -775,16 +813,19 @@ function registerInstanceIpc() {
     });
 
     ipcMain.handle("cloud:setFolder", (_e, folder) => {
-        launcherSettings.writeSettings({ cloudFolder: folder || "" });
+        launcherSettings.writeSettings({ cloudFolder: launcherSettings.checkFolder(folder) });
         return launcherSettings.readSettings().cloudFolder;
     });
 
+    // Each backup listed is one the page may then ask to restore (see security.cjs).
     ipcMain.handle("cloud:list", () => {
         const folder = cloudFolderInUse();
+        const instances = cloud.listCloudInstances(folder);
+        grantPaths("cloud-backup", (Array.isArray(instances) ? instances : []).flatMap((entry) => [entry?.file, entry?.previous?.file]));
 
         return {
             folder,
-            instances: cloud.listCloudInstances(folder),
+            instances,
         };
     });
 
@@ -818,7 +859,9 @@ function registerInstanceIpc() {
      * as it is. Mods and saves go back first, so they're safe here even if downloading
      * Minecraft then fails: Repair can finish that part later.
      */
-    ipcMain.handle("cloud:import", async (event, file) => {
+    ipcMain.handle("cloud:import", async (event, picked) => {
+        // Only a backup the cloud list or the import dialog offered.
+        const file = assertGranted(["cloud-backup", "import-zip"], picked);
         const { config } = await cloud.readCloudInstance(file);
 
         if (!config?.version) {
@@ -884,21 +927,21 @@ function registerInstanceIpc() {
     }));
 
     ipcMain.handle("settings:set", (_e, patch) => ({
-        ...launcherSettings.writeSettings(patch),
+        ...launcherSettings.writeSettings(launcherSettings.settingsFromPage(patch)),
         system: launcherSettings.systemInfo(),
     }));
 
     ipcMain.handle("settings:javaRuntimes", () => javaRuntime.installedRuntimes());
 
-    ipcMain.handle("settings:pickJava", async () => {
-        const picked = await dialog.showOpenDialog({
+    ipcMain.handle("settings:pickJava", async (event) => {
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
             title: "Choose a Java executable",
             properties: ["openFile"],
         });
 
-        if (picked.canceled) return null;
+        if (picked.canceled || !picked.filePaths.length) return null;
 
-        const javaPath = picked.filePaths[0];
+        const javaPath = launcherSettings.checkJavaPath(picked.filePaths[0]);
 
         launcherSettings.writeSettings({ javaPath });
 
@@ -949,4 +992,4 @@ function registerInstanceIpc() {
     });
 }
 
-module.exports = { registerInstanceIpc, saveAccount: account.saveAccount };
+module.exports = { registerInstanceIpc, launchAs, saveAccount: account.saveAccount };

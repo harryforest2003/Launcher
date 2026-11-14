@@ -389,6 +389,15 @@ export const gamesBridge = {
     return { restored: key, version: "2025.9" };
   },
   nexusAccount: async () => ({ name: "PreviewUser", premium: false }),
+  // As the desktop app: Steam's signed-in player for games found in Steam, else where sign-in happens.
+  account: async (id: GameId): Promise<GameStoreAccount> => {
+    const game = GAMES.find((entry) => entry.id === id);
+    if (!game?.gameDir) return { store: null, storeName: null, name: null, how: "Find the game on this computer to see how it signs in." };
+    if (/steamapps/i.test(game.gameDir)) {
+      return { store: "steam", storeName: "Steam", name: "PreviewSteamPlayer", how: "Steam signs you in. To play as someone else, switch account in the Steam app." };
+    }
+    return { store: "ea", storeName: "EA app", name: null, how: "The EA app handles sign-in. Sign in there to play." };
+  },
 
   saves: async (id: GameId) => ({ dir: id === "sims4" ? "~/Documents/Electronic Arts/The Sims 4/Saves" : null, backups: id === "sims4" ? backups : [] }),
   backupSaves: async () => {

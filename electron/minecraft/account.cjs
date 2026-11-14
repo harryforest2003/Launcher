@@ -101,11 +101,25 @@ function switchAccount(uuid) {
     writeStore({ ...store, active: uuid });
 }
 
-async function freshAccount(stored) {
-    if (stored.expiresAt - Date.now() > REFRESH_BEFORE_MS) return stored;
+/*
+ * Each account renews on its own: two games starting together as two players each renew
+ * their own token, and two renewals of the same account share one request (Microsoft
+ * replaces the refresh token on every renewal, so a second one would use a spent token).
+ */
+const renewing = new Map();
 
+function freshAccount(stored) {
+    if (stored.expiresAt - Date.now() > REFRESH_BEFORE_MS) return Promise.resolve(stored);
+
+    if (!renewing.has(stored.uuid)) {
+        renewing.set(stored.uuid, renew(stored).finally(() => renewing.delete(stored.uuid)));
+    }
+    return renewing.get(stored.uuid);
+}
+
+async function renew(stored) {
     if (!stored.refreshToken) {
-        throw new Error("Your Minecraft sign-in has expired. Sign in again on the Minecraft page.");
+        throw new Error(`${stored.name}'s Minecraft sign-in has expired. Sign in again on the Minecraft page.`);
     }
 
     try {
@@ -138,17 +152,32 @@ async function minecraftAccessToken() {
 }
 
 /*
- * What launch() needs, for the active account. Falls back to an offline-style account so
- * an unauthenticated user still gets a clear result (the game will refuse online play,
- * but the launch itself is well-formed).
+ * The id of a signed-in account, as a page sent it, or null for "the active one". Anything
+ * else (not text, too long, or no saved account has it) is refused.
  */
-async function accountForLaunch(fallbackName = "Player") {
-    const stored = readAccount();
+function checkAccountId(value) {
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value !== "string" || value.length > 64) throw new Error("That isn't an account id.");
+    if (!readStore().accounts.some((entry) => entry.uuid === value)) throw new Error("That account isn't signed in any more.");
+    return value;
+}
+
+/*
+ * What launch() needs, for the account with this id (checkAccountId first), or the active
+ * one. Falls back to an offline-style account so an unauthenticated user still gets a clear
+ * result (the game will refuse online play, but the launch itself is well-formed).
+ * id is the saved account's own id, which pages know it by.
+ */
+async function accountForLaunch(fallbackName = "Player", accountId = null) {
+    const store = readStore();
+    const stored = accountId ? store.accounts.find((entry) => entry.uuid === accountId) : activeOf(store);
+    if (accountId && !stored) throw new Error("That account isn't signed in any more.");
 
     if (stored?.accessToken && stored.uuid) {
         const account = await freshAccount(stored);
 
         return {
+            id: account.uuid,
             name: account.name,
             uuid: account.uuid.replace(/-/g, ""),
             accessToken: account.accessToken,
@@ -158,6 +187,7 @@ async function accountForLaunch(fallbackName = "Player") {
     }
 
     return {
+        id: null,
         name: fallbackName,
         // Deterministic offline UUID, same convention other launchers use.
         uuid: "00000000000000000000000000000000",
@@ -185,6 +215,7 @@ module.exports = {
     readAccount,
     clearAccount,
     accountForLaunch,
+    checkAccountId,
     publicAccount,
     listAccounts,
     switchAccount,

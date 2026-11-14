@@ -3,6 +3,15 @@ export {};
 declare global {
     type GameId = "sims4" | "gtav" | "skyrimse" | "fallout4" | "cyberpunk2077" | "stardew";
 
+    /** How a game signs in. name: the Steam app's signed-in player (null when unknown or not Steam). */
+    type GameStoreAccount = {
+        store: "steam" | "ea" | "gog" | "epic" | "rockstar" | null;
+        storeName: string | null;
+        name: string | null;
+        /** One plain sentence: who signs in, or where to sign in. */
+        how: string;
+    };
+
     /* A game with its own section: where it is and how many mods are on. */
     type GameSummary = {
         id: GameId;
@@ -18,6 +27,7 @@ declare global {
         nexus: string | null;
         curseforge: number | null;
         modCount: number;
+        lastPlayed?: string | null;
         /* Set when the game has updated since it was last played from here. */
         updated: { from: string | null; to: string | null } | null;
         /* Skyrim and Fallout 4: plugins load in an order that matters. */
@@ -328,6 +338,8 @@ declare global {
             update: (id: GameId, key: string) => Promise<GameInstallResult>;
             undoUpdate: (id: GameId, key: string) => Promise<{ restored: string; version: string | null }>;
             nexusAccount: () => Promise<{ name: string; premium: boolean } | null>;
+            /** Who the game signs in as: Steam's signed-in player (display name only), or which app handles sign-in. */
+            account: (id: GameId) => Promise<GameStoreAccount>;
             /* recheck: ask Nexus again (after verifying on the website). */
             adultStatus: (recheck?: boolean) => Promise<GameAdultStatus>;
             setAdult: (on: boolean) => Promise<GameAdultStatus>;

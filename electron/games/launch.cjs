@@ -27,9 +27,14 @@ const PARKED_LOADER = `dinput8.dll${PARKED}`;
 const CROSSOVER_WINE = "/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/bin/wine";
 
 function startDetached(command, args, cwd) {
-    const child = spawn(command, args, { cwd, detached: true, stdio: "ignore" });
-    child.on("error", () => {});
-    child.unref();
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, { cwd, detached: true, stdio: "ignore" });
+        child.once("error", reject);
+        child.once("spawn", () => {
+            child.unref();
+            resolve();
+        });
+    });
 }
 
 /* An exe in a CrossOver bottle, through CrossOver's own wine. */
@@ -38,7 +43,7 @@ function startInBottle(exe) {
     if (!match || !exe.includes("/CrossOver/Bottles/") || !fs.existsSync(CROSSOVER_WINE)) {
         throw new Error("This game is in a Windows bottle: start it from CrossOver or Whisky.");
     }
-    startDetached(CROSSOVER_WINE, ["--bottle", match[1], exe], path.dirname(exe));
+    return startDetached(CROSSOVER_WINE, ["--bottle", match[1], exe], path.dirname(exe));
 }
 
 const inBottle = (dir) => Boolean(dir && dir.includes(`${path.sep}drive_c${path.sep}`));

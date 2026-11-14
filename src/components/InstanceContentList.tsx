@@ -117,7 +117,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
     <div style={{ textAlign: "left" }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         <label
-          style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 220px", maxWidth: 340, padding: "6px 10px", borderRadius: 10, background: "#1b1b1b", border: "1px solid #6d28d9", color: "#9ca3af" }}
+          style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 220px", maxWidth: 340, padding: "6px 10px", borderRadius: 10, background: "var(--color-surface-sunken)", border: "1px solid var(--color-border)", color: "var(--color-text-muted)" }}
         >
           <SearchIcon size={14} />
           <input
@@ -126,10 +126,10 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
             onChange={(e) => setSearch(e.target.value)}
             placeholder={`Search ${all.length} items...`}
             aria-label="Search this instance's content"
-            style={{ flex: 1, minWidth: 0, background: "none", border: "none", outline: "none", color: "white", fontSize: 13 }}
+            style={{ flex: 1, minWidth: 0, background: "none", border: "none", outline: "none", color: "var(--color-text)", fontSize: 13 }}
           />
           {search && (
-            <button aria-label="Clear search" onClick={() => setSearch("")} style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", padding: 0, fontSize: 15 }}>
+            <button aria-label="Clear search" onClick={() => setSearch("")} style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", padding: 0, fontSize: 15 }}>
               ×
             </button>
           )}
@@ -139,7 +139,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
           className="sidebar-button"
           data-testid="filter-button"
           onClick={() => setShowFilter(true)}
-          style={{ padding: "6px 12px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, background: active ? "#6d28d9" : undefined }}
+          style={{ padding: "6px 12px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, background: active ? "var(--color-accent-subtle)" : undefined }}
         >
           <FilterIcon size={14} />
           Filter{active ? ` (${active})` : ""}
@@ -156,14 +156,14 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
       <UpdatesMessages updates={updates} />
 
       {narrowed && all.length > 0 && (
-        <div style={{ display: "flex", gap: 10, alignItems: "center", color: "#9ca3af", fontSize: 12, marginBottom: 10 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", color: "var(--color-text-muted)", fontSize: 12, marginBottom: 10 }}>
           Showing {shown.length} of {all.length}
           <button
             onClick={() => {
               setSearch("");
               setFilters({ ...NO_FILTERS, sort: filters.sort });
             }}
-            style={{ background: "none", border: "none", color: "#c4b5fd", cursor: "pointer", fontSize: 12, padding: 0 }}
+            style={{ background: "none", border: "none", color: "var(--color-accent-text)", cursor: "pointer", fontSize: 12, padding: 0 }}
           >
             Show everything
           </button>
@@ -171,11 +171,11 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
       )}
 
       {all.length === 0 ? (
-        <div style={{ background: "#151515", border: "1px solid #6d28d9", borderRadius: 10, padding: 16, color: "#9ca3af" }}>
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: 16, color: "var(--color-text-muted)" }}>
           Nothing here yet. Use <b>Add Content</b> to find mods, resource packs and shaders that work on Minecraft {mcVersion}.
         </div>
       ) : shown.length === 0 ? (
-        <div style={{ background: "#151515", border: "1px solid #3f3f46", borderRadius: 10, padding: 16, color: "#9ca3af" }}>Nothing matches your search or filters.</div>
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: 16, color: "var(--color-text-muted)" }}>Nothing matches your search or filters.</div>
       ) : (
         <div data-testid="content-list" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {shown.map(({ item, key, status, name, icon, author, version }) => (
@@ -187,8 +187,8 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
                 alignItems: "center",
                 gap: 12,
                 padding: "7px 12px",
-                background: "#151515",
-                border: `1px solid ${item.enabled ? "#4c1d95" : "#3f3f46"}`,
+                background: "var(--color-surface)",
+                border: `1px solid ${item.enabled ? "var(--color-border)" : "var(--color-border)"}`,
                 borderRadius: 10,
                 opacity: item.enabled ? 1 : 0.55,
                 // Turned off: the whole item goes grey.
@@ -200,7 +200,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
               ) : (
                 <div
                   aria-hidden="true"
-                  style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: "#2b1d47", color: "#c4b5fd", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}
+                  style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: "var(--color-accent-subtle)", color: "var(--color-accent-text)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}
                 >
                   {name.charAt(0).toUpperCase()}
                 </div>
@@ -208,20 +208,20 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <span title={item.fileName} style={{ color: "#e9d5ff", fontWeight: 600, fontSize: 14, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span title={item.fileName} style={{ color: "var(--color-accent-text)", fontWeight: 600, fontSize: 14, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {name}
                   </span>
                   {TYPE_BADGE[item.type] && (
-                    <span style={{ flexShrink: 0, fontSize: 10, color: "#c4b5fd", border: "1px solid #4c1d95", borderRadius: 6, padding: "1px 6px" }}>{TYPE_BADGE[item.type]}</span>
+                    <span style={{ flexShrink: 0, fontSize: 10, color: "var(--color-accent-text)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "1px 6px" }}>{TYPE_BADGE[item.type]}</span>
                   )}
                 </div>
-                <div style={{ fontSize: 12, lineHeight: 1.35, color: "#9ca3af", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 12, lineHeight: 1.35, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {[
                     author && `by ${author}`,
                     version && (
                       <span key="version">
                         {version}
-                        {status?.state === "update" && <span style={{ color: "#86efac" }}> → {status.latest}</span>}
+                        {status?.state === "update" && <span style={{ color: "var(--color-success-text)" }}> → {status.latest}</span>}
                       </span>
                     ),
                     formatBytes(item.size),

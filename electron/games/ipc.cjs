@@ -1,7 +1,9 @@
 const { BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { assertGranted, grantPaths, openExternalSafely } = require("../security.cjs");
 const { GAMES, getGame } = require("./registry.cjs");
 const { readSettings, writeSettings } = require("./storage.cjs");
 const detect = require("./detect.cjs");
+const gameAccount = require("./account.cjs");
 const store = require("./store.cjs");
 const protect = require("./protect.cjs");
 const downloads = require("./downloads.cjs");
@@ -55,8 +57,10 @@ function summary(game) {
     } catch {
         // Not found yet.
     }
+    const played = protect.lastPlayed(game.id);
     return {
         id: game.id,
+        lastPlayed: played?.at ? new Date(played.at).toISOString() : null,
         name: game.name,
         tagline: game.tagline,
         colour: game.colour,
@@ -113,8 +117,7 @@ async function runQueued(item, progress) {
         if (!entry) return { failed: "That requirement has changed since: check again." };
         const result = await requirements.get(item.gameId, entry, progress);
         if (result.external) {
-            if (!/^https?:\/\//i.test(String(result.needsWebsite ?? ""))) return { failed: `${entry.name} has no page to get it from.` };
-            await shell.openExternal(result.needsWebsite);
+            if (!/^https?:\/\//i.test(String(result.needsWebsite ?? "")) || !openExternalSafely(result.needsWebsite)) return { failed: `${entry.name} has no page to get it from.` };
             return { opened: entry.name };
         }
         return result.mod ? withMissing(item.gameId, result) : result;
@@ -228,7 +231,7 @@ function registerGamesIpc() {
     queue.start({
         run: runQueued,
         open: (url) => {
-            if (/^https?:\/\//i.test(String(url))) shell.openExternal(String(url));
+            if (/^https?:\/\//i.test(String(url))) openExternalSafely(String(url));
         },
         changed: (gameId) => {
             statusCache.delete(gameId);
@@ -302,7 +305,6 @@ function registerGamesIpc() {
                 const print = protect.fingerprint(game, loc);
                 return print?.version ?? print?.label ?? null;
             })(),
-            lastPlayed: played?.at ? new Date(played.at).toISOString() : null,
             simsOptions: game.id === "sims4" ? protect.simsOptions(loc) : null,
             // What went wrong since it was last played from here (or in the last 3 days).
             problems: crashes.reports(game, loc, played?.at ? played.at - 60 * 60 * 1000 : Date.now() - 3 * 24 * 60 * 60 * 1000),
@@ -351,13 +353,17 @@ function registerGamesIpc() {
 
     ipcMain.handle("games:downloads", async (_e, id) => {
         const installed = new Set(store.readState(need(id).id).mods.map((mod) => mod.source?.fileName).filter(Boolean));
-        return (await downloads.recent(id)).map((file) => ({ ...file, installed: installed.has(file.name) }));
+        const found = await downloads.recent(id);
+        // Each file listed is one the page may then ask to install (see security.cjs).
+        grantPaths("game-download", found.map((file) => file.path));
+        return found.map((file) => ({ ...file, installed: installed.has(file.name) }));
     });
 
     // From a file: one given (Downloads, a dropped file), or chosen in a dialog.
     ipcMain.handle("games:install", async (event, id, filePath) => {
         const game = need(id);
-        let file = filePath ? String(filePath) : null;
+        // Only a file the Downloads list offered, or one chosen in the dialog below.
+        let file = filePath ? assertGranted("game-download", filePath) : null;
         if (!file) {
             const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
                 title: `Install a mod for ${game.name}`,
@@ -425,7 +431,10 @@ function registerGamesIpc() {
                 backupError = err.message;
             }
         }
-        const started = await launch(game, loc, { safe: options?.safe === true, open: (url) => shell.openExternal(url) });
+        const started = await launch(game, loc, { safe: options?.safe === true, open: (url) => {
+            // Only Steam's "start this game" link (steam://rungameid/<number>).
+            if (!openExternalSafely(url, { steam: true })) throw new Error("Steam couldn't be asked to start the game.");
+        } });
         return { ...started, backedUp, backupError };
     });
 
@@ -539,8 +548,7 @@ function registerGamesIpc() {
         try {
             const result = await requirements.get(id, entry, (detail) => event.sender.send("games:progress", { gameId: id, detail }));
             if (result.external) {
-                if (!/^https?:\/\//i.test(String(result.needsWebsite ?? ""))) return { failed: `${entry.name} has no page to get it from.` };
-                await shell.openExternal(result.needsWebsite);
+                if (!/^https?:\/\//i.test(String(result.needsWebsite ?? "")) || !openExternalSafely(result.needsWebsite)) return { failed: `${entry.name} has no page to get it from.` };
                 return { opened: entry.name };
             }
             return result.mod ? await withMissing(id, result) : result;
@@ -697,7 +705,7 @@ function registerGamesIpc() {
         try {
             if (provider === "curseforge") {
                 const file = await curseforge.resolveDownload(String(modId), fileId ? String(fileId) : null);
-                return queueMissing(id, await withMissing(id, await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress)));
+                return queueMissing(id, await withMissing(id, await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress, { sha1: file.sha1 })));
             }
             const url = await nexus.downloadUrl(game.nexus, String(modId), String(fileId));
             return queueMissing(id, await withMissing(id, await installFromUrl(game, url, { name: String(name || `Nexus mod ${modId}`), source: { provider: "nexus", modId: String(modId), fileId: String(fileId) } }, progress)));
@@ -735,6 +743,9 @@ function registerGamesIpc() {
         return adultStatus();
     });
 
+    // Who the game signs in as: the Steam app's signed-in player, or which app handles it.
+    ipcMain.handle("games:account", (_e, id) => gameAccount.storeAccount(need(id).id));
+
     ipcMain.handle("games:nexusAccount", async () => {
         nexus.forgetAccount();
         try {
@@ -748,7 +759,7 @@ function registerGamesIpc() {
         const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com)\//i;
         // Script Hook V's own site, and Script Hook V .NET's releases (requirements of GTA V mods).
         const frameworks = /^(http:\/\/www\.dev-c\.com\/gtav\/|https:\/\/github\.com\/scripthookvdotnet\/)/i;
-        if (allowed.test(String(url)) || frameworks.test(String(url))) return shell.openExternal(String(url));
+        if ((allowed.test(String(url)) || frameworks.test(String(url))) && openExternalSafely(String(url))) return;
         throw new Error("That link isn't one the launcher opens.");
     });
 }

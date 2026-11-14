@@ -60,7 +60,7 @@ export default function HealthPanel({ detail, mods, reload }: Props) {
           <button
             className="sidebar-button"
             data-testid="health-fix-all"
-            style={{ ...smallButton, padding: "6px 12px", fontSize: 12, background: "#7c3aed", borderColor: "#a78bfa", color: "white", flexShrink: 0 }}
+            style={{ ...smallButton, padding: "6px 12px", fontSize: 12, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)", flexShrink: 0 }}
             onClick={() => !busy && fix(fixable)}
           >
             {busy === "all" ? "Fixing..." : `Fix all (${fixable.length})`}
@@ -70,7 +70,7 @@ export default function HealthPanel({ detail, mods, reload }: Props) {
       {said && <div style={{ fontSize: 12, marginTop: 8 }}>{said.text}</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
         {issues.map((issue) => (
-          <div key={issue.id} style={{ padding: "8px 10px", background: "rgba(0, 0, 0, 0.25)", borderRadius: 8 }}>
+          <div key={issue.id} style={{ padding: "8px 10px", background: "var(--color-hover)", borderRadius: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>{issue.title}</div>

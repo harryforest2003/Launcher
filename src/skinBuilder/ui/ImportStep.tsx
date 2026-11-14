@@ -44,9 +44,9 @@ export default function ImportStep({ busy, error, onFile }: Props) {
         padding: 30,
         textAlign: "center",
         cursor: "pointer",
-        border: `2px dashed ${dragging ? "#c084fc" : "#6d28d9"}`,
+        border: `2px dashed ${dragging ? "var(--color-accent-line)" : "var(--color-border)"}`,
         borderRadius: 16,
-        background: dragging ? "rgba(109, 40, 217, 0.18)" : "#161616",
+        background: dragging ? "var(--color-accent-subtle)" : "var(--color-surface-sunken)",
       }}
     >
       <input
@@ -61,15 +61,15 @@ export default function ImportStep({ busy, error, onFile }: Props) {
         }}
       />
 
-      <div style={{ fontSize: 20, color: "#c084fc" }}>{busy ? "Cutting out your item..." : "Drop an image of an item here"}</div>
-      <div style={{ color: "#aaa", fontSize: 14 }}>
+      <div style={{ fontSize: 20, color: "var(--color-accent-text)" }}>{busy ? "Cutting out your item..." : "Drop an image of an item here"}</div>
+      <div style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
         {busy ? "This runs on your computer and nothing is uploaded." : "or click to choose a file. PNG, JPEG and WebP all work."}
       </div>
-      <div style={{ color: "#777", fontSize: 13, maxWidth: 460, marginTop: 8 }}>
+      <div style={{ color: "var(--color-text-muted)", fontSize: 13, maxWidth: 460, marginTop: 8 }}>
         One item on a plain background cuts out best. You can correct the selection in the next step.
       </div>
 
-      {error && <div style={{ color: "#fda4af", fontSize: 14, marginTop: 10 }}>{error}</div>}
+      {error && <div style={{ color: "var(--color-danger-text)", fontSize: 14, marginTop: 10 }}>{error}</div>}
     </div>
   );
 }

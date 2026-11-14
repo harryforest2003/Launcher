@@ -50,7 +50,7 @@ export default function CollectionsList({ detail, openCollection }: Props) {
   const loading = loaded?.key !== searchKey;
   const result = loaded?.result ?? null;
   const pageCount = result ? Math.max(1, Math.ceil(result.total / PAGE_SIZE)) : 1;
-  const dropdownStyle = { padding: "10px 12px", borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", fontSize: 13 };
+  const dropdownStyle = { padding: "10px 12px", borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 13 };
 
   return (
     <div>
@@ -58,7 +58,7 @@ export default function CollectionsList({ detail, openCollection }: Props) {
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder={`Search ${detail.name} collections...`}
-        style={{ width: "100%", padding: 14, borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", boxSizing: "border-box" }}
+        style={{ width: "100%", padding: 14, borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", boxSizing: "border-box" }}
       />
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
         <select style={dropdownStyle} value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort collections by">
@@ -72,7 +72,7 @@ export default function CollectionsList({ detail, openCollection }: Props) {
       {!loading && loaded?.error && <div style={{ ...note("warn"), marginTop: 16 }}>{loaded.error}</div>}
       <div ref={listTop} style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
         {result && (
-          <div style={{ fontSize: 12, color: "#9ca3af" }}>
+          <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
             {result.total.toLocaleString()} collections • Page {page} of {pageCount}
           </div>
         )}
@@ -82,7 +82,7 @@ export default function CollectionsList({ detail, openCollection }: Props) {
         {loading ? (
           <div>Loading...</div>
         ) : !result?.collections.length ? (
-          <div style={{ color: "#9ca3af", padding: 20 }}>No collections found{search.trim() ? ` for "${search.trim()}"` : ""}.</div>
+          <div style={{ color: "var(--color-text-muted)", padding: 20 }}>No collections found{search.trim() ? ` for "${search.trim()}"` : ""}.</div>
         ) : (
           result.collections.map((collection) => (
             <div
@@ -101,14 +101,14 @@ export default function CollectionsList({ detail, openCollection }: Props) {
               }}
               style={{ display: "flex", alignItems: "center", gap: 14, minHeight: 100, padding: 12, cursor: "pointer" }}
             >
-              <div style={{ width: 124, height: 70, borderRadius: 10, overflow: "hidden", border: "1px solid #6d28d9", flexShrink: 0, background: "#1b1b1b" }}>
+              <div style={{ width: 124, height: 70, borderRadius: 10, overflow: "hidden", border: "1px solid var(--color-border)", flexShrink: 0, background: "var(--color-surface-sunken)" }}>
                 {collection.picture ? <img src={collection.picture} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
               </div>
               <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <div style={{ fontWeight: 600, color: "#c084fc" }}>{collection.name}</div>
-                <div style={{ fontSize: 12, color: "#aaa" }}>{collection.summary.slice(0, 180)}</div>
-                <div style={{ fontSize: 11, marginTop: 4, color: "#d4d4d8", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ padding: "1px 6px", borderRadius: 5, background: "#d97706", color: "white", fontWeight: 700, fontSize: 10 }}>COLLECTION</span>
+                <div style={{ fontWeight: 600, color: "var(--color-accent-text)" }}>{collection.name}</div>
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{collection.summary.slice(0, 180)}</div>
+                <div style={{ fontSize: 11, marginTop: 4, color: "var(--color-text-secondary)", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ padding: "1px 6px", borderRadius: 5, background: "var(--color-warning-solid)", color: "var(--color-on-warning)", fontWeight: 700, fontSize: 10 }}>COLLECTION</span>
                   <span>by {collection.author}</span>
                   <span>{collection.mods} mods</span>
                   <span>{sizeText(collection.size)}</span>

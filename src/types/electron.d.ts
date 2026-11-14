@@ -19,7 +19,8 @@ declare global {
 
             // ---------- Instances ----------
             getInstances(): Promise<any[]>;
-            launchInstance(instance: any): Promise<any>;
+            /** As the signed-in account with this id, or the active one. */
+            launchInstance(name: string, accountId?: string): Promise<{ launched: boolean; name: string; online: boolean; playerName: string; account: GamePlayer | null }>;
             getInstancesStorage(): Promise<number>;
 
             // ---------- Minecraft ----------

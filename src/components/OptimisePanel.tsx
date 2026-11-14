@@ -13,9 +13,9 @@ const message = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
 const STATE = {
-  fix: { colour: "#f59e0b", label: "Could be faster" },
-  tip: { colour: "#a78bfa", label: "Worth knowing" },
-  ok: { colour: "#22c55e", label: "Fine" },
+  fix: { colour: "var(--color-warning-text)", label: "Could be faster" },
+  tip: { colour: "var(--color-accent-text)", label: "Worth knowing" },
+  ok: { colour: "var(--color-success-text)", label: "Fine" },
 } as const;
 
 /*
@@ -106,7 +106,7 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
     <div
       data-testid="optimise-panel"
       onClick={() => !busy && onClose()}
-      style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0, 0, 0, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{ position: "fixed", inset: 0, zIndex: 50, background: "var(--color-scrim)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
     >
       <div
         role="dialog"
@@ -117,42 +117,42 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
           maxHeight: "min(800px, 92vh)",
           display: "flex",
           flexDirection: "column",
-          background: "#17141f",
-          border: "1px solid #6d28d9",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
           borderRadius: 14,
-          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6)",
+          boxShadow: "0 20px 60px var(--color-shadow)",
           textAlign: "left",
-          color: "#e4e4e7",
+          color: "var(--color-text-secondary)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid #2e2640" }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: "#2b1d47", color: "#c4b5fd", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: "var(--color-accent-subtle)", color: "var(--color-accent-text)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             <Gauge size={22} aria-hidden="true" />
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 600, color: "#e9d5ff" }}>Optimise {instanceName}</div>
-            <div data-testid="optimise-hardware" style={{ fontSize: 12, color: "#9ca3af" }}>
+            <div style={{ fontSize: 17, fontWeight: 600, color: "var(--color-accent-text)" }}>Optimise {instanceName}</div>
+            <div data-testid="optimise-hardware" style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
               {hw
                 ? [hw.gpu ? `${hw.gpu}${hw.builtIn ? " (built in)" : ""}` : "Unknown graphics", `${hw.memoryGb} GB memory`, hw.retina ? "Retina screen" : null].filter(Boolean).join(" · ")
                 : "Looking at your computer and this instance..."}
             </div>
           </div>
-          <button aria-label="Close" disabled={!!busy} onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "#9ca3af", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>
+          <button aria-label="Close" disabled={!!busy} onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-text-muted)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>
             ×
           </button>
         </div>
 
         <div style={{ overflowY: "auto", padding: "12px 16px", flex: 1 }}>
           {report?.running && (
-            <div role="alert" style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 10, background: "#2a1a05", border: "1px solid #b45309", color: "#fcd34d", fontSize: 13 }}>
+            <div role="alert" style={{ marginBottom: 10, padding: "8px 12px", borderRadius: 10, background: "var(--color-warning-bg)", border: "1px solid var(--color-warning-border)", color: "var(--color-warning-text)", fontSize: 13 }}>
               Close Minecraft to change these: it saves its own settings when it quits, over anything changed while it's open.
             </div>
           )}
 
           {loadError ? (
-            <div style={{ color: "#fca5a5", fontSize: 13, padding: 8 }}>{loadError}</div>
+            <div style={{ color: "var(--color-danger-text)", fontSize: 13, padding: 8 }}>{loadError}</div>
           ) : !report ? (
-            <div style={{ color: "#9ca3af", fontSize: 13, padding: 8 }}>Checking mods, shaders, Java and graphics settings...</div>
+            <div style={{ color: "var(--color-text-muted)", fontSize: 13, padding: 8 }}>Checking mods, shaders, Java and graphics settings...</div>
           ) : (
             report.items.map((item) => {
               const state = STATE[item.state];
@@ -161,7 +161,7 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
                   key={item.id}
                   data-testid={`optimise-${item.id}`}
                   data-state={item.state}
-                  style={{ display: "flex", gap: 12, padding: "12px 14px", marginBottom: 8, borderRadius: 10, background: "#100e16", border: `1px solid ${item.state === "ok" ? "#231d31" : "#3b2a5c"}` }}
+                  style={{ display: "flex", gap: 12, padding: "12px 14px", marginBottom: 8, borderRadius: 10, background: "var(--color-surface-sunken)", border: `1px solid ${item.state === "ok" ? "var(--color-border)" : "var(--color-border)"}` }}
                 >
                   <span
                     aria-label={state.label}
@@ -171,23 +171,23 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
                     {item.state === "ok" ? <CheckIcon size={13} /> : item.state === "fix" ? <span style={{ fontWeight: 800, fontSize: 13, lineHeight: 1 }}>!</span> : <Info size={13} aria-hidden="true" />}
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: "#ede9fe" }}>{item.title}</div>
-                    <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{item.detail}</div>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: "var(--color-accent-text)" }}>{item.title}</div>
+                    <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>{item.detail}</div>
                     {item.fixes && item.fixes.length > 0 && (
                       <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                         {item.fixes.map((one) => {
                           const id = `${item.id}:${one.id}`;
                           return (
-                            <div key={one.id} data-testid={`optimise-limit-${one.id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, background: "#17141f", border: "1px solid #231d31" }}>
-                              <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "#d4d4d8" }}>
-                                <span style={{ color: "#c4b5fd", fontWeight: 600 }}>{one.label}</span>: {one.text}
+                            <div key={one.id} data-testid={`optimise-limit-${one.id}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 10px", borderRadius: 8, background: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
+                              <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--color-text-secondary)" }}>
+                                <span style={{ color: "var(--color-accent-text)", fontWeight: 600 }}>{one.label}</span>: {one.text}
                               </div>
                               <button
                                 className="sidebar-button"
                                 data-testid={`optimise-fix-${id}`}
                                 disabled={blocked}
                                 onClick={() => fix([id], id)}
-                                style={{ padding: "5px 10px", fontSize: 12, whiteSpace: "nowrap", background: one.recommended ? "#7c3aed" : undefined }}
+                                style={{ padding: "5px 10px", fontSize: 12, whiteSpace: "nowrap", background: one.recommended ? "var(--color-accent-subtle)" : undefined }}
                               >
                                 {busy === id ? "Working..." : one.action}
                               </button>
@@ -199,8 +199,8 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
                     {item.list && item.list.length > 0 && (
                       <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none" }}>
                         {item.list.map((entry) => (
-                          <li key={entry.label} style={{ fontSize: 12, color: "#d4d4d8", marginTop: 3 }}>
-                            <span style={{ color: "#c4b5fd", fontWeight: 600 }}>{entry.label}</span>: {entry.text}
+                          <li key={entry.label} style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 3 }}>
+                            <span style={{ color: "var(--color-accent-text)", fontWeight: 600 }}>{entry.label}</span>: {entry.text}
                           </li>
                         ))}
                       </ul>
@@ -212,7 +212,7 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
                       data-testid={`optimise-fix-${item.id}`}
                       disabled={blocked}
                       onClick={() => fix([item.id], item.id)}
-                      style={{ alignSelf: "center", padding: "7px 12px", fontSize: 12, whiteSpace: "nowrap", background: item.state === "fix" ? "#7c3aed" : undefined }}
+                      style={{ alignSelf: "center", padding: "7px 12px", fontSize: 12, whiteSpace: "nowrap", background: item.state === "fix" ? "var(--color-accent-subtle)" : undefined }}
                     >
                       {busy === item.id ? "Working..." : item.action}
                     </button>
@@ -225,29 +225,29 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
 
         {(result || error || (busy && progress)) && (
           <div data-testid="optimise-result" style={{ margin: "0 20px", fontSize: 13 }}>
-            {busy && progress && <div style={{ color: "#c4b5fd" }}>{progress}</div>}
+            {busy && progress && <div style={{ color: "var(--color-accent-text)" }}>{progress}</div>}
             {result?.done.map((line) => (
-              <div key={line} style={{ color: "#86efac" }}>
+              <div key={line} style={{ color: "var(--color-success-text)" }}>
                 {line}
               </div>
             ))}
             {result?.skipped.map((skip) => (
-              <div key={skip.name} style={{ color: "#fcd34d" }}>
+              <div key={skip.name} style={{ color: "var(--color-warning-text)" }}>
                 Left out {skip.name}: {skip.reason}.
               </div>
             ))}
-            {result && result.done.length === 0 && result.skipped.length === 0 && <div style={{ color: "#9ca3af" }}>Nothing needed changing.</div>}
-            {error && <div style={{ color: "#fca5a5" }}>{error}</div>}
+            {result && result.done.length === 0 && result.skipped.length === 0 && <div style={{ color: "var(--color-text-muted)" }}>Nothing needed changing.</div>}
+            {error && <div style={{ color: "var(--color-danger-text)" }}>{error}</div>}
           </div>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid #2e2640" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid var(--color-border)" }}>
           {report?.undo ? (
             <button className="sidebar-button" data-testid="optimise-undo" disabled={blocked} onClick={undo} style={{ padding: "8px 14px", fontSize: 13 }}>
               {busy === "undo" ? "Putting back..." : "Undo Optimise"}
             </button>
           ) : (
-            <span style={{ fontSize: 12, color: "#71717a" }}>Changes take effect next time you play.</span>
+            <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Changes take effect next time you play.</span>
           )}
           <span style={{ marginLeft: "auto" }} />
           <button className="sidebar-button" disabled={!!busy} onClick={onClose} style={{ padding: "8px 14px", fontSize: 13 }}>
@@ -259,7 +259,7 @@ export default function OptimisePanel({ instanceName, onChanged, onClose }: Prop
               data-testid="optimise-fix-all"
               disabled={blocked}
               onClick={() => fix(fixable.map((item) => item.id), "all")}
-              style={{ padding: "8px 14px", fontSize: 13, background: "#7c3aed" }}
+              style={{ padding: "8px 14px", fontSize: 13, background: "var(--color-accent)", color: "var(--color-on-accent)" }}
             >
               {busy === "all" ? "Working..." : `Fix all (${fixable.length})`}
             </button>

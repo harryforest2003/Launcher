@@ -1,8 +1,25 @@
+import { Component, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Box, Compass, FolderPlus, LayoutGrid, LogIn, Play, Shirt, UserRound } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
 import AccountSwitcher from "../components/AccountSwitcher";
 import Sidebar from "../components/MCSidebar";
-import { useEffect, useRef, useState } from "react";
 import SkinPreview from "../components/SkinPreview";
+import SkinFront from "../components/SkinFront";
+import InstanceArt from "../components/InstanceArt";
+import { AccountClashNotice } from "../components/PlayAs";
+import { useAccountChoice } from "../components/playAsChoice";
+import { Button, Notice } from "../components/ui";
+import { Sparkline, formatDuration } from "../components/charts";
+import { SkinBuilderNavContext } from "../skinBuilder/navContext";
+import ActivityPanel from "./dashboard/ActivityPanel";
+import PlayHero from "./dashboard/PlayHero";
+import PlayStats from "./dashboard/PlayStats";
+import NewsPanel from "./dashboard/NewsPanel";
+import { useDashboard } from "./dashboard/useDashboard";
+import { defaultRange, type Range } from "./dashboard/range";
+import { loaderName, useInstances } from "./dashboard/useInstances";
+import { timeAgo } from "./playedAgo";
+import "./homeScreens.css";
 
 type Props = {
   onBack: () => void;
@@ -15,6 +32,23 @@ type Props = {
   goSettings: () => void;
 };
 
+/* The 3D skin needs WebGL; where it can't start (no graphics acceleration), a flat picture of
+   the same skin takes its place instead of the whole page going blank. */
+class SkinFallback extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+/*
+ * The Minecraft home: back into the last-played instance in one click (the same quick-launch
+ * card as Home), every other instance with its real play time, ways into mods, packs, skins
+ * and models, and the Microsoft account with its 3D skin.
+ */
 function MinecraftMenu({
   onBack,
   goHome,
@@ -24,6 +58,8 @@ function MinecraftMenu({
   goSkinSelector,
   goSettings,
 }: Props) {
+  const goSkinBuilder = useContext(SkinBuilderNavContext);
+
   const [account, setAccount] = useState<{
     loggedIn: boolean;
     username: string;
@@ -31,20 +67,48 @@ function MinecraftMenu({
     skin?: string;
   } | null>(null);
 
-  const [recentInstances, setRecentInstances] = useState<any[]>([]);
+  const { instances, loaded, starting, launchError, clearError, launch } = useInstances();
+  // The rows' Play: an account already in another game is offered the free ones instead.
+  const choice = useAccountChoice();
+  const dashboard = useDashboard();
+  const stats = dashboard.stats.data;
+  const [chosenRange, setRange] = useState<Range | null>(null);
+  const range = chosenRange ?? defaultRange(stats);
+  const [lastWorld, setLastWorld] = useState<{ instance: string; world: InstanceWorld | null } | null>(null);
 
   const [signingIn, setSigningIn] = useState(false);
+
+  /* The player's own skin for the 3D figure. The account normally carries it; when it doesn't
+     (an older saved sign-in, or the profile fetch failed), the same lookup the Skins page uses
+     finds the skin Mojang has for that username. Never a made-up one. */
+  const [lookedUp, setLookedUp] = useState<{ username: string; skin: string; slim: boolean } | null>(null);
+  const needsLookup = Boolean(account?.loggedIn && !account.skin && account.username);
+  useEffect(() => {
+    if (!needsLookup || !account) return;
+    let cancelled = false;
+    window.launcherAPI
+      .searchPlayers(account.username)
+      .then((results) => {
+        const match = results.find((entry) => entry.username.toLowerCase() === account.username.toLowerCase());
+        if (!cancelled && match?.skin) setLookedUp({ username: account.username, skin: match.skin, slim: match.slim });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [needsLookup, account]);
+  const playerSkin = account?.skin ?? (lookedUp && lookedUp.username === account?.username ? lookedUp.skin : undefined);
+  const playerSlim = account?.skin ? undefined : lookedUp?.slim;
   const [signInError, setSignInError] = useState<string | null>(null);
   const signInAttempt = useRef(0);
 
   useEffect(() => {
-    loadInstances();
-
+    let current = true;
     // Stays signed in between runs of the app.
     window.instanceAPI
       .getAccount()
       .then((saved) => {
-        if (saved) {
+        if (current && saved) {
           setAccount({
             loggedIn: true,
             username: saved.name,
@@ -56,21 +120,42 @@ function MinecraftMenu({
       .catch(() => {});
 
     // Switching accounts, from here or the sidebar, shows the one now active.
-    return window.instanceAPI.onAccountsChanged((accounts) => {
+    const unsubscribe = window.instanceAPI.onAccountsChanged((accounts) => {
+      current = false;
       const active = accounts.find((entry) => entry.active);
       setAccount(active ? { loggedIn: true, username: active.name, uuid: active.uuid, skin: active.skin ?? undefined } : null);
     });
+    return () => {
+      current = false;
+      unsubscribe();
+    };
   }, []);
 
-  async function loadInstances() {
-    try {
-      const instances = await window.launcherAPI?.getInstances?.();
-      setRecentInstances(instances || []);
-    } catch (err) {
-      console.error("Failed to load instances:", err);
-      setRecentInstances([]);
-    }
-  }
+  const latest = instances[0];
+  // Every other instance stays one click from playing, most recently played first.
+  const others = instances.slice(1);
+  const statFor = (name: string) => stats?.instances.find((i) => i.name === name);
+
+  // The world last played in the latest instance, when it has any.
+  const latestName = latest?.name;
+  useEffect(() => {
+    if (!latestName) return;
+    let live = true;
+    window.instanceAPI
+      .worlds(latestName)
+      .then((worlds) => {
+        if (live) setLastWorld({ instance: latestName, world: worlds[0] ?? null });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [latestName]);
+
+  const world = lastWorld && lastWorld.instance === latestName ? lastWorld.world : null;
+
+  // The last 30 days of one instance, for its little trend line.
+  const recent = (name: string) => (stats?.daily ?? []).slice(-30).map((d) => d.byInstance[name] ?? 0);
 
   async function handleMicrosoftLogin() {
     // Clicking again replaces a sign-in still waiting on a browser tab, whose failure
@@ -106,16 +191,15 @@ function MinecraftMenu({
     setAccount(null);
   }
 
+  const links = [
+    { icon: <Compass size={18} />, title: "Mods and modpacks", lead: "Search Modrinth and CurseForge", go: goDiscover },
+    { icon: <Shirt size={18} />, title: "Skins", lead: "Look up a player's skin or change yours", go: goSkinSelector },
+    { icon: <Box size={18} />, title: "Model Builder", lead: "Turn a picture into an item model", go: goSkinBuilder },
+    { icon: <LayoutGrid size={18} />, title: "Library", lead: "Every instance: sort, group and import", go: goLibrary },
+  ];
+
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background: "#0d0d0d",
-        color: "white",
-        fontFamily: "'Orbitron', sans-serif",
-      }}
-    >
+    <div className="app-screen">
       <Sidebar
         currentPage="minecraft"
         goHome={goHome}
@@ -128,287 +212,202 @@ function MinecraftMenu({
         onBack={onBack}
       />
 
-      {/* Main Content */}
-      <div
-        style={{
-          flex: 1,
-          position: "relative",
-          overflow: "hidden",
-        }}
-      >
-        <BackgroundLogo />
+      <main className="app-main">
+        <div className="app-logo-tint">
+          <BackgroundLogo />
+        </div>
 
-        <div
-          style={{
-            position: "relative",
-            zIndex: 1,
-            padding: "35px",
-            height: "100%",
-            overflowY: "auto",
-            // Padding inside the height, so the bottom of the page can be scrolled to.
-            boxSizing: "border-box",
-          }}
-        >
-          <h1
-            style={{
-              color: "#c084fc",
-              fontSize: "2.2rem",
-              lineHeight: 1,
-              marginBottom: "15px",
-            }}
-          >
-            Welcome back, {account?.loggedIn ? account.username : "Player"}!
-          </h1>
-
-          <p style={{ color: "#b0b0b0", marginBottom: "50px" }}>
-            Jump straight back into your latest worlds.
-          </p>
-
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              width: "90%",
-              gap: "15px",
-            }}
-          >
-            {recentInstances.map((instance) => (
-              <div
-                key={instance.name}
-                className="game-card"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "16px 24px",
-                  minHeight: "80px",
-                }}
-              >
-                <div>
-                  <h3
-                    style={{
-                      color: "#c084fc",
-                      margin: 0,
-                      marginBottom: "10px",
-                    }}
-                  >
-                    {instance.name}
-                  </h3>
-
-                  <p style={{ color: "#b0b0b0" }}>
-                    {instance.version}
-                  </p>
-
-                  <p
-                    style={{
-                      color: "#b0b0b0",
-                      margin: 0,
-                      fontSize: "0.95rem",
-                    }}
-                  >
-                    Loader: {instance.loader}
-                  </p>
+        <div className="app-page mh-page">
+          {/* The top: the welcome and the last-played card on the left, and the signed-in player
+              (or a way to sign in) on the right, as tall as both together. */}
+          <div className="mh-top">
+            <div className="mh-top__main">
+              <header className="mh-head">
+                <div className="mh-head__text">
+                  <h1 className="page-title">Welcome back, {account?.loggedIn ? account.username : "Player"}!</h1>
+                  <p className="page-lead">Pick up where you left off, or find something new.</p>
                 </div>
 
-                <button
-                  className="sidebar-button"
-                  style={{
-                    width: "140px",
-                    minWidth: "140px",
-                    margin: 0,
-                  }}
-                  onClick={async () => {
-                    try {
-                      await window.launcherAPI.launchInstance(instance.name);
-                    } catch (err) {
-                      console.error("Launch failed:", err);
-                      alert(
-                        err instanceof Error
-                          ? err.message
-                          : "Failed to launch instance."
-                      );
-                    }
-                  }}
-                >
-                  Launch
-                </button>
-              </div>
-            ))}
+              </header>
+              <PlayHero
+                instance={latest}
+                stat={latest ? statFor(latest.name) : undefined}
+                loaded={loaded}
+                starting={starting}
+                onPlay={launch}
+                onCreate={goLibrary}
+                extra={
+                  world && (
+                    <span>
+                      Last world: <strong style={{ color: "var(--color-text-secondary)" }}>{world.name}</strong>
+                    </span>
+                  )
+                }
+              />
+            </div>
+
+            {account?.loggedIn ? (
+              <section className="mh-player" aria-label="Microsoft account">
+                <div className={`mh-player__figure${playerSkin ? "" : " mh-player__figure--empty"}`}>
+                  {playerSkin ? (
+                    <SkinFallback key={playerSkin} fallback={<div className="mh-player__flat"><SkinFront skin={playerSkin} slim={playerSlim} scale={6} /></div>}>
+                      <SkinPreview skin={playerSkin} slim={playerSlim} size={240} height={280} fullBody still followCursor fill />
+                    </SkinFallback>
+                  ) : (
+                    <UserRound size={40} aria-label="No skin found for this account" />
+                  )}
+                </div>
+
+                <div className="mh-player__info">
+                  <strong className="mh-player__name">{account.username}</strong>
+                  <span className="mh-player__uuid" title="Your Minecraft player ID (UUID)">
+                    {account.uuid}
+                  </span>
+                </div>
+
+                <div className="mh-player__switch">
+                  <AccountSwitcher />
+                </div>
+                <div className="mh-player__actions">
+                  <Button size="sm" variant="ghost" icon={<Shirt size={14} aria-hidden="true" />} onClick={goSkinSelector}>
+                    Change skin
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={handleSignOut}>
+                    Sign out
+                  </Button>
+                </div>
+              </section>
+            ) : (
+              <section className="mh-signin mh-signin--card" aria-label="Microsoft account">
+                    <span className="mh-signin__icon" aria-hidden="true">
+                      <UserRound size={18} />
+                    </span>
+                    <p className="mh-signin__text">
+                      <strong>Not signed in.</strong> Sign in with Microsoft to play online, see and change your skin, and keep
+                      several accounts on this launcher.
+                    </p>
+                    <Button className="mh-wrap" icon={<LogIn size={16} aria-hidden="true" />} onClick={handleMicrosoftLogin}>
+                      {signingIn ? "Waiting for your browser. Click to start again" : "Sign in with Microsoft"}
+                    </Button>
+                    {signInError && (
+                      <Notice
+                        tone="danger"
+                        data-testid="sign-in-error"
+                        className="mh-signin__error"
+                        style={{ userSelect: "text", overflowWrap: "anywhere" }}
+                      >
+                        {signInError}
+                      </Notice>
+                    )}
+                  </section>
+            )}
           </div>
 
-          <div style={{ marginTop: "60px" }}>
-            <h2 style={{ color: "#d8b4fe", marginBottom: "20px" }}>
-              News
-            </h2>
+          <div className="mh-layout mh-layout--solo">
+            <div className="mh-main">
 
-            <div className="game-card" style={{ minHeight: "180px" }}>
-              <h3 style={{ color: "#c084fc" }}>Unity Launcher</h3>
-
-              <p
-                style={{
-                  color: "#aaa",
-                  marginTop: "15px",
-                  lineHeight: "1.7",
+              {launchError && (
+                <Notice tone="danger" actions={<Button size="sm" variant="ghost" onClick={clearError}>Dismiss</Button>}>
+                  {launchError}
+                </Notice>
+              )}
+              <AccountClashNotice
+                choice={choice}
+                onPlayAs={(id) => {
+                  const target = instances.find((i) => i.name === choice.clash?.instance);
+                  if (target && choice.check(target.name, id)) launch(target, id);
                 }}
-              >
-                This area can later display Minecraft news,
-                launcher updates, featured modpacks,
-                announcements and changelogs.
-              </p>
+              />
+
+              <div className="mh-split">
+                <section aria-labelledby="mh-others">
+                  <div className="mh-section-head">
+                    <h2 className="mh-section-title" id="mh-others">
+                      {others.length ? "Your other instances" : "Your instances"}
+                    </h2>
+                    <Button variant="ghost" size="sm" onClick={goLibrary}>
+                      Open Library
+                    </Button>
+                  </div>
+                  <ul className="mh-cards">
+                    {others.map((instance) => {
+                      const stat = statFor(instance.name);
+                      const trend = recent(instance.name);
+                      return (
+                        <li key={instance.name} className="mh-card">
+                          <InstanceArt name={instance.name} cols={10} rows={3} className="mh-card__art" />
+                          <div className="mh-card__body">
+                            <span className="mh-card__name">{instance.name}</span>
+                            <span className="mh-row__facts">
+                              <span className="mh-version">{instance.version}</span> {loaderName(instance.loader)}
+                              {stat ? `, ${stat.modCount === 1 ? "1 mod" : `${stat.modCount} mods`}` : ""}
+                            </span>
+                            <span className="mh-card__stats">
+                              <span>
+                                {(() => {
+                                  // The instance file or the play history, whichever knows when.
+                                  const last = instance.lastPlayed ?? stat?.lastPlayed;
+                                  const total = stat && stat.playSeconds ? `${formatDuration(stat.playSeconds)} in all` : "";
+                                  const when = instance.running ? (instance.playingAs ? `Playing now as ${instance.playingAs.name}` : "Playing now") : last ? `Played ${timeAgo(last)}` : total ? "" : "Not played yet";
+                                  return [when, total].filter(Boolean).join(", ");
+                                })()}
+                              </span>
+                              {trend.some((v) => v > 0) && <Sparkline values={trend} width={64} height={20} />}
+                            </span>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="mh-card__play"
+                            icon={<Play size={14} aria-hidden="true" />}
+                            disabled={starting !== null || Boolean(instance.running)}
+                            onClick={() => choice.check(instance.name) && launch(instance)}
+                            aria-label={`Play ${instance.name}`}
+                          >
+                            {starting === instance.name ? "Starting..." : instance.running ? "Running" : "Play"}
+                          </Button>
+                        </li>
+                      );
+                    })}
+                    <li>
+                      <button type="button" className="mh-card mh-card--new" onClick={goLibrary}>
+                        <FolderPlus size={20} aria-hidden="true" />
+                        <span className="mh-card__name">New instance</span>
+                        <span className="mh-row__facts">Create one, start from a modpack, or import from another launcher</span>
+                      </button>
+                    </li>
+                  </ul>
+                </section>
+
+                <ActivityPanel items={dashboard.activity.data} loading={dashboard.activity.loading} failed={dashboard.activity.failed} />
+              </div>
+
+              <PlayStats stats={stats} loading={dashboard.stats.loading} failed={dashboard.stats.failed} range={range} onRange={setRange} show={["trend", "most"]} onInstance={goLibrary} />
+              <NewsPanel news={dashboard.news.data} loading={dashboard.news.loading} failed={dashboard.news.failed} onRefresh={dashboard.refreshNews} title="Minecraft news" from="Mojang, Java and Bedrock releases, Fabric, Forge and NeoForge" />
+
+              <section aria-labelledby="mh-links">
+                <div className="mh-section-head">
+                  <h2 className="mh-section-title" id="mh-links">
+                    Mods, packs and skins
+                  </h2>
+                </div>
+                <div className="mh-links">
+                  {links.map((link) => (
+                    <button key={link.title} type="button" className="mh-link" onClick={() => link.go?.()}>
+                      <span className="mh-link__icon" aria-hidden="true">
+                        {link.icon}
+                      </span>
+                      <span style={{ minWidth: 0 }}>
+                        <span className="mh-link__title">{link.title}</span>
+                        <span className="mh-link__lead">{link.lead}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Right Sidebar */}
-      <div
-        style={{
-          width: "300px",
-          background: "#161616",
-          borderLeft: "1px solid #6d28d9",
-          padding: "20px",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <h2 style={{ color: "#c084fc", marginBottom: "20px" }}>
-          Microsoft Account
-        </h2>
-
-        {account?.loggedIn ? (
-          <>
-            <div style={{ marginBottom: "25px" }}>
-              <AccountSwitcher />
-            </div>
-
-            <div
-              style={{
-                width: "220px",
-                height: "320px",
-                margin: "0 auto",
-                background: "#232323",
-                border: "1px solid #6d28d9",
-                borderRadius: "18px",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                color: "#888",
-                marginBottom: "25px",
-              }}
-            >
-              {account.skin ? (
-                <SkinPreview skin={account.skin} size={218} height={318} fullBody still followCursor />
-              ) : (
-                "No skin"
-              )}
-            </div>
-
-	    <div className="game-card">
-	      <h3 style={{ color: "#c084fc", marginBottom: "10px" }}>
-	        Account Details
-	      </h3>
-
-	      <p style={{ color: "#aaa", lineHeight: "1.6" }}>
-	        Username:
-	        <br />
-	        {account.username}
-	      </p>
-
-	      <p
-	        style={{
-	          color: "#888",
-	          fontSize: "0.85rem",
-	          marginTop: "10px",
-	          lineHeight: "1.5",
-	          wordBreak: "break-all",
-	        }}
-	      >
-	        UUID:
-	        <br />
-	        {account.uuid}
-	      </p>
-
-	      <button
-	        className="sidebar-button"
-	        style={{
-	          width: "100%",
-	          marginTop: "20px",
-	        }}
-	        onClick={handleSignOut}
-	      >
-	        Sign out
-	      </button>
-	    </div>
-          </>
-        ) : (
-          <>
-            <button
-              className="sidebar-button"
-              style={{
-                width: "100%",
-                marginBottom: signInError ? "12px" : "25px",
-              }}
-              onClick={handleMicrosoftLogin}
-            >
-              {signingIn ? "Waiting for your browser. Click to start again" : "Sign in with Microsoft"}
-            </button>
-
-            {signInError && (
-              <div
-                role="alert"
-                data-testid="sign-in-error"
-                style={{
-                  marginBottom: "25px",
-                  padding: "12px",
-                  borderRadius: "10px",
-                  background: "#2a0d0d",
-                  border: "1px solid #ef4444",
-                  color: "#fca5a5",
-                  fontSize: "0.85rem",
-                  lineHeight: "1.5",
-                  wordBreak: "break-word",
-                  userSelect: "text",
-                }}
-              >
-                {signInError}
-              </div>
-            )}
-
-            <div
-              style={{
-                width: "220px",
-                height: "320px",
-                margin: "0 auto",
-                background: "#232323",
-                border: "1px solid #6d28d9",
-                borderRadius: "18px",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                color: "#777",
-                textAlign: "center",
-                padding: "20px",
-              }}
-            >
-              Sign in to preview your
-              <br />
-              Minecraft skin.
-            </div>
-
-            <div className="game-card" style={{ marginTop: "25px" }}>
-              <h3 style={{ color: "#c084fc", marginBottom: "10px" }}>
-                Quick Tip
-              </h3>
-
-              <p style={{ color: "#aaa", lineHeight: "1.6" }}>
-                Once you've signed into your Microsoft account you'll be able
-                to launch instances, synchronize skins, browse your library
-                and manage multiple Minecraft accounts from here.
-              </p>
-            </div>
-          </>
-        )}
-      </div>
+      </main>
     </div>
   );
 }

@@ -30,7 +30,7 @@ export default function PlayPrompt({ detail, risky, onChoose }: Props) {
     <div
       data-testid="play-prompt"
       onClick={() => onChoose("cancel")}
-      style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0, 0, 0, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{ position: "fixed", inset: 0, zIndex: 9000, background: "var(--color-scrim)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
     >
       <div
         role="alertdialog"
@@ -39,31 +39,31 @@ export default function PlayPrompt({ detail, risky, onChoose }: Props) {
         onClick={(event) => event.stopPropagation()}
         style={{
           width: "min(540px, 100%)",
-          background: "#17141f",
-          border: "1px solid #6d28d9",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
           borderRadius: 14,
-          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6)",
+          boxShadow: "0 20px 60px var(--color-shadow)",
           padding: "22px 24px 20px",
           textAlign: "left",
-          color: "#e4e4e7",
+          color: "var(--color-text-secondary)",
         }}
       >
-        <div id="play-prompt-title" style={{ fontSize: 17, fontWeight: 600, color: "#e9d5ff", marginBottom: 10 }}>
+        <div id="play-prompt-title" style={{ fontSize: 17, fontWeight: 600, color: "var(--color-accent-text)", marginBottom: 10 }}>
           {detail.name} has updated since you last played{versions}
         </div>
-        <div style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.55, marginBottom: 14 }}>
+        <div style={{ fontSize: 13, color: "var(--color-text-muted)", lineHeight: 1.55, marginBottom: 14 }}>
           Game updates often break {safe.what}, and a broken one can crash the game every time it starts. Playing without them
           first is the safe way to check; turn them back on once their authors have updated them.
         </div>
 
         {risky.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, color: "#fcd34d", marginBottom: 6 }}>
+            <div style={{ fontSize: 12, color: "var(--color-warning-text)", marginBottom: 6 }}>
               {risky.length === 1 ? "This mod" : `These ${risky.length} mods`} may need updating:
             </div>
             <div style={{ maxHeight: 150, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
               {risky.map((mod) => (
-                <div key={mod.key} style={{ fontSize: 13, color: "#e4e4e7", padding: "4px 8px", background: "#211c2b", borderRadius: 6 }}>
+                <div key={mod.key} style={{ fontSize: 13, color: "var(--color-text-secondary)", padding: "4px 8px", background: "var(--color-accent-subtle)", borderRadius: 6 }}>
                   {mod.name}
                 </div>
               ))}
@@ -81,7 +81,7 @@ export default function PlayPrompt({ detail, risky, onChoose }: Props) {
           <button
             className="sidebar-button"
             autoFocus
-            style={{ padding: "8px 16px", fontSize: 13, background: "#7c3aed", borderColor: "#a78bfa" }}
+            style={{ padding: "8px 16px", fontSize: 13, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
             onClick={() => onChoose("safe")}
           >
             {safe.button}

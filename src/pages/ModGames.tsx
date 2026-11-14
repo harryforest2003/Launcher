@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
+import LauncherSidebar from "../components/LauncherSidebar";
+import { Badge, Button, Notice, Panel } from "../components/ui";
 import ModManager from "./ModManager";
+import "./homeScreens.css";
 
 type Props = {
+  initialGame?: DetectedGame;
   onBack: () => void;
   onMinecraft: () => void;
   onSettings: () => void;
@@ -10,214 +15,136 @@ type Props = {
 
 const OWN_SECTIONS = new Set(["sims4", "gtav", "skyrimse", "fallout4", "cyberpunk2077", "stardew"]);
 
-export default function ModGames({ onBack, onMinecraft, onSettings }: Props) {
+export default function ModGames({ initialGame, onBack, onMinecraft, onSettings }: Props) {
   const [games, setGames] = useState<DetectedGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<DetectedGame | null>(null);
+  const [selected, setSelected] = useState<DetectedGame | null>(initialGame ?? null);
   const [error, setError] = useState<string | null>(null);
 
   // A Nexus Mods key is added in the launcher's Settings; this only says whether there is one.
   const [hasNexusKey, setHasNexusKey] = useState(true);
 
-  const load = useCallback(async (refresh = false) => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      if (refresh) await window.modAPI.refreshGames();
-
-      const [list, settings] = await Promise.all([
-        window.modAPI.getGames(refresh ? { refresh: true } : undefined),
-        window.modAPI.getSettings(),
-      ]);
-
-      // The Sims 4, GTA V, Skyrim, Cyberpunk and Stardew have their own sections now.
-      setGames(list.filter((game) => !OWN_SECTIONS.has(game.id)));
-      setHasNexusKey(settings.hasNexusKey);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setGames([]);
-    }
-
-    setLoading(false);
+  // Reads the games (rescanning first when asked) and shows them; state is only set once
+  // the answer is in.
+  const read = useCallback((refresh: boolean) => {
+    const work = (refresh ? window.modAPI.refreshGames() : Promise.resolve())
+      .then(() =>
+        Promise.all([window.modAPI.getGames(refresh ? { refresh: true } : undefined), window.modAPI.getSettings()])
+      )
+      .then(([list, settings]) => {
+        // The Sims 4, GTA V, Skyrim, Cyberpunk and Stardew have their own sections now.
+        setGames(list.filter((game) => !OWN_SECTIONS.has(game.id)));
+        setHasNexusKey(settings.hasNexusKey);
+        setError(null);
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setGames([]);
+      });
+    return work.finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    read(false);
+  }, [read]);
 
-  const card: React.CSSProperties = {
-    background: "#151515",
-    border: "1px solid #6d28d9",
-    borderRadius: 12,
-    padding: 16,
-  };
-
-  if (selected) {
-    return (
-      <div style={{ display: "flex", height: "100vh", background: "#0d0d0d", color: "white", position: "relative", overflow: "hidden" }}>
-        <BackgroundLogo />
-        <ModManager game={selected} onBack={() => setSelected(null)} />
-      </div>
-    );
+  function rescan() {
+    setLoading(true);
+    setError(null);
+    read(true);
   }
 
   return (
-    <div style={{ position: "relative", height: "100vh", overflow: "hidden", background: "#0d0d0d" }}>
-    <BackgroundLogo />
-    <div
-      style={{
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        color: "white",
-        padding: 30,
-        overflowY: "auto",
-        boxSizing: "border-box",
-      }}
-    >
-      <button
-        className="sidebar-button"
-        onClick={onBack}
-        style={{ marginBottom: 20, alignSelf: "flex-start" }}
-      >
-        ← Back to Launcher
-      </button>
+    <div className="app-screen">
+      <LauncherSidebar current="modmanager" onHome={onBack} onModManager={() => setSelected(null)} onSettings={onSettings} />
 
-      <h1 style={{ color: "#c084fc", marginBottom: 6 }}>More Games</h1>
-
-      <p style={{ color: "#9ca3af", marginBottom: 20 }}>
-        Other games found on this computer. Mods can be viewed, enabled and disabled
-        for any of them. The Sims 4, GTA V, Skyrim, Fallout 4, Cyberpunk 2077 and
-        Stardew Valley have their own sections on the home page.
-      </p>
-
-      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
-        <button className="sidebar-button" onClick={() => load(true)}>
-          Rescan for Games
-        </button>
-      </div>
-
-      {!hasNexusKey && (
-        <div style={{ ...card, marginBottom: 20, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-          <p style={{ color: "#9ca3af", fontSize: 13, flex: "1 1 300px", margin: 0 }}>
-            Browsing Nexus Mods needs your Nexus API key, which goes in Settings under Personal API
-            tokens.
-          </p>
-          <button className="sidebar-button" onClick={onSettings}>
-            Open Settings
-          </button>
+      <main className="app-main">
+        <div className="app-logo-tint">
+          <BackgroundLogo />
         </div>
-      )}
 
-      {error && (
-        <div
-          style={{
-            ...card,
-            borderColor: "#ef4444",
-            background: "#2a0d0d",
-            color: "#fca5a5",
-            marginBottom: 20,
-          }}
-        >
-          {error}
-        </div>
-      )}
+        {selected ? (
+          <ModManager game={selected} onBack={() => setSelected(null)} />
+        ) : (
+          <div className="app-page">
+            <Button variant="ghost" className="mg-back" icon={<ArrowLeft size={16} aria-hidden="true" />} onClick={onBack}>
+              Back to Home
+            </Button>
 
-      {loading ? (
-        <div style={{ color: "#9ca3af" }}>Scanning for installed games...</div>
-      ) : games.length === 0 ? (
-        <div style={{ ...card, color: "#9ca3af", maxWidth: 700 }}>
-          <p style={{ marginBottom: 10 }}>No supported games detected.</p>
-
-          <p style={{ fontSize: 13, lineHeight: 1.7 }}>
-            The scan looks through Steam libraries, Epic manifests, and the
-            standard install and mod folders for Palworld, Terraria, Baldur's
-            Gate 3, Valheim and RimWorld.
-            <br />
-            <br />
-            If a game is installed somewhere unusual, set{" "}
-            <code style={{ color: "#c084fc" }}>UNITY_STEAM_ROOTS</code> to its
-            Steam folder and rescan.
-          </p>
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))",
-            gap: 20,
-          }}
-        >
-          {games.map((game) => (
-            <div
-              key={game.id}
-              className="game-card"
-              onClick={() =>
-                game.managedByInstances ? onMinecraft() : setSelected(game)
-              }
-              style={{ cursor: "pointer", display: "flex", flexDirection: "column" }}
-            >
-              <h3 style={{ color: "#c084fc", marginBottom: 8 }}>{game.name}</h3>
-
-              <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>
-                Found via {game.source}
+            <header className="page-header" style={{ marginBottom: "var(--space-5)" }}>
+              <h1 className="page-title">More Games</h1>
+              <p className="page-lead">
+                Other games found on this computer: see their mods and turn them on and off. The Sims 4, GTA V, Skyrim,
+                Fallout 4, Cyberpunk 2077 and Stardew Valley have their own sections on Home.
               </p>
+            </header>
 
-              <p
-                style={{
-                  color: "#6b7280",
-                  fontSize: 11,
-                  marginBottom: 12,
-                  wordBreak: "break-all",
-                }}
-              >
-                {game.modDir ?? "No mod folder"}
-              </p>
-
-              <div style={{ marginTop: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {game.managedByInstances ? (
-                  <span style={{ ...tag, background: "#6d28d9" }}>
-                    Instances
-                  </span>
-                ) : game.availableProviders.length > 0 ? (
-                  game.availableProviders.map((p) => (
-                    <span
-                      key={p.id}
-                      style={{
-                        ...tag,
-                        background: p.ready ? "#166534" : "#3f3f46",
-                      }}
-                      title={p.ready ? "" : "Needs an API key"}
-                    >
-                      {p.label}
-                    </span>
-                  ))
-                ) : (
-                  <span style={{ ...tag, background: "#3f3f46" }}>
-                    Local only
-                  </span>
-                )}
-
-                {!game.modDirExists && !game.managedByInstances && (
-                  <span style={{ ...tag, background: "#7f1d1d" }}>
-                    No mods folder yet
-                  </span>
-                )}
-              </div>
+            <div className="mg-toolbar">
+              <Button icon={<RefreshCw size={16} aria-hidden="true" />} onClick={rescan} disabled={loading}>
+                Rescan for games
+              </Button>
             </div>
-          ))}
-        </div>
-      )}
-    </div>
+
+            {(!hasNexusKey || error) && (
+              <div className="mg-stack">
+                {!hasNexusKey && (
+                  <Notice tone="info" actions={<Button size="sm" onClick={onSettings}>Open Settings</Button>}>
+                    Browsing Nexus Mods needs your Nexus API key, which goes in Settings under Personal API tokens.
+                  </Notice>
+                )}
+                {error && <Notice tone="danger">{error}</Notice>}
+              </div>
+            )}
+
+            {loading ? (
+              <p className="mg-muted" role="status">
+                Scanning for installed games...
+              </p>
+            ) : games.length === 0 ? (
+              <Panel title="No supported games found" className="mg-empty">
+                <p>
+                  The scan looks through Steam libraries, Epic manifests, and the standard install and mod folders for
+                  Palworld, Terraria, Baldur's Gate 3, Valheim and RimWorld.
+                </p>
+                <p>
+                  If a game is installed somewhere unusual, set <code>UNITY_STEAM_ROOTS</code> to its Steam folder and rescan.
+                </p>
+              </Panel>
+            ) : (
+              <div className="mg-grid">
+                {games.map((game) => (
+                  <button
+                    key={game.id}
+                    type="button"
+                    className="mg-game"
+                    onClick={() => (game.managedByInstances ? onMinecraft() : setSelected(game))}
+                  >
+                    <span className="mg-game__name">{game.name}</span>
+                    <span className="mg-game__source">Found via {game.source}</span>
+                    <span className="mg-path">{game.modDir ?? "No mod folder"}</span>
+
+                    <span className="mg-tags">
+                      {game.managedByInstances ? (
+                        <Badge tone="accent">Instances</Badge>
+                      ) : game.availableProviders.length > 0 ? (
+                        game.availableProviders.map((p) => (
+                          <Badge key={p.id} tone={p.ready ? "success" : "neutral"} data-tip={p.ready ? undefined : "Needs an API key"}>
+                            {p.ready ? p.label : `${p.label}: needs a key`}
+                          </Badge>
+                        ))
+                      ) : (
+                        <Badge>Local only</Badge>
+                      )}
+
+                      {!game.modDirExists && !game.managedByInstances && <Badge tone="warning">No mods folder yet</Badge>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </main>
     </div>
   );
 }
-
-const tag: React.CSSProperties = {
-  fontSize: 11,
-  padding: "3px 8px",
-  borderRadius: 6,
-  color: "white",
-};

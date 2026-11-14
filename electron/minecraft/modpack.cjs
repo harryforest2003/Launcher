@@ -235,25 +235,56 @@ async function curseForgeClasses(projectIds) {
     return classes;
 }
 
+/*
+ * Where a .mrpack's files may be downloaded from, and how they're checked, as the format
+ * itself requires (https://support.modrinth.com/en/articles/8802351-modrinth-modpack-format-mrpack):
+ * https only, from these hosts, with a SHA-1 and a SHA-512 for every file. A file that
+ * breaks those rules isn't downloaded; it's listed as one that couldn't be.
+ */
+const MRPACK_HOSTS = ["cdn.modrinth.com", "github.com", "raw.githubusercontent.com", "gitlab.com"];
+
+function mrpackSource(url) {
+    try {
+        const parsed = new URL(String(url));
+        return parsed.protocol === "https:" && MRPACK_HOSTS.includes(parsed.hostname.toLowerCase()) && !parsed.username && !parsed.password;
+    } catch {
+        return false;
+    }
+}
+
 function resolveModrinthFiles(index) {
     const downloads = [];
+    const blocked = [];
 
     for (const file of index.files ?? []) {
         // Skip server-only files when building a client instance.
         if (file.env?.client === "unsupported") continue;
 
-        const url = file.downloads?.[0];
-        if (!url) continue;
+        const name = path.basename(String(file.path ?? "file"));
+        const url = (file.downloads ?? []).find(mrpackSource);
+        const sha1 = /^[0-9a-f]{40}$/i.test(file.hashes?.sha1 ?? "") ? file.hashes.sha1 : null;
+        const sha512 = /^[0-9a-f]{128}$/i.test(file.hashes?.sha512 ?? "") ? file.hashes.sha512 : null;
+
+        if (!url) {
+            blocked.push({ name, reason: "not from a site modpacks may download from" });
+            continue;
+        }
+        if (!sha1 || !sha512) {
+            blocked.push({ name, reason: "no hashes to check it against" });
+            continue;
+        }
 
         downloads.push({
             url,
             path: file.path,
-            sha1: file.hashes?.sha1 ?? null,
+            sha1,
+            sha512,
+            hosts: MRPACK_HOSTS,
             size: file.fileSize ?? null,
         });
     }
 
-    return { downloads, blocked: [] };
+    return { downloads, blocked };
 }
 
 /* =========================================================
@@ -338,7 +369,11 @@ async function applyModpack(zipPath, info, gameDir, onProgress) {
 
             await downloadFile(item.url, target, {
                 sha1: item.sha1 ?? undefined,
+                sha512: item.sha512 ?? undefined,
                 size: item.size ?? undefined,
+                // A .mrpack's files: its hosts only, and only with their hashes.
+                hosts: item.hosts,
+                requireHash: Boolean(item.hosts),
             });
         },
         {
@@ -393,9 +428,11 @@ async function downloadPackFile(source, projectId, fileId) {
 
         if (!file?.url) throw new Error("That modpack version has no file.");
 
-        const target = path.join(tempDir, file.filename);
+        // The site's name for it, as a name only: never a path out of the temporary folder.
+        const target = path.join(tempDir, path.basename(String(file.filename || "modpack.mrpack")) || "modpack.mrpack");
 
-        await downloadFile(file.url, target, { sha1: file.hashes?.sha1 });
+        // The pack itself, from Modrinth's own file server, checked against both its hashes.
+        await downloadFile(file.url, target, { sha1: file.hashes?.sha1, sha512: file.hashes?.sha512, hosts: MRPACK_HOSTS, requireHash: true });
 
         return { zipPath: target, tempDir, versionName: version.version_number };
     }
@@ -420,9 +457,10 @@ async function downloadPackFile(source, projectId, fileId) {
             );
         }
 
-        const target = path.join(tempDir, file.fileName);
+        // The site's name for it, as a name only: never a path out of the temporary folder.
+        const target = path.join(tempDir, path.basename(String(file.fileName || "modpack.zip")) || "modpack.zip");
 
-        await downloadFile(file.downloadUrl, target);
+        await downloadFile(file.downloadUrl, target, { sha1: file.hashes?.find(h => h.algo === 1)?.value ?? undefined });
 
         return { zipPath: target, tempDir, versionName: file.displayName };
     }

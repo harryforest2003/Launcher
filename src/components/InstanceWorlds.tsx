@@ -3,8 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 type Props = { instanceName: string };
 
 const card: React.CSSProperties = {
-  background: "#151515",
-  border: "1px solid #6d28d9",
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
   borderRadius: 12,
   padding: 14,
 };
@@ -48,7 +48,7 @@ export default function InstanceWorlds({ instanceName }: Props) {
   return (
     <div data-testid="worlds-tab">
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ color: "#9ca3af", fontSize: 13, marginRight: "auto" }}>
+        <span style={{ color: "var(--color-text-muted)", fontSize: 13, marginRight: "auto" }}>
           {worlds ? `${worlds.length} world${worlds.length === 1 ? "" : "s"}` : "Loading..."}
         </span>
         <button className="sidebar-button" onClick={load}>
@@ -60,13 +60,13 @@ export default function InstanceWorlds({ instanceName }: Props) {
       </div>
 
       {error && (
-        <div role="alert" style={{ ...card, borderColor: "#ef4444", color: "#fca5a5", marginBottom: 12 }}>
+        <div role="alert" style={{ ...card, borderColor: "var(--color-danger-border)", color: "var(--color-danger-text)", marginBottom: 12 }}>
           {error}
         </div>
       )}
 
       {worlds && worlds.length === 0 && (
-        <div style={{ ...card, color: "#9ca3af" }}>No worlds yet. They appear here once you've played one.</div>
+        <div style={{ ...card, color: "var(--color-text-muted)" }}>No worlds yet. They appear here once you've played one.</div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -75,12 +75,12 @@ export default function InstanceWorlds({ instanceName }: Props) {
             {world.icon ? (
               <img src={world.icon} alt="" width={56} height={56} style={{ borderRadius: 8, imageRendering: "pixelated", flexShrink: 0 }} />
             ) : (
-              <div style={{ width: 56, height: 56, borderRadius: 8, background: "#252525", flexShrink: 0 }} />
+              <div style={{ width: 56, height: 56, borderRadius: 8, background: "var(--color-surface)", flexShrink: 0 }} />
             )}
 
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ color: "#c084fc", fontWeight: 600 }}>{world.name}</div>
-              <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>
+              <div style={{ color: "var(--color-accent-text)", fontWeight: 600 }}>{world.name}</div>
+              <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }}>
                 {[
                   world.hardcore ? "Hardcore" : world.gameMode,
                   world.cheats ? "Cheats on" : null,
@@ -89,7 +89,7 @@ export default function InstanceWorlds({ instanceName }: Props) {
                   .filter(Boolean)
                   .join(" • ")}
               </div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
                 Last played {new Date(world.lastPlayed).toLocaleString()} • {formatBytes(world.size)}
                 {world.folder !== world.name ? ` • folder "${world.folder}"` : ""}
               </div>
@@ -100,7 +100,7 @@ export default function InstanceWorlds({ instanceName }: Props) {
             </button>
             <button
               className="sidebar-button"
-              style={{ background: "#7f1d1d" }}
+              style={{ background: "var(--color-danger-solid)" }}
               onClick={() => {
                 if (window.confirm(`Move "${world.name}" to the Bin? You can get it back from there.`)) {
                   act({ kind: "world", name: world.folder, action: "trash" });

@@ -120,6 +120,15 @@ async function fileAction(instance, { kind, name, action }) {
 
     const target = itemPath(instance, kind, name);
 
+    // Opening hands the file to the system, which would run a program: only a picture
+    // (a screenshot) or a folder (a world) is opened.
+    if (action === "open") {
+        const isFolder = fs.statSync(target).isDirectory();
+        if (kind === "screenshot" ? isFolder || !IMAGE.test(path.basename(target)) : !isFolder) {
+            throw new Error("Only pictures and world folders can be opened from here.");
+        }
+    }
+
     if (action === "open") {
         const failed = await shell.openPath(target);
         if (failed) throw new Error(failed);

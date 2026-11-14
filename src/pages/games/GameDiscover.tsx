@@ -4,6 +4,7 @@ import { DownloadIcon } from "../../components/Icons";
 import Pagination from "../../components/Pagination";
 import CollectionsList from "./CollectionsList";
 import { countText, errorText, installSummary, MORE_SITES, note, panel, shortDate } from "./shared";
+import { Tabs } from "../../components/ui";
 
 type Props = {
   detail: GameDetail;
@@ -26,8 +27,8 @@ const SORTS = [
 ];
 
 const BADGE: Record<string, { label: string; colour: string }> = {
-  nexus: { label: "NEXUS MODS", colour: "#d97706" },
-  curseforge: { label: "CURSEFORGE", colour: "#f97316" },
+  nexus: { label: "NEXUS MODS", colour: "var(--color-warning-solid)" },
+  curseforge: { label: "CURSEFORGE", colour: "var(--color-warning-solid)" },
 };
 
 /*
@@ -138,29 +139,26 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
     setInstalling(null);
   }
 
-  const dropdownStyle = { padding: "10px 12px", borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", fontSize: 13 };
+  const dropdownStyle = { padding: "10px 12px", borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 13 };
   const mods = result?.mods ?? [];
   const label = provider === "curseforge" ? "CurseForge" : provider === "nexus" ? "Nexus Mods" : "Nexus Mods and CurseForge";
   const showsNexus = provider !== "curseforge";
 
   return (
     <div>
-      <h1 style={{ color: "#c084fc", marginTop: 0 }}>Discover Mods</h1>
+      <h1 style={{ marginTop: 0 }}>Discover Mods</h1>
       {detail.nexus && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }} role="tablist">
-          {(["mods", "collections"] as const).map((tab) => (
-            <button
-              key={tab}
-              role="tab"
-              aria-selected={showing === tab}
-              data-testid={`discover-${tab}`}
-              className="sidebar-button"
-              onClick={() => setShowing(tab)}
-              style={{ fontSize: 13, padding: "8px 14px", ...(showing === tab ? { background: "#6d28d9" } : { opacity: 0.7 }) }}
-            >
-              {tab === "mods" ? "Mods" : "Collections"}
-            </button>
-          ))}
+        <div style={{ marginBottom: 12 }}>
+          <Tabs
+            label="Discover"
+            idBase="discover"
+            value={showing}
+            onChange={setShowing}
+            tabs={[
+              { value: "mods", label: "Mods" },
+              { value: "collections", label: "Collections" },
+            ]}
+          />
         </div>
       )}
       {showing === "collections" ? (
@@ -172,7 +170,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder={`Search ${label} for ${detail.name} mods...`}
-        style={{ width: "100%", padding: 14, borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", boxSizing: "border-box" }}
+        style={{ width: "100%", padding: 14, borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", boxSizing: "border-box" }}
       />
 
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
@@ -195,7 +193,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
       {MORE_SITES[detail.id] && (
         <div style={{ ...panel, marginTop: 16, padding: 14 }} data-testid="more-sites">
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "#c084fc", fontWeight: 600, fontSize: 13, marginRight: 4 }}>More sites</span>
+            <span style={{ color: "var(--color-accent-text)", fontWeight: 600, fontSize: 13, marginRight: 4 }}>More sites</span>
             {MORE_SITES[detail.id]!.map((site) => (
               <button
                 key={site.url}
@@ -208,9 +206,9 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
               </button>
             ))}
           </div>
-          <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
+          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
             These sites don't let apps list their mods, so they open in your browser. Download what you like there, then{" "}
-            <button onClick={goMods} style={{ background: "none", border: "none", padding: 0, color: "#c084fc", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
+            <button onClick={goMods} style={{ background: "none", border: "none", padding: 0, color: "var(--color-accent-text)", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
               Add from Downloads
             </button>{" "}
             installs them all at once.
@@ -248,7 +246,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
 
       <div ref={listTop} style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
         {result && (
-          <div style={{ fontSize: 12, color: "#9ca3af" }}>
+          <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
             {result.totals && Object.keys(result.totals).length > 1
               ? `${(result.totals.nexus ?? 0).toLocaleString()} on Nexus Mods • ${(result.totals.curseforge ?? 0).toLocaleString()}${(result.totals.curseforge ?? 0) >= 10000 ? "+" : ""} on CurseForge`
               : `${result.total.toLocaleString()} on ${label}`}
@@ -262,7 +260,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
         {loading ? (
           <div>Loading...</div>
         ) : mods.length === 0 ? (
-          <div style={{ color: "#9ca3af", padding: 20 }}>No mods found{search.trim() ? ` for "${search.trim()}"` : ""}.</div>
+          <div style={{ color: "var(--color-text-muted)", padding: 20 }}>No mods found{search.trim() ? ` for "${search.trim()}"` : ""}.</div>
         ) : (
           mods.map((mod) => (
             <div
@@ -288,9 +286,9 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
                   height: 70,
                   borderRadius: 10,
                   overflow: "hidden",
-                  border: "1px solid #6d28d9",
+                  border: "1px solid var(--color-border)",
                   flexShrink: 0,
-                  background: "#1b1b1b",
+                  background: "var(--color-surface-sunken)",
                 }}
               >
                 {mod.picture ? (
@@ -299,11 +297,11 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
               </div>
 
               <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <div style={{ fontWeight: 600, color: "#c084fc" }}>{mod.name}</div>
-                <div style={{ fontSize: 12, color: "#aaa" }}>{mod.summary?.slice(0, 160)}</div>
-                <div style={{ fontSize: 11, marginTop: 4, color: "#d4d4d8", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <span style={{ padding: "1px 6px", borderRadius: 5, background: BADGE[mod.provider].colour, color: "white", fontWeight: 700, fontSize: 10 }}>{BADGE[mod.provider].label}</span>
-                  {mod.adult && <span style={{ padding: "1px 6px", borderRadius: 5, border: "1px solid #f87171", color: "#fca5a5", fontWeight: 700, fontSize: 10 }}>18+</span>}
+                <div style={{ fontWeight: 600, color: "var(--color-accent-text)" }}>{mod.name}</div>
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{mod.summary?.slice(0, 160)}</div>
+                <div style={{ fontSize: 11, marginTop: 4, color: "var(--color-text-secondary)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ padding: "1px 6px", borderRadius: 5, background: BADGE[mod.provider].colour, color: "var(--color-on-warning)", fontWeight: 700, fontSize: 10 }}>{BADGE[mod.provider].label}</span>
+                  {mod.adult && <span style={{ padding: "1px 6px", borderRadius: 5, border: "1px solid var(--color-danger-border)", color: "var(--color-danger-text)", fontWeight: 700, fontSize: 10 }}>18+</span>}
                   {mod.author && <span>by {mod.author}</span>}
                   <span>↓ {countText(mod.downloads)}</span>
                   {mod.endorsements != null && <span>♥ {countText(mod.endorsements)}</span>}

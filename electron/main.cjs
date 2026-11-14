@@ -2,22 +2,24 @@ console.log("MAIN.CJS LOADED");
 
 // First, because it decides where everything after it keeps its data.
 require("./paths.cjs");
-// Early, because Blockbench's files are served on a scheme that has to exist before ready.
+// Next, because the app's schemes have to exist before ready, and every message handler
+// registered after this has its sender checked (see security.cjs).
+const security = require("./security.cjs");
+security.guardIpc();
 const { registerBlockbenchIpc } = require("./blockbench/index.cjs");
+const { registerDashboardIpc } = require("./dashboard/index.cjs");
 
 const {
     getInstances,
-    launchInstance,
     getInstancesStorage
 } = require("./instanceManager.cjs");
 
 const { registerModIpc } = require("./mods/index.cjs");
 const { registerGamesIpc, handleNxm } = require("./games/ipc.cjs");
-const { registerInstanceIpc, saveAccount } = require("./minecraft/ipc.cjs");
-const { accountForLaunch } = require("./minecraft/account.cjs");
+const { registerInstanceIpc, launchAs, saveAccount } = require("./minecraft/ipc.cjs");
 const { registerSkinBuilderIpc } = require("./skinBuilder/ipc.cjs");
 
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, session } = require("electron");
 const fs = require("fs");
 const path = require("path");
 
@@ -152,17 +154,42 @@ function normalizeCurseForgeProject(project, files = [], description = null) {
 // ---------------- BROWSING ----------------
 
 ipcMain.handle("catalog:browse", (_event, options) => browse(options));
-ipcMain.handle("project:resolveLink", (_event, link) => resolveProjectLink(link));
+// A link to a project, as src/utils/projectLinks.ts reads one: { source, slug | id, type }.
+const LINK_SLUG = /^[\w.-]{1,100}$/;
+ipcMain.handle("project:resolveLink", async (_event, link) => {
+    if (!link || typeof link !== "object") return null;
+    const { source, slug, id, type } = link;
+    if (source !== "modrinth" && source !== "curseforge") return null;
+    const clean = {
+        source,
+        slug: typeof slug === "string" && LINK_SLUG.test(slug) ? slug : undefined,
+        id: (typeof id === "string" || typeof id === "number") && /^\d{1,12}$/.test(String(id)) ? String(id) : undefined,
+        type: typeof type === "string" && /^[a-z]{1,20}$/.test(type) ? type : undefined,
+    };
+    if (!clean.slug && !clean.id) return null;
+    if (source === "modrinth" && !clean.slug) return null;
+    try {
+        return await resolveProjectLink(clean);
+    } catch {
+        return null;
+    }
+});
 
 // ---------------- PROJECT GET ----------------
 
-ipcMain.handle("project:get", async (_event, source, id) => {
+// A project id or slug, as the sites use them: never a path to another part of their API.
+const PROJECT_ID = /^[\w.-]{1,100}$/;
+
+ipcMain.handle("project:get", async (_event, source, rawId) => {
+    const id = String(rawId ?? "");
+    if (!PROJECT_ID.test(id) || (source !== "modrinth" && source !== "curseforge")) return null;
+
     try {
         if (source === "modrinth") {
             const [projectRes, versionsRes, membersRes] = await Promise.all([
-                fetch(`https://api.modrinth.com/v2/project/${id}`),
-                fetch(`https://api.modrinth.com/v2/project/${id}/version`),
-                fetch(`https://api.modrinth.com/v2/project/${id}/members`)
+                fetch(`https://api.modrinth.com/v2/project/${encodeURIComponent(id)}`),
+                fetch(`https://api.modrinth.com/v2/project/${encodeURIComponent(id)}/version`),
+                fetch(`https://api.modrinth.com/v2/project/${encodeURIComponent(id)}/members`)
             ]);
 
             const project = await projectRes.json();
@@ -173,9 +200,9 @@ ipcMain.handle("project:get", async (_event, source, id) => {
         }
 
         const [projectRes, filesRes, descriptionRes] = await Promise.all([
-            curseforgeFetch(`/mods/${id}`),
-            curseforgeFetch(`/mods/${id}/files?pageSize=100`),
-            curseforgeFetch(`/mods/${id}/description`)
+            curseforgeFetch(`/mods/${encodeURIComponent(id)}`),
+            curseforgeFetch(`/mods/${encodeURIComponent(id)}/files?pageSize=100`),
+            curseforgeFetch(`/mods/${encodeURIComponent(id)}/description`)
         ]);
 
         const project = (await projectRes.json()).data;
@@ -213,9 +240,8 @@ ipcMain.handle("instances:storage", () => getInstancesStorage());
 
 // Exposed in preload.cjs but previously unhandled, so the Launch button
 // rejected with "No handler registered for 'minecraft:launch'".
-ipcMain.handle("minecraft:launch", async (_, name) => {
-    return launchInstance(name, await accountForLaunch(name));
-});
+// As instance:launch: as the account with this id, or the active one.
+ipcMain.handle("minecraft:launch", (_, name, accountId) => launchAs(name, accountId));
 
 
 // ---------------- MICROSOFT LOGIN (FIXED FLOW) ----------------
@@ -249,33 +275,40 @@ const isDev = !app.isPackaged;
 const pendingNxm = [];
 let pageReady = false;
 
+// Only a link the size of a real one, in the form Nexus Mods sends (checked again by parseNxm).
+const isNxmLink = (link) => typeof link === "string" && link.length <= 2048 && /^nxm:\/\/[\w-]+\/mods\/\d+\/files\/\d+\/?(\?[^\s#]*)?$/i.test(link);
+
 function takeNxm(link) {
-    if (!/^nxm:\/\//i.test(String(link))) return;
+    if (!isNxmLink(link)) return;
     if (pageReady) handleNxm(link);
-    else pendingNxm.push(link);
+    else if (pendingNxm.length < 20) pendingNxm.push(link);
 }
 
 // Only the installed app handles these links: run from source, it would claim them for Electron.
+// A copy started on a throwaway profile (scripts/check-app-starts.cjs) leaves them to the real one.
 // A second copy of the installed app hands its link to the first and quits, without a window.
 const secondCopy = app.isPackaged && !app.requestSingleInstanceLock();
 if (app.isPackaged) {
     if (secondCopy) {
         app.quit();
     } else {
-        app.setAsDefaultProtocolClient("nxm");
+        // The system sends nxm:// links here because the installed app declares them, so
+        // the app changes no system setting itself: the Mac app's Info.plist and Linux's
+        // .desktop file list the scheme (package.json build.protocols), and the Windows
+        // installer registers it (scripts/nxm-protocol.nsh). Links reach only takeNxm.
         app.on("second-instance", (_event, argv) => {
-            argv.filter((arg) => /^nxm:\/\//i.test(arg)).forEach(takeNxm);
+            argv.filter(isNxmLink).forEach(takeNxm);
             const win = BrowserWindow.getAllWindows()[0];
             if (win) {
                 if (win.isMinimized()) win.restore();
                 win.focus();
             }
         });
-        process.argv.filter((arg) => /^nxm:\/\//i.test(arg)).forEach(takeNxm);
+        process.argv.filter(isNxmLink).forEach(takeNxm);
     }
 }
 app.on("open-url", (event, url) => {
-    if (!/^nxm:\/\//i.test(url)) return;
+    if (!/^nxm:/i.test(String(url))) return;
     event.preventDefault();
     takeNxm(url);
 });
@@ -287,12 +320,24 @@ function createWindow() {
         minWidth: 1200,
         minHeight: 700,
         autoHideMenuBar: true,
+        // Dark from the first frame, so there's no white flash before the page paints its colours.
+        backgroundColor: "#141414",
         // Windows and Linux show this in the title bar and taskbar; a Mac uses the app's own icon.
         ...(process.platform === "darwin" ? {} : { icon: path.join(__dirname, "..", "build", "icons", "512x512.png") }),
         webPreferences: {
-            preload: path.join(__dirname, "preload.cjs"),
             contextIsolation: true,
             nodeIntegration: false,
+            nodeIntegrationInWorker: false,
+            nodeIntegrationInSubFrames: false,
+            sandbox: true,
+            webSecurity: true,
+            allowRunningInsecureContent: false,
+            experimentalFeatures: false,
+            webviewTag: false,
+            safeDialogs: true,
+            navigateOnDragDrop: false,
+            // A middle click on a link would otherwise try to open it in a new window.
+            disableBlinkFeatures: "Auxclick",
         },
     });
 
@@ -306,28 +351,26 @@ function createWindow() {
     /*
      * Project pages contain links written by strangers. Opening one inside the app
      * would hand that site the launcher's preload APIs, or navigate the launcher
-     * away entirely, so links go to the system browser instead.
+     * away entirely, so links go to the system browser instead (web and mail links
+     * only: see security.openExternalSafely).
      */
-    const openExternally = (url) => {
-        if (/^(https?:\/\/|mailto:)/i.test(url)) shell.openExternal(url);
-    };
-
     win.webContents.setWindowOpenHandler(({ url }) => {
-        openExternally(url);
+        security.openExternalSafely(url);
         return { action: "deny" };
     });
 
     win.webContents.on("will-navigate", (event, url) => {
-        if (new URL(url).origin === new URL(win.webContents.getURL()).origin) return;
+        if (security.isLauncherUrl(url) && security.originOf(url) === security.originOf(win.webContents.getURL())) return;
         event.preventDefault();
-        openExternally(url);
+        security.openExternalSafely(url);
     });
 
     if (isDev) {
-        win.loadURL("http://localhost:5174");
+        win.loadURL(security.DEV_SERVER_URL);
         win.webContents.openDevTools();
     } else {
-        win.loadFile(path.join(__dirname, "../dist/index.html"));
+        // Served by security.cjs from dist/, on the app's own scheme rather than file://.
+        win.loadURL(security.APP_START_URL);
     }
 }
 
@@ -338,12 +381,28 @@ app.whenReady().then(() => {
     const devIcon = path.join(__dirname, "..", "build", "icon.png");
     if (process.platform === "darwin" && !app.isPackaged && fs.existsSync(devIcon)) app.dock?.setIcon(devIcon);
 
+    // Policies, permissions and the app:// scheme for every session, before any page loads.
+    security.protectApp();
+
+    // The launcher's bridge (preload.cjs), for its session: it gives functions only to the
+    // launcher's own page, and has no Electron or Node object to give.
+    session.defaultSession.registerPreloadScript({ type: "frame", id: "unity-launcher", filePath: path.join(__dirname, "preload.cjs") });
+
+    // Sign-in tokens older versions left as plain text go into encrypted storage (once).
+    try {
+        require("./auth/legacyTokens.cjs").moveLegacyTokens();
+    } catch (err) {
+        console.warn("Couldn't move old sign-in files into encrypted storage:", err.message);
+    }
+
     // Both need app.getPath("userData"), so they can't run at module load.
     registerModIpc();
     registerGamesIpc();
     registerInstanceIpc();
     registerSkinBuilderIpc();
     registerBlockbenchIpc();
+    // Home's play time, activity, news and Steam deals.
+    registerDashboardIpc();
     createWindow();
 });
 

@@ -44,7 +44,7 @@ export default function RequirementsPanel({ requirements, getting, onGet }: Prop
           <button
             className="sidebar-button"
             data-testid="get-requirements"
-            style={{ ...smallButton, padding: "6px 12px", fontSize: 12, background: "#7c3aed", borderColor: "#a78bfa", color: "white" }}
+            style={{ ...smallButton, padding: "6px 12px", fontSize: 12, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
             onClick={() => {
               if (!getting) onGet(sure);
             }}
@@ -57,14 +57,14 @@ export default function RequirementsPanel({ requirements, getting, onGet }: Prop
       {(open || requirements.length === 1) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
           {requirements.map((entry) => (
-            <div key={entry.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "rgba(0, 0, 0, 0.25)", borderRadius: 8 }}>
+            <div key={entry.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "var(--color-hover)", borderRadius: 8 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: "#fde68a", fontWeight: 600 }}>{entry.name}</div>
-                <div style={{ color: "#d6d3d1", fontSize: 12, marginTop: 2 }}>
+                <div style={{ color: "var(--color-warning-text)", fontWeight: 600 }}>{entry.name}</div>
+                <div style={{ color: "var(--color-text-secondary)", fontSize: 12, marginTop: 2 }}>
                   {entry.neededBy.length ? `Needed by ${entry.neededBy.join(", ")}` : "Needed by the mod being installed"} • from {SOURCE[entry.kind]}
                   {entry.kind === "search" || entry.kind === "master" ? " (it couldn't be told for sure which mod it is)" : ""}
                 </div>
-                {entry.note && <div style={{ color: "#a8a29e", fontSize: 11, marginTop: 2 }}>{entry.note}</div>}
+                {entry.note && <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginTop: 2 }}>{entry.note}</div>}
               </div>
               {/* With one, the button above already gets it. */}
               {!(requirements.length === 1 && entry.auto) && (

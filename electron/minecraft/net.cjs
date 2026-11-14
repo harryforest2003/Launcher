@@ -28,7 +28,7 @@ function sha1(filePath) {
  * Skip a download when the file is already present and matches its
  * expected hash. Makes re-running an install cheap and resumable.
  */
-async function isValid(destination, expectedSha1, expectedSize) {
+async function isValid(destination, expectedSha1, expectedSize, expectedSha512) {
     if (!fs.existsSync(destination)) return false;
 
     const stat = fs.statSync(destination);
@@ -36,15 +36,28 @@ async function isValid(destination, expectedSha1, expectedSize) {
     if (stat.size === 0) return false;
     if (expectedSize && stat.size !== expectedSize) return false;
 
-    if (expectedSha1) {
-        try {
-            return (await sha1(destination)) === expectedSha1;
-        } catch {
-            return false;
-        }
+    try {
+        if (expectedSha1 && (await sha1(destination)) !== String(expectedSha1).toLowerCase()) return false;
+        if (expectedSha512 && crypto.createHash("sha512").update(fs.readFileSync(destination)).digest("hex") !== String(expectedSha512).toLowerCase()) return false;
+    } catch {
+        return false;
     }
 
     return true;
+}
+
+/*
+ * Whether a download address is allowed: https always when hosts is given, and then only
+ * those hosts (as a modpack's own list of files must be, by the .mrpack format's rules).
+ */
+function allowedSource(url, hosts) {
+    if (!hosts) return true;
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === "https:" && hosts.includes(parsed.hostname.toLowerCase()) && !parsed.username && !parsed.password;
+    } catch {
+        return false;
+    }
 }
 
 // A download that sends nothing for this long is given up on and tried again. Without
@@ -89,8 +102,20 @@ async function fetchBuffer(url) {
     }
 }
 
-async function downloadFile(url, destination, { sha1: expected, size, retries = 3 } = {}) {
-    if (await isValid(destination, expected, size)) {
+/*
+ * Downloads url to destination, checked against the SHA-1 and SHA-512 given (either, both
+ * or neither). hosts, when given, limits where it may come from (https only), and
+ * requireHash refuses a file with no hash to check it against.
+ */
+async function downloadFile(url, destination, { sha1: expected, sha512: expected512, size, retries = 3, hosts, requireHash = false } = {}) {
+    if (!allowedSource(url, hosts)) {
+        throw new Error(`Refusing to download ${path.basename(destination)} from ${url}: it isn't from a site this file may come from.`);
+    }
+    if (requireHash && !expected && !expected512) {
+        throw new Error(`Refusing to download ${path.basename(destination)}: there's no hash to check it against.`);
+    }
+
+    if (await isValid(destination, expected, size, expected512)) {
         return { destination, skipped: true };
     }
 
@@ -111,10 +136,11 @@ async function downloadFile(url, destination, { sha1: expected, size, retries = 
             const temp = `${destination}.part`;
             fs.writeFileSync(temp, buffer);
 
-            if (expected) {
-                const actual = crypto.createHash("sha1").update(buffer).digest("hex");
+            const sha512Ok = !expected512 || crypto.createHash("sha512").update(buffer).digest("hex") === String(expected512).toLowerCase();
+            if (expected || !sha512Ok) {
+                const actual = expected ? crypto.createHash("sha1").update(buffer).digest("hex") : null;
 
-                if (actual !== expected) {
+                if ((expected && actual !== String(expected).toLowerCase()) || !sha512Ok) {
                     fs.rmSync(temp, { force: true });
                     throw new Error(
                         `Checksum mismatch for ${path.basename(destination)}`
@@ -231,7 +257,20 @@ function mavenToUrl(baseUrl, name) {
     return `${baseUrl.replace(/\/$/, "")}/${relative}`;
 }
 
+/*
+ * The SHA-1 a Maven repository publishes beside a file (<file>.sha1), so a download from
+ * it can be checked. Throws if there isn't one.
+ */
+async function publishedSha1(url) {
+    const res = await fetch(`${url}.sha1`, { headers: { "User-Agent": "UnityLauncher/1.0" }, signal: AbortSignal.timeout(30 * 1000) });
+    if (!res.ok) throw new Error(`No published checksum for ${path.basename(new URL(url).pathname)} (HTTP ${res.status}).`);
+    const hash = (await res.text()).trim().match(/^[0-9a-f]{40}\b/i)?.[0];
+    if (!hash) throw new Error(`The published checksum for ${path.basename(new URL(url).pathname)} couldn't be read.`);
+    return hash.toLowerCase();
+}
+
 module.exports = {
+    publishedSha1,
     downloadFile,
     fetchJson,
     pool,

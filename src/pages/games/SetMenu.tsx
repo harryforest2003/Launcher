@@ -47,22 +47,22 @@ export default function SetMenu({ mod, sets, onMember, onCreate }: Props) {
             top: 54,
             zIndex: 50,
             width: 240,
-            background: "#17141f",
-            border: "1px solid #6d28d9",
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
             borderRadius: 12,
-            boxShadow: "0 12px 30px rgba(0, 0, 0, 0.5)",
+            boxShadow: "0 12px 30px var(--color-shadow)",
             padding: 10,
           }}
         >
-          <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 6 }}>Sets</div>
-          {sets.length === 0 && <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>No sets yet: name one below.</div>}
+          <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 6 }}>Sets</div>
+          {sets.length === 0 && <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 6 }}>No sets yet: name one below.</div>}
           {sets.map((set) => (
             <label key={set.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", cursor: "pointer", fontSize: 13 }}>
               <input
                 type="checkbox"
                 checked={set.keys.includes(mod.key)}
                 onChange={(event) => onMember(set.id, event.target.checked)}
-                style={{ width: 15, height: 15, accentColor: "#7c3aed" }}
+                style={{ width: 15, height: 15, accentColor: "var(--color-accent)" }}
               />
               {set.name}
             </label>
@@ -81,7 +81,7 @@ export default function SetMenu({ mod, sets, onMember, onCreate }: Props) {
               onChange={(event) => setName(event.target.value)}
               placeholder="New set..."
               maxLength={40}
-              style={{ flex: 1, minWidth: 0, padding: "6px 8px", borderRadius: 8, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", fontSize: 12 }}
+              style={{ flex: 1, minWidth: 0, padding: "6px 8px", borderRadius: 8, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 12 }}
             />
             <button type="submit" className="sidebar-button" style={{ padding: "6px 10px", fontSize: 12 }}>
               Add

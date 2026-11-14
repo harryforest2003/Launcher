@@ -39,7 +39,7 @@ export default function BlockbenchFrame({ title }: { title: string }) {
         position: "absolute",
         inset: 0,
         zIndex: 50,
-        background: "#0d0d0d",
+        background: "var(--color-bg)",
         display: "flex",
         flexDirection: "column",
       }}
@@ -52,15 +52,15 @@ export default function BlockbenchFrame({ title }: { title: string }) {
           alignItems: "center",
           gap: 14,
           padding: "0 16px",
-          background: "#151515",
-          borderBottom: "1px solid #6d28d9",
+          background: "var(--color-surface)",
+          borderBottom: "1px solid var(--color-border)",
         }}
       >
-        <span style={{ color: "#c084fc", fontFamily: "'Orbitron', sans-serif", fontWeight: 700 }}>Blockbench</span>
-        <span style={{ color: "#9ca3af", fontSize: 13 }}>{title}</span>
+        <span style={{ color: "var(--color-accent-text)", fontFamily: "var(--font-ui)", fontWeight: 700 }}>Blockbench</span>
+        <span style={{ color: "var(--color-text-muted)", fontSize: 13 }}>{title}</span>
         <span style={{ flex: 1 }} />
         {status && (
-          <span data-testid="blockbench-status" style={{ color: "#86efac", fontSize: 12 }}>
+          <span data-testid="blockbench-status" style={{ color: "var(--color-success-text)", fontSize: 12 }}>
             {status}
           </span>
         )}
@@ -69,7 +69,7 @@ export default function BlockbenchFrame({ title }: { title: string }) {
         </button>
         <button
           className="sidebar-button"
-          style={{ padding: "6px 16px", background: "#7c3aed" }}
+          style={{ padding: "6px 16px", background: "var(--color-accent)", color: "var(--color-on-accent)" }}
           onClick={() => leaveBlockbench()}
         >
           Done
@@ -79,7 +79,7 @@ export default function BlockbenchFrame({ title }: { title: string }) {
       {/* Blockbench is drawn over this once what it's editing is open. */}
       <div
         ref={spaceRef}
-        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 14 }}
+        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-text-muted)", fontSize: 14 }}
       >
         Opening the model editor...
       </div>

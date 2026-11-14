@@ -482,9 +482,9 @@ function SkinSelector({
       style={{
         display: "flex",
         height: "100vh",
-        background: "#0d0d0d",
-        color: "white",
-        fontFamily: "'Orbitron', sans-serif",
+        background: "var(--color-bg)",
+        color: "var(--color-text)",
+        fontFamily: "var(--font-ui)",
       }}
     >
       <Sidebar
@@ -524,17 +524,15 @@ function SkinSelector({
           <div style={{ position: "relative", zIndex: 1 }}>
             <h1
               style={{
-                color: "#c084fc",
                 lineHeight: 1,
-                marginBottom: "10px",
-              }}
+                marginBottom: "10px" }}
             >
               Minecraft Skin Selector
             </h1>
 
             <p
               style={{
-                color: "#9ca3af",
+                color: "var(--color-text-muted)",
                 marginBottom: "30px",
               }}
             >
@@ -552,9 +550,9 @@ function SkinSelector({
                 width: "100%",
                 padding: "15px",
                 borderRadius: "12px",
-                border: "1px solid #6d28d9",
-                background: "#1a1a1a",
-                color: "white",
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
+                color: "var(--color-text)",
                 fontSize: "16px",
                 boxSizing: "border-box",
               }}
@@ -575,7 +573,7 @@ function SkinSelector({
                 data-testid="saved-tab"
                 aria-pressed={view === "saved"}
                 onClick={() => setView(view === "saved" ? "search" : "saved")}
-                style={{ background: view === "saved" ? "#6d28d9" : undefined }}
+                style={{ background: view === "saved" ? "var(--color-accent-subtle)" : undefined }}
               >
                 Favourites ({saved.length})
               </button>
@@ -596,7 +594,7 @@ function SkinSelector({
             {profileLoaded && !signedIn && (
               <div
                 data-testid="skin-signed-out"
-                style={{ ...card, background: "#2a1a05", border: "1px solid #b45309", color: "#fcd34d" }}
+                style={{ ...card, background: "var(--color-warning-bg)", border: "1px solid var(--color-warning-border)", color: "var(--color-warning-text)" }}
               >
                 Sign in with Microsoft on the Minecraft page to change your skin. You can
                 still search and preview skins here.
@@ -607,7 +605,7 @@ function SkinSelector({
               <div
                 role="alert"
                 data-testid="skin-error"
-                style={{ ...card, background: "#2a0d0d", border: "1px solid #ef4444", color: "#fca5a5" }}
+                style={{ ...card, background: "var(--color-danger-bg)", border: "1px solid var(--color-danger-border)", color: "var(--color-danger-text)" }}
               >
                 {error}
               </div>
@@ -616,7 +614,7 @@ function SkinSelector({
             {notice && (
               <div
                 data-testid="skin-notice"
-                style={{ ...card, background: "#0d2a12", border: "1px solid #166534", color: "#86efac" }}
+                style={{ ...card, background: "var(--color-success-bg)", border: "1px solid var(--color-success-border)", color: "var(--color-success-text)" }}
               >
                 {notice}
               </div>
@@ -626,7 +624,7 @@ function SkinSelector({
             {view === "saved" && (
             <div style={{ marginTop: 28 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-                <h2 style={{ color: "#c084fc", margin: 0, fontSize: 20 }}>Favourites</h2>
+                <h2 style={{ margin: 0 }}>Favourites</h2>
 
                 {signedIn && profile?.skin && (
                   <button
@@ -641,7 +639,7 @@ function SkinSelector({
               </div>
 
               {saved.length === 0 ? (
-                <p style={{ color: "#6b7280", fontSize: 13 }}>
+                <p style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
                   Nothing saved yet. Save your current skin, or any skin you preview, to
                   switch back to it later.
                 </p>
@@ -666,7 +664,7 @@ function SkinSelector({
                         <SkinFront skin={entry.dataUrl} slim={entry.slim} scale={4} />
                       </div>
 
-                      <div style={{ color: "#c084fc", fontSize: 13, marginBottom: 8, wordBreak: "break-word" }}>
+                      <div style={{ color: "var(--color-accent-text)", fontSize: 13, marginBottom: 8, wordBreak: "break-word" }}>
                         {entry.name}
                       </div>
 
@@ -696,7 +694,7 @@ function SkinSelector({
                           width: "100%",
                           fontSize: 12,
                           padding: "6px",
-                          background: confirmingDelete === entry.id ? "#7f1d1d" : undefined,
+                          background: confirmingDelete === entry.id ? "var(--color-danger-solid)" : undefined,
                         }}
                         disabled={!!busy}
                         onClick={(event) => {
@@ -717,13 +715,13 @@ function SkinSelector({
             )}
 
             {view === "search" && loading && (
-              <p style={{ color: "#9ca3af", marginTop: 16 }}>
+              <p style={{ color: "var(--color-text-muted)", marginTop: 16 }}>
                 Searching...
               </p>
             )}
 
             {view === "search" && !loading && search.trim() && players.length === 0 && (
-              <p style={{ color: "#9ca3af", marginTop: 16 }}>
+              <p style={{ color: "var(--color-text-muted)", marginTop: 16 }}>
                 No Java players found for "{search.trim()}".
               </p>
             )}
@@ -748,13 +746,13 @@ function SkinSelector({
                   <div
                     style={{
                       height: "230px",
-                      background: "#252525",
-                      border: "1px solid #6d28d9",
+                      background: "var(--color-surface)",
+                      border: "1px solid var(--color-border)",
                       borderRadius: "14px",
                       display: "flex",
                       justifyContent: "center",
                       alignItems: "center",
-                      color: "#777",
+                      color: "var(--color-text-muted)",
                       marginBottom: "14px",
                       overflow: "hidden",
                     }}
@@ -764,9 +762,7 @@ function SkinSelector({
 
                   <h3
                     style={{
-                      color: "#c084fc",
-                      marginBottom: "10px",
-                    }}
+                      marginBottom: "10px" }}
                   >
                     {player.username}
                   </h3>
@@ -833,8 +829,8 @@ function SkinSelector({
         <div
           style={{
             width: "340px",
-            borderLeft: "1px solid #6d28d9",
-            background: "#161616",
+            borderLeft: "1px solid var(--color-border)",
+            background: "var(--color-chrome)",
             padding: "20px 22px",
             boxSizing: "border-box",
             display: "flex",
@@ -842,21 +838,21 @@ function SkinSelector({
             overflowY: "auto",
           }}
         >
-          <h2 style={{ color: "#c084fc", margin: "0 0 14px", flexShrink: 0 }}>3D Preview</h2>
+          <h2 style={{ margin: "0 0 14px", flexShrink: 0 }}>3D Preview</h2>
 
           <div
             data-testid="skin-preview-box"
             style={{
               flex: 1,
               minHeight: 220,
-              background: "#232323",
-              border: "1px solid #6d28d9",
+              background: "var(--color-surface-raised)",
+              border: "1px solid var(--color-border)",
               borderRadius: "18px",
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
               alignItems: "center",
-              color: "#777",
+              color: "var(--color-text-muted)",
               overflow: "hidden",
               padding: preview ? 0 : 20,
             }}
@@ -870,13 +866,13 @@ function SkinSelector({
 
           <div
             data-testid={preview ? "preview-label" : undefined}
-            style={{ color: "#c084fc", margin: "8px 0 14px", fontSize: 13, minHeight: 17, flexShrink: 0 }}
+            style={{ color: "var(--color-accent-text)", margin: "8px 0 14px", fontSize: 13, minHeight: 17, flexShrink: 0 }}
           >
             {preview ? `${preview.label}${unsaved ? " • not saved yet" : ""}` : ""}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", alignItems: "center", gap: "10px 12px", flexShrink: 0, textAlign: "left" }}>
-            <label htmlFor="skin-model" style={{ color: "#d8b4fe", fontSize: 14, fontWeight: 600 }}>
+            <label htmlFor="skin-model" style={{ color: "var(--color-accent-text)", fontSize: 14, fontWeight: 600 }}>
               Player Model
             </label>
             <select
@@ -892,7 +888,7 @@ function SkinSelector({
               <option value="slim">Slim</option>
             </select>
 
-            <label htmlFor="skin-cape" style={{ color: "#d8b4fe", fontSize: 14, fontWeight: 600 }}>
+            <label htmlFor="skin-cape" style={{ color: "var(--color-accent-text)", fontSize: 14, fontWeight: 600 }}>
               Cape
             </label>
             <select
@@ -914,7 +910,7 @@ function SkinSelector({
           </div>
 
           {signedIn && profile?.capes.length === 0 && (
-            <p style={{ color: "#6b7280", fontSize: 12, margin: "8px 0 0", flexShrink: 0 }}>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 12, margin: "8px 0 0", flexShrink: 0 }}>
               Your account doesn't have any capes.
             </p>
           )}
@@ -964,7 +960,7 @@ function SkinSelector({
             </IconButton>
           </div>
 
-          <div role="status" style={{ minHeight: 17, marginTop: 10, fontSize: 12, color: confirmingReset ? "#fca5a5" : "#c4b5fd", flexShrink: 0 }}>
+          <div role="status" style={{ minHeight: 17, marginTop: 10, fontSize: 12, color: confirmingReset ? "var(--color-danger-text)" : "var(--color-accent-text)", flexShrink: 0 }}>
             {busy === "save"
               ? "Saving..."
               : busy === "blockbench"

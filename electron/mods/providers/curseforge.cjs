@@ -58,7 +58,7 @@ async function search(game, query, { limit = 40 } = {}) {
 
 // The downloadable files for one project, newest first.
 async function getFiles(projectId) {
-    const res = await curseforgeFetch(`/mods/${projectId}/files?pageSize=50`);
+    const res = await curseforgeFetch(`/mods/${encodeURIComponent(String(projectId))}/files?pageSize=50`);
 
     if (!res.ok) {
         throw new Error(`Could not list files (HTTP ${res.status}).`);
@@ -73,6 +73,8 @@ async function getFiles(projectId) {
         size: f.fileLength ?? 0,
         date: f.fileDate,
         downloadUrl: f.downloadUrl,   // null when distribution is disabled
+        // CurseForge's SHA-1 of the file (algo 1), so a download is checked against it.
+        sha1: f.hashes?.find(h => h.algo === 1)?.value ?? null,
     }));
 }
 

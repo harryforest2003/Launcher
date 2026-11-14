@@ -1,28 +1,20 @@
 import { useEffect, useState } from "react";
+import { Check, CircleCheck, CircleX, Package, Search, Undo2, X } from "lucide-react";
+import Badge from "./ui/Badge";
+import Button from "./ui/Button";
+import Segmented from "./ui/Segmented";
+import "../theme/appearance.css";
 
-const card: React.CSSProperties = {
-  background: "#151515",
-  border: "1px solid #6d28d9",
-  borderRadius: 12,
-  padding: 20,
-  maxWidth: 760,
-};
-
-const fieldStyle: React.CSSProperties = {
-  flex: "1 1 240px",
-  minWidth: 0,
-  padding: 10,
-  borderRadius: 10,
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #6d28d9",
+type Props = {
+  /** The section's id, for a page index to scroll to. */
+  id?: string;
 };
 
 const TYPE_LABELS: Record<StarterMod["type"], string | null> = {
   mod: null,
-  resourcepack: "resource pack",
-  shader: "shader",
-  datapack: "data pack",
+  resourcepack: "Resource pack",
+  shader: "Shader",
+  datapack: "Data pack",
 };
 
 const SEARCH_TYPES: { value: StarterMod["type"]; label: string }[] = [
@@ -46,10 +38,10 @@ const message = (err: unknown) =>
 
 /*
  * The projects added to every new instance. Each change is saved straight away. A
- * project can be turned off without losing it, or removed, and the list can go back
- * to how it started.
+ * project can be turned off without losing it, or removed (with Undo), and the list can go
+ * back to how it started.
  */
-export default function StarterModsSettings() {
+export default function StarterModsSettings({ id = "starter-mods" }: Props) {
   const [list, setList] = useState<StarterMod[] | null>(null);
   const [query, setQuery] = useState("");
   const [searchType, setSearchType] = useState<StarterMod["type"]>("mod");
@@ -58,6 +50,9 @@ export default function StarterModsSettings() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The list before the last removal, for Undo.
+  const [undo, setUndo] = useState<StarterMod[] | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
     window.instanceAPI
@@ -66,14 +61,23 @@ export default function StarterModsSettings() {
       .catch((err) => setError(message(err)));
   }, []);
 
-  async function run(action: () => Promise<StarterMod[]>, done?: string) {
+  // Reset waits a few seconds for its second press, then stands down.
+  useEffect(() => {
+    if (!confirmReset) return;
+    const timer = setTimeout(() => setConfirmReset(false), 4000);
+    return () => clearTimeout(timer);
+  }, [confirmReset]);
+
+  async function run(action: () => Promise<StarterMod[]>, done?: string, before: StarterMod[] | null = null) {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setUndo(null);
 
     try {
       setList(await action());
       if (done) setNotice(done);
+      setUndo(before);
     } catch (err) {
       setError(message(err));
     }
@@ -114,208 +118,203 @@ export default function StarterModsSettings() {
         entry.name.toLowerCase() === item.name.toLowerCase()
     );
 
-  const save = (next: StarterMod[], done?: string) => run(() => window.instanceAPI.starterModsSave(next), done);
+  const save = (next: StarterMod[], done?: string, before: StarterMod[] | null = null) =>
+    run(() => window.instanceAPI.starterModsSave(next), done, before);
   const on = list?.filter((entry) => entry.enabled).length ?? 0;
+  const searchLabel = SEARCH_TYPES.find((option) => option.value === searchType)?.label.toLowerCase() ?? "mods";
 
   return (
-    <div style={card} data-testid="starter-mods">
-      <h2 style={{ color: "#d8b4fe", marginBottom: 6 }}>Starter mods</h2>
-
-      <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 12 }}>
-        Added to every new instance, in the build for its Minecraft version and loader, with
-        whatever each one needs. One with no build for that version is skipped, and Create
-        Instance says which. Mods are only added to instances with a mod loader.
-      </p>
+    <section id={id} aria-labelledby={`${id}-title`} className="ui-panel set-panel" data-testid="starter-mods">
+      <div className="set-panel-head">
+        <div>
+          <h2 id={`${id}-title`} className="set-panel-title">
+            <Package size={18} aria-hidden="true" />
+            Starter mods
+          </h2>
+          <p className="set-lead">
+            Added to every new instance, in the build for its Minecraft version and loader, with whatever each one needs. One with
+            no build for that version is skipped, and Create Instance says which. Mods only go into instances with a mod loader.
+          </p>
+        </div>
+      </div>
 
       {list && (
         <>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-            <span data-testid="starter-count" style={{ color: "#d4d4d8", fontSize: 13, marginRight: "auto" }}>
-              {on} of {list.length} on
+          <div className="set-toolbar">
+            <span data-testid="starter-count" className="set-count">
+              <strong>{on}</strong> of {list.length} on
             </span>
-            <button
-              className="sidebar-button"
-              style={{ padding: "4px 10px", fontSize: 12 }}
-              disabled={busy}
-              onClick={() => save(list.map((entry) => ({ ...entry, enabled: true })))}
-            >
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => save(list.map((entry) => ({ ...entry, enabled: true })))}>
               All on
-            </button>
-            <button
-              className="sidebar-button"
-              style={{ padding: "4px 10px", fontSize: 12 }}
-              disabled={busy}
-              onClick={() => save(list.map((entry) => ({ ...entry, enabled: false })))}
-            >
+            </Button>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => save(list.map((entry) => ({ ...entry, enabled: false })))}>
               All off
-            </button>
-            <button
-              className="sidebar-button"
-              style={{ padding: "4px 10px", fontSize: 12 }}
+            </Button>
+            <Button
+              variant={confirmReset ? "danger" : "ghost"}
+              size="sm"
               disabled={busy}
               onClick={() => {
-                if (window.confirm("Put the starter mods back to the original list? Ones you added will go.")) {
-                  run(() => window.instanceAPI.starterModsReset(), "Back to the original list.");
+                if (!confirmReset) {
+                  setConfirmReset(true);
+                  return;
                 }
+                setConfirmReset(false);
+                run(() => window.instanceAPI.starterModsReset(), "Back to the original list.", list);
               }}
             >
-              Reset
-            </button>
+              {confirmReset ? "Reset? Ones you added will go" : "Reset"}
+            </Button>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))",
-              gap: "4px 14px",
-              marginBottom: 14,
-            }}
-          >
-            {list.map((entry) => (
-              <div
-                key={`${entry.source}:${entry.projectId}`}
-                data-testid="starter-mod"
-                style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}
-              >
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    flex: 1,
-                    minWidth: 0,
-                    color: entry.enabled ? "#e4e4e7" : "#6b7280",
-                    fontSize: 13,
-                    cursor: "pointer",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={entry.enabled}
+          {list.length === 0 ? (
+            <p className="set-help">Nothing yet. Search below to add a mod every new instance should have.</p>
+          ) : (
+            <ul className="set-ticks">
+              {list.map((entry) => (
+                <li key={`${entry.source}:${entry.projectId}`} data-testid="starter-mod" className="set-tick-row">
+                  <label className={`set-check${entry.enabled ? "" : " set-check--off"}`} title={entry.name}>
+                    <input
+                      type="checkbox"
+                      checked={entry.enabled}
+                      disabled={busy}
+                      onChange={() => save(list.map((other) => (other === entry ? { ...other, enabled: !other.enabled } : other)))}
+                    />
+                    <span className="set-check-box" aria-hidden="true">
+                      {entry.enabled && <Check size={13} strokeWidth={3} />}
+                    </span>
+                    <span className="set-check-name">{entry.name}</span>
+                    {TYPE_LABELS[entry.type] && <Badge>{TYPE_LABELS[entry.type]}</Badge>}
+                  </label>
+                  <Button
+                    variant="ghost"
+                    className="set-icon-button"
+                    aria-label={`Remove ${entry.name}`}
+                    title={`Remove ${entry.name}`}
                     disabled={busy}
-                    onChange={() =>
-                      save(list.map((other) => (other === entry ? { ...other, enabled: !other.enabled } : other)))
-                    }
-                  />
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={entry.name}>
-                    {entry.name}
-                    {TYPE_LABELS[entry.type] && (
-                      <span style={{ color: "#a78bfa", fontSize: 11 }}> ({TYPE_LABELS[entry.type]})</span>
-                    )}
-                  </span>
-                </label>
-                <button
-                  aria-label={`Remove ${entry.name}`}
-                  title={`Remove ${entry.name}`}
+                    onClick={() => save(list.filter((other) => other !== entry), `Removed ${entry.name}.`, list)}
+                  >
+                    <X size={16} aria-hidden="true" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {error && (
+            <p role="alert" className="set-message set-message--danger" style={{ marginTop: "var(--space-3)" }}>
+              <CircleX size={14} aria-hidden="true" />
+              {error}
+            </p>
+          )}
+          {notice && (
+            <p role="status" className="set-message set-message--success" style={{ marginTop: "var(--space-3)", alignItems: "center" }}>
+              <CircleCheck size={14} aria-hidden="true" style={{ marginTop: 0 }} />
+              {notice}
+              {undo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Undo2 size={14} aria-hidden="true" />}
                   disabled={busy}
-                  onClick={() => save(list.filter((other) => other !== entry), `Removed ${entry.name}.`)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "#6b7280",
-                    cursor: "pointer",
-                    fontSize: 16,
-                    lineHeight: 1,
-                    padding: "0 4px",
-                  }}
+                  onClick={() => save(undo, "Put back.")}
                 >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
+                  Undo
+                </Button>
+              )}
+            </p>
+          )}
 
           <div data-testid="starter-search">
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search for a mod to add..."
-                aria-label="Search for a starter mod"
-                style={fieldStyle}
-              />
-              <select
-                aria-label="What to search for"
-                value={searchType}
-                onChange={(event) => setSearchType(event.target.value as StarterMod["type"])}
-                style={{ ...fieldStyle, flex: "0 0 auto" }}
-              >
-                {SEARCH_TYPES.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+            <div className="set-search">
+              <div className="set-search-field">
+                <Search size={16} aria-hidden="true" />
+                <input
+                  className="ui-input"
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={`Search ${searchLabel} to add...`}
+                  aria-label="Search for a starter mod"
+                />
+              </div>
+              <Segmented label="What to search for" value={searchType} options={SEARCH_TYPES} onChange={setSearchType} />
             </div>
 
-            {searching && <p style={{ color: "#9ca3af", fontSize: 12, margin: "8px 0 0" }}>Searching...</p>}
+            {searching && <p className="set-message set-message--muted" style={{ marginTop: "var(--space-2)" }}>Searching...</p>}
 
             {shown && !searching && shown.length === 0 && (
-              <p style={{ color: "#9ca3af", fontSize: 12, margin: "8px 0 0" }}>Nothing found.</p>
+              <p className="set-message set-message--muted" style={{ marginTop: "var(--space-2)" }}>
+                Nothing found.
+              </p>
             )}
 
             {shown && shown.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+              <ul className="set-list set-results" aria-label="Search results">
                 {shown.map((item) => {
                   const added = inList(item);
                   const source = preferredSource(item);
 
                   return (
-                    <div
-                      key={`${item.source}:${item.id}`}
-                      data-testid="starter-result-row"
-                      style={{ display: "flex", alignItems: "center", gap: 10, padding: 6, borderRadius: 8, background: "#1b1b1b" }}
-                    >
+                    <li key={`${item.source}:${item.id}`} data-testid="starter-result-row" className="set-item">
                       {item.icon ? (
-                        <img src={item.icon} alt="" width={32} height={32} style={{ borderRadius: 6, flex: "0 0 auto" }} />
+                        <img src={item.icon} alt="" width={32} height={32} className="set-icon" />
                       ) : (
-                        <div style={{ width: 32, height: 32, borderRadius: 6, background: "#2b1d47", flex: "0 0 auto" }} />
+                        <span className="set-monogram" aria-hidden="true">
+                          {item.name.slice(0, 1).toUpperCase()}
+                        </span>
                       )}
-                      <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                        <div style={{ color: "#ede9fe", fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {item.name}
+                      <div className="set-item-text">
+                        <div className="set-item-name">
+                          <span>{item.name}</span>
                         </div>
-                        <div style={{ color: "#6b7280", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {item.sources.map((entry) => (entry.source === "modrinth" ? "Modrinth" : "CurseForge")).join(" + ")} ·{" "}
-                          {formatDownloads(item.downloads)} downloads · {item.summary}
+                        <div className="set-item-meta">
+                          {item.sources.map((entry) => (entry.source === "modrinth" ? "Modrinth" : "CurseForge")).join(" + ")},{" "}
+                          {formatDownloads(item.downloads)} downloads. {item.summary}
                         </div>
                       </div>
-                      <button
-                        className="sidebar-button"
-                        style={{ padding: "4px 12px", fontSize: 12, background: added || !source ? undefined : "#7c3aed" }}
-                        disabled={busy || added || !source}
-                        title={!source ? "Its author doesn't allow launchers to download it." : undefined}
-                        onClick={() =>
-                          source &&
-                          run(
-                            () =>
-                              window.instanceAPI.starterModsAdd({
-                                source: source.source,
-                                projectId: source.id,
-                                name: item.name,
-                                type: searchType,
-                              }),
-                            `Added ${item.name}.`
-                          )
-                        }
-                      >
-                        {added ? "Added" : source ? "Add" : "Can't add"}
-                      </button>
-                    </div>
+                      {added ? (
+                        <Badge tone="success">
+                          <Check size={12} aria-hidden="true" />
+                          Added
+                        </Badge>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={busy || !source}
+                          title={!source ? "Its author doesn't allow launchers to download it." : undefined}
+                          onClick={() =>
+                            source &&
+                            run(
+                              () =>
+                                window.instanceAPI.starterModsAdd({
+                                  source: source.source,
+                                  projectId: source.id,
+                                  name: item.name,
+                                  type: searchType,
+                                }),
+                              `Added ${item.name}.`
+                            )
+                          }
+                        >
+                          {source ? "Add" : "Can't add"}
+                        </Button>
+                      )}
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             )}
           </div>
         </>
       )}
 
-      {error && (
-        <p role="alert" style={{ color: "#fca5a5", fontSize: 13, margin: "8px 0 0" }}>
+      {!list && error && (
+        <p role="alert" className="set-message set-message--danger">
+          <CircleX size={14} aria-hidden="true" />
           {error}
         </p>
       )}
-      {notice && <p style={{ color: "#86efac", fontSize: 13, margin: "8px 0 0" }}>{notice}</p>}
-    </div>
+    </section>
   );
 }

@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Download } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, Download, X } from "lucide-react";
+import Button from "./ui/Button";
+import { useDownloads } from "./ui/downloadsContext";
 
 const GAME_NAMES: Record<string, string> = {
   sims4: "The Sims 4",
@@ -10,85 +12,93 @@ const GAME_NAMES: Record<string, string> = {
   stardew: "Stardew Valley",
 };
 
-const STATUS: Record<GameQueueItem["status"], { label: string; colour: string }> = {
-  waiting: { label: "Waiting", colour: "#9ca3af" },
-  working: { label: "Getting it", colour: "#c084fc" },
-  website: { label: "On Nexus Mods", colour: "#fcd34d" },
-  done: { label: "Done", colour: "#86efac" },
-  failed: { label: "Didn't work", colour: "#fca5a5" },
-  skipped: { label: "Skipped", colour: "#6b7280" },
+const STATUS: Record<GameQueueItem["status"], string> = {
+  waiting: "Waiting",
+  working: "Getting it",
+  website: "On Nexus Mods",
+  done: "Done",
+  failed: "Didn't work",
+  skipped: "Skipped",
 };
-
-const button: React.CSSProperties = { padding: "5px 10px", fontSize: 12 };
 
 /*
  * The game sections' downloads, on every page: what's being got now, how many are left,
- * and for a free Nexus account, which page to press the download button on.
+ * and for a free Nexus account, which page to press the download button on. The sidebar's
+ * Downloads button opens it even when nothing is queued.
  */
 export default function DownloadQueue() {
-  const [queue, setQueue] = useState<GameQueue | null>(null);
+  const { queue, left, shown, hide } = useDownloads();
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (!window.gamesAPI?.queue) return;
-    let active = true;
-    window.gamesAPI
-      .queue()
-      .then((found) => active && found && setQueue(found))
-      .catch(() => {});
-    const stop = window.gamesAPI.onQueue((next) => setQueue(next));
-    return () => {
-      active = false;
-      stop();
-    };
-  }, []);
+  const counts = queue?.counts;
+  const finished = counts ? counts.done + counts.failed + counts.skipped : 0;
+  const hasQueue = Boolean(counts && counts.total > 0 && (left || open || finished));
+  if (!hasQueue && !shown) return null;
 
-  if (!queue || queue.counts.total === 0) return null;
-  const { current, counts } = queue;
-  const left = counts.waiting + (current ? 1 : 0);
-  const finished = counts.done + counts.failed + counts.skipped;
-  if (!left && !open && finished === 0) return null;
+  // Opened from the sidebar with nothing queued.
+  if (!hasQueue || !queue || !counts) {
+    return (
+      <section className="ui-queue" data-testid="download-queue" aria-label="Downloads">
+        <div className="ui-queue__head">
+          <Download size={16} aria-hidden="true" />
+          <span className="ui-queue__title">Downloads</span>
+          <button type="button" className="ui-queue__icon-button" onClick={hide} aria-label="Close downloads">
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+        <p className="ui-queue__empty">
+          Nothing downloading. Updates, missing requirements and collections you get for your games line up here and
+          carry on whichever page you're on.
+        </p>
+      </section>
+    );
+  }
+
+  const { current } = queue;
   const fraction = counts.total ? finished / counts.total : 0;
 
   return (
-    <div
-      data-testid="download-queue"
-      style={{
-        position: "fixed",
-        right: 16,
-        bottom: 48,
-        zIndex: 8000,
-        width: 380,
-        maxWidth: "calc(100vw - 32px)",
-        background: "#17141f",
-        border: "1px solid #6d28d9",
-        borderRadius: 12,
-        boxShadow: "0 12px 30px rgba(0, 0, 0, 0.5)",
-        color: "#e4e4e7",
-        fontFamily: "system-ui, sans-serif",
-        fontSize: 13,
-        textAlign: "left",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" }}>
-        <Download size={16} color="#c084fc" />
-        <span style={{ flex: 1, fontWeight: 600, color: "#e9d5ff" }}>
-          {left ? `Downloads: ${left} to go` : `Downloads: all done${counts.failed ? ` (${counts.failed} didn't work)` : ""}`}
+    <section className="ui-queue" data-testid="download-queue" aria-label="Downloads">
+      <div className="ui-queue__head">
+        <Download size={16} aria-hidden="true" />
+        <span className="ui-queue__title" aria-live="polite">
+          Downloads:{" "}
+          <span className="ui-queue__count">
+            {left ? `${left} to go` : `all done${counts.failed ? ` (${counts.failed} didn't work)` : ""}`}
+          </span>
         </span>
-        <button onClick={() => setOpen((now) => !now)} aria-label={open ? "Hide the list" : "Show the list"} style={{ background: "none", border: "none", color: "#c084fc", cursor: "pointer", display: "flex" }}>
-          {open ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+        <button
+          type="button"
+          className="ui-queue__icon-button"
+          onClick={() => setOpen((now) => !now)}
+          aria-label={open ? "Hide the list" : "Show the list"}
+          aria-expanded={open}
+        >
+          {open ? <ChevronDown size={18} aria-hidden="true" /> : <ChevronUp size={18} aria-hidden="true" />}
         </button>
+        {shown && (
+          <button type="button" className="ui-queue__icon-button" onClick={hide} aria-label="Close downloads">
+            <X size={16} aria-hidden="true" />
+          </button>
+        )}
       </div>
-      <div style={{ height: 3, background: "#2e2e2e", margin: "0 12px" }}>
-        <div style={{ width: `${Math.round(fraction * 100)}%`, height: "100%", background: "#7c3aed", transition: "width .2s" }} />
+      <div
+        className="ui-queue__track"
+        role="progressbar"
+        aria-label="Downloads finished"
+        aria-valuemin={0}
+        aria-valuemax={counts.total}
+        aria-valuenow={finished}
+      >
+        <div className="ui-queue__fill" style={{ width: `${Math.round(fraction * 100)}%` }} />
       </div>
 
       {current && (
-        <div style={{ padding: "10px 12px 0" }} data-testid="queue-current">
-          <div style={{ color: "#e9d5ff" }}>
-            {current.name} <span style={{ color: "#6b7280" }}>• {GAME_NAMES[current.gameId] ?? current.gameId}</span>
+        <div className="ui-queue__current" data-testid="queue-current">
+          <div className="ui-queue__name">
+            {current.name} <span className="ui-queue__game">in {GAME_NAMES[current.gameId] ?? current.gameId}</span>
           </div>
-          <div style={{ color: current.status === "website" ? "#fcd34d" : "#9ca3af", fontSize: 12, marginTop: 3, lineHeight: 1.4 }}>
+          <div className={`ui-queue__detail${current.status === "website" ? " ui-queue__detail--website" : ""}`}>
             {current.status === "website"
               ? "Press the download button on the Nexus Mods page that opened; the launcher installs it and opens the next."
               : (current.detail ?? "Getting it...")}
@@ -96,46 +106,46 @@ export default function DownloadQueue() {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 6, padding: "10px 12px", flexWrap: "wrap" }}>
+      <div className="ui-queue__actions">
         {current?.status === "website" && (
           <>
-            <button className="sidebar-button" style={button} onClick={() => window.gamesAPI.queueControl("open")}>
+            <Button size="sm" variant="secondary" onClick={() => window.gamesAPI.queueControl("open")}>
               Open the page again
-            </button>
-            <button className="sidebar-button" style={button} onClick={() => window.gamesAPI.queueControl("skip")}>
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => window.gamesAPI.queueControl("skip")}>
               Skip this one
-            </button>
+            </Button>
           </>
         )}
         {left > 0 && (
-          <button className="sidebar-button" style={button} onClick={() => window.gamesAPI.queueControl("stop")}>
+          <Button size="sm" variant="ghost" onClick={() => window.gamesAPI.queueControl("stop")}>
             Stop
-          </button>
+          </Button>
         )}
         {counts.failed > 0 && (
-          <button className="sidebar-button" style={button} onClick={() => window.gamesAPI.queueControl("retry")}>
+          <Button size="sm" variant="secondary" onClick={() => window.gamesAPI.queueControl("retry")}>
             Try failed again
-          </button>
+          </Button>
         )}
         {!left && (
-          <button className="sidebar-button" style={button} onClick={() => window.gamesAPI.queueControl("clear")}>
+          <Button size="sm" variant="ghost" onClick={() => window.gamesAPI.queueControl("clear")}>
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
       {open && (
-        <div style={{ maxHeight: 260, overflowY: "auto", borderTop: "1px solid #2e2e2e", padding: "6px 12px 10px" }}>
+        <ul className="ui-queue__list">
           {queue.items.map((item) => (
-            <div key={item.id} style={{ display: "flex", gap: 8, padding: "4px 0", fontSize: 12 }}>
-              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={item.error ?? undefined}>
-                {item.name} <span style={{ color: "#6b7280" }}>• {GAME_NAMES[item.gameId] ?? item.gameId}</span>
+            <li key={item.id} className="ui-queue__row">
+              <span className="ui-queue__row-name" title={item.error ?? undefined}>
+                {item.name} <span className="ui-queue__game">in {GAME_NAMES[item.gameId] ?? item.gameId}</span>
               </span>
-              <span style={{ color: STATUS[item.status].colour, flexShrink: 0 }}>{STATUS[item.status].label}</span>
-            </div>
+              <span className={`ui-queue__status ui-queue__status--${item.status}`}>{STATUS[item.status]}</span>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </section>
   );
 }

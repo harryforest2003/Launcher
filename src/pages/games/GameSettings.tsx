@@ -9,7 +9,7 @@ type Props = {
   goLauncherSettings: () => void;
 };
 
-const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 14, padding: "12px 0", borderTop: "1px solid #262626" };
+const row: React.CSSProperties = { display: "flex", alignItems: "center", gap: 14, padding: "12px 0", borderTop: "1px solid var(--color-border)" };
 
 /* Where the game is, The Sims 4's own mod switches, and the Nexus Mods account. */
 export default function GameSettings({ detail, reload, goLauncherSettings }: Props) {
@@ -46,15 +46,15 @@ export default function GameSettings({ detail, reload, goLauncherSettings }: Pro
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <h1 style={{ color: "#c084fc", margin: 0 }}>{detail.name} Settings</h1>
+      <h1 style={{ margin: 0 }}>{detail.name} Settings</h1>
       {error && <div style={note("bad")}>{error}</div>}
 
       <div style={panel}>
-        <div style={{ color: "#c084fc", fontWeight: 600, marginBottom: 8 }}>Where it is</div>
+        <div style={{ color: "var(--color-accent-text)", fontWeight: 600, marginBottom: 8 }}>Where it is</div>
         <div style={{ ...row, borderTop: "none" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div>Game folder</div>
-            <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3, wordBreak: "break-all" }} data-testid="game-folder">
+            <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3, wordBreak: "break-all" }} data-testid="game-folder">
               {detail.gameDir ? `${detail.gameDir} (${detail.chosen ? "chosen by you" : `found via ${detail.source}`})` : "Not found"}
             </div>
           </div>
@@ -76,7 +76,7 @@ export default function GameSettings({ detail, reload, goLauncherSettings }: Pro
           <div style={row}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div>Documents folder</div>
-              <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3, wordBreak: "break-all" }}>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3, wordBreak: "break-all" }}>
                 {detail.docsDir ?? "Not found"}. The Sims 4 keeps Mods, Tray and its options here.
               </div>
             </div>
@@ -102,38 +102,38 @@ export default function GameSettings({ detail, reload, goLauncherSettings }: Pro
 
       {detail.id === "sims4" && (
         <div style={panel}>
-          <div style={{ color: "#c084fc", fontWeight: 600, marginBottom: 8 }}>The Sims 4's own mod switches</div>
+          <div style={{ color: "var(--color-accent-text)", fontWeight: 600, marginBottom: 8 }}>The Sims 4's own mod switches</div>
           {sims ? (
             <>
               <div style={{ ...row, borderTop: "none" }}>
                 <div style={{ flex: 1 }}>
                   <div>Custom content and mods</div>
-                  <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3 }}>When off, the game loads nothing from the Mods folder.</div>
+                  <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3 }}>When off, the game loads nothing from the Mods folder.</div>
                 </div>
                 <Toggle on={sims.mods} label="Custom content and mods" onChange={(on) => act(() => window.gamesAPI.setSimsOptions({ mods: on }))} />
               </div>
               <div style={row}>
                 <div style={{ flex: 1 }}>
                   <div>Script mods</div>
-                  <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3 }}>
+                  <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3 }}>
                     .ts4script mods. These are the ones game updates break; Play turns them off for you after an update if you choose.
                   </div>
                 </div>
                 <Toggle on={sims.scripts} label="Script mods" onChange={(on) => act(() => window.gamesAPI.setSimsOptions({ scripts: on }))} />
               </div>
-              <div style={{ color: "#6b7280", fontSize: 12, marginTop: 6 }}>Changes take effect the next time the game starts; change them with the game closed.</div>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 6 }}>Changes take effect the next time the game starts; change them with the game closed.</div>
             </>
           ) : (
-            <div style={{ color: "#9ca3af", fontSize: 13 }}>The Sims 4 hasn't made its options file yet: start the game once, then these switches appear.</div>
+            <div style={{ color: "var(--color-text-muted)", fontSize: 13 }}>The Sims 4 hasn't made its options file yet: start the game once, then these switches appear.</div>
           )}
         </div>
       )}
 
       {detail.nexus && (
         <div style={panel}>
-          <div style={{ color: "#c084fc", fontWeight: 600, marginBottom: 8 }}>Nexus Mods</div>
+          <div style={{ color: "var(--color-accent-text)", fontWeight: 600, marginBottom: 8 }}>Nexus Mods</div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ flex: 1, fontSize: 13, color: "#d4d4d8", lineHeight: 1.5 }} data-testid="nexus-account">
+            <div style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.5 }} data-testid="nexus-account">
               {account === undefined
                 ? "Checking..."
                 : account
@@ -147,7 +147,7 @@ export default function GameSettings({ detail, reload, goLauncherSettings }: Pro
           <div style={{ ...row, marginTop: 10 }} data-testid="adult-setting">
             <div style={{ flex: 1 }}>
               <div>Adult mods</div>
-              <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>
                 {!adult
                   ? "Checking..."
                   : adult.error

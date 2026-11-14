@@ -131,14 +131,14 @@ function Card({ item, want, busy, confirming, onToggle, onReveal, onDelete }: {
 
   return (
     <div ref={ref} data-testid="cc-card" className="cc-card" title={item.rel} style={{ opacity: item.enabled ? 1 : 0.55 }}>
-      <div className="cc-picture" style={{ borderColor: item.broken ? "#b91c1c" : undefined }}>
+      <div className="cc-picture" style={{ borderColor: item.broken ? "var(--color-danger-border)" : undefined }}>
         {picture ? (
           <img src={picture} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} draggable={false} />
         ) : (
-          <Icon size={46} color="#8b8b99" strokeWidth={1.5} style={{ opacity: item.picture && picture === undefined ? 0.4 : 1 }} />
+          <Icon size={46} color="var(--color-text-muted)" strokeWidth={1.5} style={{ opacity: item.picture && picture === undefined ? 0.4 : 1 }} />
         )}
         {!item.enabled && <span className="cc-badge">Off</span>}
-        {item.broken && <span className="cc-badge" style={{ background: "#7f1d1d" }}>Damaged</span>}
+        {item.broken && <span className="cc-badge" style={{ background: "var(--color-danger-solid)" }}>Damaged</span>}
         <div className="cc-actions">
           <Toggle on={item.enabled} label={item.enabled ? `Turn off ${item.name}` : `Turn on ${item.name}`} disabled={busy} onChange={onToggle} />
           <IconButton tip="Show it in its folder" label={`Show ${item.name} in its folder`} onClick={onReveal} style={{ width: 30, height: 30 }}>
@@ -166,13 +166,13 @@ function Card({ item, want, busy, confirming, onToggle, onReveal, onDelete }: {
 
 /* Tiles like the instance library's: a picture, its name and one line; the buttons show on hover. */
 const CARD_CSS = `
-.cc-card { background: #1f1f24; border: 1px solid #2c2c33; border-radius: 18px; padding: 12px 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; transition: border-color 0.15s; }
-.cc-card:hover, .cc-card:focus-within { border-color: #6d28d9; }
-.cc-picture { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: #2c2c35; border: 1px solid #383842; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
-.cc-name { font-weight: 700; font-size: 15px; color: #f4f4f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cc-sub { font-size: 13px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cc-badge { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); color: #e4e4e7; }
-.cc-actions { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 12px; background: rgba(18, 18, 22, 0.88); opacity: 0; transform: translateY(4px); transition: opacity 0.15s, transform 0.15s; }
+.cc-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; padding: 12px 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; transition: border-color 0.15s; }
+.cc-card:hover, .cc-card:focus-within { border-color: var(--color-border); }
+.cc-picture { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--color-surface-raised); border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+.cc-name { font-weight: 700; font-size: 15px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-sub { font-size: 13px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cc-badge { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--color-scrim); color: var(--color-text-secondary); }
+.cc-actions { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 12px; background: var(--color-surface); opacity: 0; transform: translateY(4px); transition: opacity 0.15s, transform 0.15s; }
 .cc-actions > :first-child { margin-right: auto; }
 .cc-card:hover .cc-actions, .cc-card:focus-within .cc-actions { opacity: 1; transform: none; }
 `;
@@ -251,8 +251,8 @@ export default function CCBrowser({ detail, reload }: Props) {
       <style>{CARD_CSS}</style>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
         <div style={{ flex: 1 }}>
-          <h2 style={{ margin: 0, color: "#e9d5ff" }}>CC</h2>
-          <div style={{ color: "#9ca3af", fontSize: 13, marginTop: 4 }}>
+          <h2 style={{ margin: 0 }}>CC</h2>
+          <div style={{ color: "var(--color-text-muted)", fontSize: 13, marginTop: 4 }}>
             {items ? `${items.length} file${items.length === 1 ? "" : "s"} • ${sizeText(totalSize)}${offCount ? ` • ${offCount} off` : ""}` : "Looking through your Mods folder..."}
           </div>
         </div>
@@ -271,7 +271,7 @@ export default function CCBrowser({ detail, reload }: Props) {
             setLimit(PAGE);
           }}
           placeholder="Search your CC..."
-          style={{ flex: "1 1 220px", padding: 12, borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9" }}
+          style={{ flex: "1 1 220px", padding: 12, borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}
         />
         {CATEGORIES.filter((option) => option.id === "all" || counts[option.id]).map((option) => (
           <button
@@ -281,7 +281,7 @@ export default function CCBrowser({ detail, reload }: Props) {
               setCategory(option.id);
               setLimit(PAGE);
             }}
-            style={{ fontSize: 12, padding: "8px 12px", opacity: activeCategory === option.id ? 1 : 0.6, ...(activeCategory === option.id ? { background: "#6d28d9" } : {}) }}
+            style={{ fontSize: 12, padding: "8px 12px", opacity: activeCategory === option.id ? 1 : 0.6, ...(activeCategory === option.id ? { background: "var(--color-accent-subtle)" } : {}) }}
           >
             {option.label} ({counts[option.id] ?? 0})
           </button>
@@ -291,7 +291,7 @@ export default function CCBrowser({ detail, reload }: Props) {
             value={showing}
             onChange={(event) => setShowing(event.target.value as "all" | "on" | "off")}
             aria-label="On or off"
-            style={{ padding: "8px 10px", borderRadius: 10, background: "#1b1b1b", color: "white", border: "1px solid #6d28d9", fontSize: 12 }}
+            style={{ padding: "8px 10px", borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 12 }}
           >
             <option value="all">On and off</option>
             <option value="on">Only on</option>
@@ -301,11 +301,11 @@ export default function CCBrowser({ detail, reload }: Props) {
       </div>
 
       {loading && !items ? (
-        <div style={{ color: "#9ca3af", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
           <ImageIcon size={16} /> Reading your CC (the first time takes a little while)...
         </div>
       ) : !shown.length ? (
-        <div style={{ color: "#9ca3af", fontSize: 14 }}>{items?.length ? "Nothing matches." : "There's no CC or script mods in your Mods folder yet."}</div>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 14 }}>{items?.length ? "Nothing matches." : "There's no CC or script mods in your Mods folder yet."}</div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 18 }}>
           {shown.slice(0, limit).map((item) => (

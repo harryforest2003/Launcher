@@ -16,6 +16,8 @@ declare global {
         assetIndex?: string;
         installed: boolean;
         running?: boolean;
+        /** Who its open (or starting) game plays as; null offline or when it isn't open. */
+        playingAs?: GamePlayer | null;
         jvmArgs?: string;
         javaPath?: string;
         notes?: string;
@@ -24,6 +26,9 @@ declare global {
     };
 
     type MinecraftAccount = { name: string; uuid: string; skin: string | null; savedAt: string; active: boolean };
+
+    /** The signed-in account an open game plays as: id is its MinecraftAccount uuid. */
+    type GamePlayer = { id: string; name: string };
 
     type InstanceWorld = {
         /** The folder in saves/, which is how a world is named to the launcher. */
@@ -331,6 +336,8 @@ declare global {
             platform: string;
             arch: string;
         };
+        /** The colour the whole UI is dyed with (Settings > Appearance). Missing until first changed. */
+        theme?: import("../theme/engine").ThemeSettings;
     };
 
     // A project added to every new instance.
@@ -444,15 +451,19 @@ declare global {
             repair(name: string): Promise<Instance>;
             remove(name: string): Promise<{ deleted: string }>;
 
-            launch(name: string): Promise<{
+            /** As the signed-in account with this id, or the active one. Refused while that account is in another game. */
+            launch(name: string, accountId?: string): Promise<{
                 launched: boolean;
                 name: string;
                 pid: number;
                 online: boolean;
                 playerName: string;
+                account: GamePlayer | null;
             }>;
 
             stop(name: string): Promise<{ stopped: string }>;
+            /** Every open or starting game's player, by instance name (null: offline). */
+            playing(): Promise<Record<string, GamePlayer | null>>;
             openFolder(name: string): Promise<string>;
             /** Worlds in the instance, most recently played first. */
             worlds(name: string): Promise<InstanceWorld[]>;
@@ -664,6 +675,7 @@ declare global {
             openLogFile(name: string, file?: string): Promise<void>;
             onLog(cb: (d: { name: string; text: string }) => void): () => void;
             onExit(cb: (d: { name: string; code: number }) => void): () => void;
+            onStarted(cb: (d: { name: string; account: GamePlayer | null }) => void): () => void;
         };
 
     }

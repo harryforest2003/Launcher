@@ -39,7 +39,7 @@ export default function LeaveBlockbenchPrompt() {
     <div
       data-testid="leave-blockbench"
       onClick={() => answer("cancel")}
-      style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0, 0, 0, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{ position: "fixed", inset: 0, zIndex: 9000, background: "var(--color-scrim)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
     >
       <div
         role="alertdialog"
@@ -49,22 +49,22 @@ export default function LeaveBlockbenchPrompt() {
         onClick={(event) => event.stopPropagation()}
         style={{
           width: "min(460px, 100%)",
-          background: "#17141f",
-          border: "1px solid #6d28d9",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
           borderRadius: 14,
-          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6)",
+          boxShadow: "0 20px 60px var(--color-shadow)",
           padding: "22px 24px 20px",
           textAlign: "left",
-          color: "#e4e4e7",
+          color: "var(--color-text-secondary)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
           <img src={blockbenchLogo} alt="" style={{ width: 30, height: 30, flexShrink: 0 }} />
-          <div id="leave-blockbench-title" style={{ fontSize: 17, fontWeight: 600, color: "#e9d5ff" }}>
+          <div id="leave-blockbench-title" style={{ fontSize: 17, fontWeight: 600, color: "var(--color-accent-text)" }}>
             Save your changes before leaving Blockbench?
           </div>
         </div>
-        <div id="leave-blockbench-detail" style={{ fontSize: 13, color: "#9ca3af", marginBottom: 20 }}>
+        <div id="leave-blockbench-detail" style={{ fontSize: 13, color: "var(--color-text-muted)", marginBottom: 20 }}>
           They haven't been saved back to Unity Launcher yet.
         </div>
 
@@ -74,7 +74,7 @@ export default function LeaveBlockbenchPrompt() {
           </button>
           <button
             className="sidebar-button"
-            style={{ padding: "8px 16px", fontSize: 13, borderColor: "#b91c4b", color: "#fda4af" }}
+            style={{ padding: "8px 16px", fontSize: 13, borderColor: "var(--color-danger-border)", color: "var(--color-danger-text)" }}
             onClick={() => answer("discard")}
           >
             Exit without saving
@@ -82,7 +82,7 @@ export default function LeaveBlockbenchPrompt() {
           <button
             className="sidebar-button"
             autoFocus
-            style={{ padding: "8px 16px", fontSize: 13, background: "#7c3aed", borderColor: "#a78bfa" }}
+            style={{ padding: "8px 16px", fontSize: 13, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
             onClick={() => answer("save")}
           >
             Save changes

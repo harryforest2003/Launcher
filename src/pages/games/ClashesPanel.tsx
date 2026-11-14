@@ -130,7 +130,7 @@ export default function ClashesPanel({ detail, mods, reload }: Props) {
           {open ? "Hide" : "See which"}
         </button>
       </div>
-      {said && <div style={{ fontSize: 12, marginTop: 8, color: said.tone === "bad" ? "#fca5a5" : "#86efac" }}>{said.text}</div>}
+      {said && <div style={{ fontSize: 12, marginTop: 8, color: said.tone === "bad" ? "var(--color-danger-text)" : "var(--color-success-text)" }}>{said.text}</div>}
       {open && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
           {visible.map((clash) => {
@@ -138,7 +138,7 @@ export default function ClashesPanel({ detail, mods, reload }: Props) {
             const loser = clash.kind === "records" ? clash.mods.find((m) => m.name !== clash.winner) : null;
             const search = clash.kind === "records" ? patchSearch(clash) : null;
             return (
-              <div key={clash.id} style={{ padding: "8px 10px", background: "rgba(0, 0, 0, 0.25)", borderRadius: 8 }} data-testid="clash">
+              <div key={clash.id} style={{ padding: "8px 10px", background: "var(--color-hover)", borderRadius: 8 }} data-testid="clash">
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{text.title}</div>
                 <div style={{ fontSize: 12, marginTop: 3, opacity: 0.85 }}>{text.why}</div>
                 {clash.examples.length > 0 && (

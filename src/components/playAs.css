@@ -1,0 +1,37 @@
+/* "Play as" beside a Play button, and the notice when an account is already in a game (PlayAs.tsx). Tokens only. */
+
+.play-as__trigger {
+  padding: 0 var(--space-2);
+}
+
+/* "Play as" entries in the library's right-click menu: one in another game is greyed. */
+.lib-menu .play-as__item:disabled {
+  color: var(--color-text-disabled);
+  background: none;
+  cursor: default;
+}
+
+.play-as__clash {
+  text-align: start;
+}
+
+.play-as__clash--spaced {
+  margin-bottom: var(--space-4);
+}
+
+.play-as__clash-text {
+  margin: 0;
+  line-height: var(--leading-normal);
+}
+
+.play-as__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.play-as__clash-error {
+  margin: var(--space-2) 0 0;
+  color: var(--color-danger-text);
+}

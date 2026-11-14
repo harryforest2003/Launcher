@@ -1,5 +1,8 @@
 import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useRef, useState } from "react";
+import { SlidersHorizontal } from "lucide-react";
+import { Button, Tabs } from "../components/ui";
+import "./discover.css";
 import InstallToInstance from "../components/InstallToInstance";
 import Sidebar from "../components/MCSidebar";
 import Pagination from "../components/Pagination";
@@ -71,6 +74,33 @@ function MCDiscover({
   const [sort, setSort] = useState("Relevance");
 
   const [tab, setTab] = useState<Tab>("all");
+
+  // The loader, version, source and sort choices live behind one Filters button, so the
+  // content tabs can take the full width of the page.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  const activeFilters = [loader !== "Any Loader", version !== "Any Version", source !== "Any Source", sort !== "Relevance"].filter(Boolean).length;
+  const resetFilters = () => {
+    setLoader("Any Loader");
+    setVersion("Any Version");
+    setSource("Any Source");
+    setSort("Relevance");
+  };
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const away = (event: MouseEvent) => {
+      if (!filtersRef.current?.contains(event.target as Node)) setFiltersOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFiltersOpen(false);
+    };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [filtersOpen]);
 
   const [versions, setVersions] = useState<any[]>([]);
   const [result, setResult] = useState<CatalogPage | null>(null);
@@ -204,14 +234,14 @@ function MCDiscover({
   const dropdownStyle = {
     padding: "10px 12px",
     borderRadius: 10,
-    background: "#1b1b1b",
-    color: "white",
-    border: "1px solid #6d28d9",
+    background: "var(--color-surface-sunken)",
+    color: "var(--color-text)",
+    border: "1px solid var(--color-border)",
     fontSize: 13,
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#0d0d0d", color: "white" }}>
+    <div style={{ display: "flex", height: "100vh", background: "var(--color-bg)", color: "var(--color-text)" }}>
       <Sidebar
         currentPage="discover"
         goHome={goHome}
@@ -227,7 +257,7 @@ function MCDiscover({
       <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
       <BackgroundLogo />
       <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", position: "relative" }}>
-        <h1 style={{ color: "#c084fc" }}>Discover Content</h1>
+        <h1>Discover Content</h1>
 
         {/* SEARCH */}
         <input
@@ -238,63 +268,89 @@ function MCDiscover({
             width: "100%",
             padding: 14,
             borderRadius: 10,
-            background: "#1b1b1b",
-            color: "white",
-            border: "1px solid #6d28d9",
+            background: "var(--color-surface-sunken)",
+            color: "var(--color-text)",
+            border: "1px solid var(--color-border)",
           }}
         />
 
-        {/* TABS */}
-        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-          {(["all", "mods", "modpacks", "shaders", "datapacks", "resourcepacks"] as Tab[]).map(
-            (t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className="sidebar-button"
-                style={{
-                  fontSize: 12,
-                  padding: "6px 10px",
-                  opacity: tab === t ? 1 : 0.6,
-                }}
-              >
-                {TAB_LABELS[t]}
-              </button>
-            )
-          )}
-        </div>
+        {/* FILTERS (one button) and the content TABS, which share the rest of the row equally */}
+        <div className="dc-toolbar">
+          <div className="dc-filters" ref={filtersRef}>
+            <Button
+              variant={activeFilters ? "primary" : "secondary"}
+              icon={<SlidersHorizontal size={16} aria-hidden="true" />}
+              aria-expanded={filtersOpen}
+              aria-controls="discover-filters"
+              onClick={() => setFiltersOpen((open) => !open)}
+            >
+              Filters
+              {activeFilters > 0 && <span className="dc-filters__count">{activeFilters}</span>}
+            </Button>
 
-        {/* DROPDOWNS */}
-        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-          <select style={dropdownStyle} value={loader} onChange={(e) => setLoader(e.target.value)}>
-            <option>Any Loader</option>
-            <option>Fabric</option>
-            <option>Forge</option>
-            <option>NeoForge</option>
-            <option>Quilt</option>
-          </select>
+            {filtersOpen && (
+              <div id="discover-filters" role="group" aria-label="Filters" className="dc-filters__panel">
+                <label className="dc-field">
+                  <span>Loader</span>
+                  <select style={dropdownStyle} value={loader} onChange={(e) => setLoader(e.target.value)}>
+                    <option>Any Loader</option>
+                    <option>Fabric</option>
+                    <option>Forge</option>
+                    <option>NeoForge</option>
+                    <option>Quilt</option>
+                  </select>
+                </label>
 
-          <select style={dropdownStyle} value={version} onChange={(e) => setVersion(e.target.value)}>
-            <option>Any Version</option>
-            {versions.map((v: any, i) => {
-              const val = typeof v === "string" ? v : v.version || v.id;
-              return <option key={i}>{val}</option>;
-            })}
-          </select>
-	  <select
-	    style={dropdownStyle}
-	    value={source}
-	    onChange={(e) => setSource(e.target.value)}
-	  >
-	    <option>Any Source</option>
-	    <option>Modrinth</option>
-	    <option>CurseForge</option>
-	  </select>
-          <select style={dropdownStyle} value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option>Relevance</option>
-            <option>Downloads</option>
-            <option>Newest</option>
-          </select>
+                <label className="dc-field">
+                  <span>Minecraft version</span>
+                  <select style={dropdownStyle} value={version} onChange={(e) => setVersion(e.target.value)}>
+                    <option>Any Version</option>
+                    {versions.map((v: any, i) => {
+                      const val = typeof v === "string" ? v : v.version || v.id;
+                      return <option key={i}>{val}</option>;
+                    })}
+                  </select>
+                </label>
+
+                <label className="dc-field">
+                  <span>Source</span>
+                  <select style={dropdownStyle} value={source} onChange={(e) => setSource(e.target.value)}>
+                    <option>Any Source</option>
+                    <option>Modrinth</option>
+                    <option>CurseForge</option>
+                  </select>
+                </label>
+
+                <label className="dc-field">
+                  <span>Sort by</span>
+                  <select style={dropdownStyle} value={sort} onChange={(e) => setSort(e.target.value)}>
+                    <option>Relevance</option>
+                    <option>Downloads</option>
+                    <option>Newest</option>
+                  </select>
+                </label>
+
+                <div className="dc-filters__actions">
+                  <Button size="sm" variant="ghost" onClick={resetFilters} disabled={!activeFilters}>
+                    Reset
+                  </Button>
+                  <Button size="sm" onClick={() => setFiltersOpen(false)}>
+                    Done
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="dc-tabs">
+            <Tabs
+              label="Content type"
+              idBase="discover"
+              value={tab}
+              onChange={setTab}
+              tabs={(["all", "mods", "modpacks", "shaders", "datapacks", "resourcepacks"] as Tab[]).map((t) => ({ value: t, label: TAB_LABELS[t] }))}
+            />
+          </div>
         </div>
 
         {!curseForgeReady && (
@@ -303,9 +359,9 @@ function MCDiscover({
               marginTop: 16,
               padding: 14,
               borderRadius: 10,
-              background: "#2a1a05",
-              border: "1px solid #b45309",
-              color: "#fcd34d",
+              background: "var(--color-warning-bg)",
+              border: "1px solid var(--color-warning-border)",
+              color: "var(--color-warning-text)",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
@@ -326,9 +382,9 @@ function MCDiscover({
               marginTop: 16,
               padding: 14,
               borderRadius: 10,
-              background: "#2a0d0d",
-              border: "1px solid #ef4444",
-              color: "#fca5a5",
+              background: "var(--color-danger-bg)",
+              border: "1px solid var(--color-danger-border)",
+              color: "var(--color-danger-text)",
               whiteSpace: "pre-wrap",
             }}
           >
@@ -342,9 +398,9 @@ function MCDiscover({
               marginTop: 16,
               padding: 14,
               borderRadius: 10,
-              background: "#0d2a12",
-              border: "1px solid #166534",
-              color: "#86efac",
+              background: "var(--color-success-bg)",
+              border: "1px solid var(--color-success-border)",
+              color: "var(--color-success-text)",
             }}
           >
             {packResult}
@@ -357,27 +413,27 @@ function MCDiscover({
               marginTop: 16,
               padding: 14,
               borderRadius: 10,
-              background: "#1a1a1a",
-              border: "1px solid #6d28d9",
+              background: "var(--color-surface)",
+              border: "1px solid var(--color-border)",
             }}
           >
-            <div style={{ color: "#d8b4fe", marginBottom: 8 }}>
+            <div style={{ color: "var(--color-accent-text)", marginBottom: 8 }}>
               {packProgress.detail ?? packProgress.stage} ({packProgress.percent}%)
             </div>
 
-            <div style={{ height: 6, background: "#333", borderRadius: 3 }}>
+            <div style={{ height: 6, background: "var(--color-surface-raised)", borderRadius: 3 }}>
               <div
                 style={{
                   width: `${packProgress.percent}%`,
                   height: "100%",
-                  background: "#7c3aed",
+                  background: "var(--color-accent)", color: "var(--color-on-accent)",
                   borderRadius: 3,
                   transition: "width .2s",
                 }}
               />
             </div>
 
-            <div style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>
+            <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8 }}>
               Downloading Minecraft, the loader and every mod in the pack.
             </div>
           </div>
@@ -390,9 +446,9 @@ function MCDiscover({
               marginTop: 16,
               padding: 14,
               borderRadius: 10,
-              background: "#2a1a05",
-              border: "1px solid #b45309",
-              color: "#fcd34d",
+              background: "var(--color-warning-bg)",
+              border: "1px solid var(--color-warning-border)",
+              color: "var(--color-warning-text)",
               fontSize: 13,
             }}
           >
@@ -403,7 +459,7 @@ function MCDiscover({
         {/* PAGES */}
         <div ref={listTop} style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
           {totals && (
-            <div data-testid="page-summary" style={{ fontSize: 12, color: "#9ca3af" }}>
+            <div data-testid="page-summary" style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
               {source !== "CurseForge" && `${totals.modrinth.toLocaleString()} on Modrinth`}
               {source === "Any Source" && " • "}
               {source !== "Modrinth" &&
@@ -417,7 +473,7 @@ function MCDiscover({
           )}
 
           {source !== "Modrinth" && totals?.curseforgeCapped && (
-            <div data-testid="curseforge-limit" style={{ fontSize: 11, color: "#6b7280" }}>
+            <div data-testid="curseforge-limit" style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
               CurseForge only lets apps reach the first 10,000 results of a search. Search or filter to get to the rest.
             </div>
           )}
@@ -428,13 +484,10 @@ function MCDiscover({
           {loading ? (
             <div>Loading...</div>
           ) : items.length === 0 ? (
-            <div style={{ color: "#9ca3af", padding: 20 }}>
+            <div style={{ color: "var(--color-text-muted)", padding: 20 }}>
               No {tab === "all" ? "content" : TAB_LABELS[tab].toLowerCase()} found
               {search.trim() ? ` for "${search.trim()}"` : ""}.
-              {(loader !== "Any Loader" ||
-                version !== "Any Version" ||
-                source !== "Any Source") &&
-                " Try clearing the filters."}
+              {activeFilters > 0 && " Try clearing the filters."}
             </div>
           ) : (
             items.map((item) => (
@@ -469,7 +522,7 @@ function MCDiscover({
                     height: 70,
                     borderRadius: 10,
                     overflow: "hidden",
-                    border: "1px solid #6d28d9",
+                    border: "1px solid var(--color-border)",
                     flexShrink: 0,
                   }}
                 >
@@ -486,11 +539,11 @@ function MCDiscover({
 
                 {/* TEXT */}
                 <div style={{ flex: 1, textAlign: "left" }}>
-                  <div style={{ fontWeight: 600, color: "#c084fc" }}>
+                  <div style={{ fontWeight: 600, color: "var(--color-accent-text)" }}>
                     {item.name}
                   </div>
 
-                  <div style={{ fontSize: 12, color: "#aaa" }}>
+                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
                     {item.summary?.slice(0, 120)}
                   </div>
 
@@ -534,7 +587,7 @@ function MCDiscover({
                   {item.type === "modpack" && item.installable !== false && (
                     <button
                       className="sidebar-button"
-                      style={{ padding: "8px 12px", background: "#7c3aed" }}
+                      style={{ padding: "8px 12px", background: "var(--color-accent)", color: "var(--color-on-accent)" }}
                       disabled={!!installingPack}
                       onClick={() => installModpack(item)}
                       title="Creates a new instance with this pack's Minecraft version, loader and mods"

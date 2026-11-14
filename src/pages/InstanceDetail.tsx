@@ -11,6 +11,9 @@ import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
 import { Cloud, Folder, Gauge, Hammer, Play, Settings, Square } from "lucide-react";
 import OptimisePanel from "../components/OptimisePanel";
+import { Tabs } from "../components/ui";
+import { AccountClashNotice, PlayAsMenu } from "../components/PlayAs";
+import { useAccountChoice } from "../components/playAsChoice";
 
 const LOADER_NAMES: Record<string, string> = { fabric: "Fabric Loader", quilt: "Quilt Loader", forge: "Forge", neoforge: "NeoForge" };
 
@@ -54,8 +57,8 @@ function formatBytes(bytes: number) {
 }
 
 const card: React.CSSProperties = {
-  background: "#151515",
-  border: "1px solid #6d28d9",
+  background: "var(--color-surface)",
+  border: "1px solid var(--color-border)",
   borderRadius: 12,
   padding: 16,
 };
@@ -71,6 +74,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Who the game plays as; an account already in another game is offered the free ones.
+  const choice = useAccountChoice();
 
   /* ---------------- loading ---------------- */
 
@@ -178,7 +183,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     setBusy(null);
   }
 
-  async function launch() {
+  /* Starts it alongside any other open games: as accountId, or the active account. */
+  async function launch(accountId?: string) {
+    if (!choice.check(instanceName, accountId)) return;
     setBusy("launch");
     setError(null);
     setNotice(null);
@@ -186,7 +193,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     try {
       setProgress(null);
       setTab("log");
-      const result = await window.instanceAPI.launch(instanceName);
+      const result = await window.instanceAPI.launch(instanceName, accountId);
 
       setNotice(
         result.online
@@ -197,7 +204,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (!(await choice.explain(instanceName, accountId))) setError(err instanceof Error ? err.message : String(err));
     }
 
     setBusy(null);
@@ -327,11 +334,11 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
   if (!instance) {
     return (
-      <div style={{ flex: 1, padding: 30, color: "white", position: "relative" }}>
+      <div style={{ flex: 1, padding: 30, color: "var(--color-text)", position: "relative" }}>
         <button className="sidebar-button" onClick={onBack}>
           ← Back
         </button>
-        <p style={{ marginTop: 20, color: error ? "#fca5a5" : "#9ca3af" }}>
+        <p style={{ marginTop: 20, color: error ? "var(--color-danger-text)" : "var(--color-text-muted)" }}>
           {error ?? "Loading instance..."}
         </p>
       </div>
@@ -354,7 +361,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           style={{
             padding: "6px 12px",
             fontSize: 13,
-            background: contentType === type ? "#6d28d9" : undefined,
+            background: contentType === type ? "var(--color-accent-subtle)" : undefined,
           }}
         >
           {label} ({content[type].length})
@@ -373,10 +380,10 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       : `${LOADER_NAMES[instance.loader] ?? instance.loader} ${instance.loaderVersion}`;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "white", position: "relative" }}>
-      <h1 style={{ color: "#c084fc", marginBottom: 6 }}>{instance.name}</h1>
+    <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "var(--color-text)", position: "relative" }}>
+      <h1 style={{ marginBottom: 6 }}>{instance.name}</h1>
 
-      <p style={{ color: "#9ca3af", marginBottom: 4 }}>
+      <p style={{ color: "var(--color-text-muted)", marginBottom: 4 }}>
         Minecraft {instance.version} • {loaderLabel}
         {instance.loader !== "vanilla" && instance.installed && (
           <LoaderUpdate
@@ -391,7 +398,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         • {instance.ram} GB RAM
       </p>
 
-      <p style={{ color: "#6b7280", fontSize: 12, marginBottom: 18 }}>
+      <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginBottom: 18 }}>
         {content.mod.length} mod{content.mod.length === 1 ? "" : "s"} •{" "}
         {content.resourcepack.length} resource pack{content.resourcepack.length === 1 ? "" : "s"} •{" "}
         {content.shader.length} shader{content.shader.length === 1 ? "" : "s"} •{" "}
@@ -410,9 +417,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         <div
           style={{
             ...card,
-            borderColor: "#b45309",
-            background: "#2a1a05",
-            color: "#fcd34d",
+            borderColor: "var(--color-warning-border)",
+            background: "var(--color-warning-bg)",
+            color: "var(--color-warning-text)",
             marginBottom: 16,
           }}
         >
@@ -423,15 +430,15 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
       {progress && progress.stage !== "done" && (busy === "repair" || busy === "cloud" || (busy === "launch" && progress.stage === "java")) && (
         <div style={{ ...card, marginBottom: 16 }}>
-          <div style={{ color: "#d8b4fe", marginBottom: 8 }}>
+          <div style={{ color: "var(--color-accent-text)", marginBottom: 8 }}>
             {progress.detail ?? progress.stage} ({progress.percent}%)
           </div>
-          <div style={{ height: 6, background: "#333", borderRadius: 3 }}>
+          <div style={{ height: 6, background: "var(--color-surface-raised)", borderRadius: 3 }}>
             <div
               style={{
                 width: `${progress.percent}%`,
                 height: "100%",
-                background: "#7c3aed",
+                background: "var(--color-accent)", color: "var(--color-on-accent)",
                 borderRadius: 3,
                 transition: "width .2s",
               }}
@@ -440,13 +447,15 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
       )}
 
+      <AccountClashNotice choice={choice} instance={instanceName} className="play-as__clash--spaced" onPlayAs={(id) => launch(id)} />
+
       {error && (
         <div
           style={{
             ...card,
-            borderColor: "#ef4444",
-            background: "#2a0d0d",
-            color: "#fca5a5",
+            borderColor: "var(--color-danger-border)",
+            background: "var(--color-danger-bg)",
+            color: "var(--color-danger-text)",
             marginBottom: 16,
             whiteSpace: "pre-wrap",
           }}
@@ -459,9 +468,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         <div
           style={{
             ...card,
-            borderColor: "#166534",
-            background: "#0d2a12",
-            color: "#86efac",
+            borderColor: "var(--color-success-border)",
+            background: "var(--color-success-bg)",
+            color: "var(--color-success-text)",
             marginBottom: 16,
           }}
         >
@@ -481,35 +490,24 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       )}
 
       {/* One line: the tabs on the left, the instance's own buttons on the right */}
-      <div
-        style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid #2e2640" }}
-      >
-        <div role="tablist" aria-label="Instance" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {(
-            [
-              ["mods", `Content (${allItems.length})`],
-              ["worlds", "Worlds"],
-              ["screenshots", "Screenshots"],
-              ["log", "Log"],
-            ] as const
-          ).map(([id, label]) => {
-            const open = tab === id || (id === "mods" && tab === "browse");
-            return (
-              <button
-                key={id}
-                role="tab"
-                aria-selected={open}
-                className="sidebar-button"
-                onClick={() => setTab(id)}
-                style={{ padding: "8px 16px", background: open ? "#6d28d9" : undefined, borderColor: open ? "#c084fc" : undefined }}
-              >
-                {label}
-              </button>
-            );
-          })}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginBottom: 18 }}>
+        {/* The tabs share the space left of the instance's buttons equally. */}
+        <div style={{ flex: "1 1 360px", minWidth: 0 }}>
+          <Tabs
+            label="Instance"
+            idBase="instance"
+            value={tab === "browse" ? "mods" : tab}
+            onChange={(id) => setTab(id)}
+            tabs={[
+              { value: "mods", label: "Content", count: allItems.length },
+              { value: "worlds", label: "Worlds" },
+              { value: "screenshots", label: "Screenshots" },
+              { value: "log", label: "Log" },
+            ]}
+          />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto", paddingBottom: 4 }}>
           <button
             className="sidebar-button"
             aria-label="Open folder"
@@ -565,7 +563,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           </button>
 
           {instance.running && (
-            <button className="sidebar-button" style={{ ...actionStyle, background: "#7f1d1d" }} onClick={() => run("stop", () => window.instanceAPI.stop(instanceName))}>
+            <button className="sidebar-button" style={{ ...actionStyle, background: "var(--color-danger-solid)", color: "var(--color-on-danger)" }} onClick={() => run("stop", () => window.instanceAPI.stop(instanceName))}>
               <Square size={14} fill="currentColor" aria-hidden="true" />
               Stop
             </button>
@@ -574,13 +572,14 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           <button
             className="sidebar-button"
             data-testid="play"
-            style={{ ...actionStyle, background: "#7c3aed", padding: "8px 18px" }}
+            style={{ ...actionStyle, background: "var(--color-accent)", color: "var(--color-on-accent)", padding: "8px 18px" }}
             disabled={busy === "launch" || instance.running}
-            onClick={launch}
+            onClick={() => launch()}
           >
             <Play size={16} fill="currentColor" aria-hidden="true" />
-            {instance.running ? "Running" : busy === "launch" ? "Starting..." : "Play"}
+            {instance.running ? (instance.playingAs ? `Running as ${instance.playingAs.name}` : "Running") : busy === "launch" ? "Starting..." : "Play"}
           </button>
+          {!instance.running && busy !== "launch" && <PlayAsMenu choice={choice} instance={instanceName} onPlayAs={(id) => launch(id)} />}
 
           <button
             className="sidebar-button"
@@ -588,7 +587,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             title="This instance's settings"
             aria-pressed={tab === "settings"}
             onClick={() => setTab("settings")}
-            style={{ ...iconStyle, background: tab === "settings" ? "#6d28d9" : undefined, borderColor: tab === "settings" ? "#c084fc" : undefined }}
+            style={{ ...iconStyle, background: tab === "settings" ? "var(--color-accent-subtle)" : undefined, borderColor: tab === "settings" ? "var(--color-accent-line)" : undefined }}
           >
             <Settings size={18} aria-hidden="true" />
           </button>
@@ -627,7 +626,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {tab === "settings" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
           <div style={card} data-testid="instance-files">
-            <p style={{ color: "#d8b4fe", marginBottom: 10 }}>This instance</p>
+            <p style={{ color: "var(--color-accent-text)", marginBottom: 10 }}>This instance</p>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
               <button
@@ -636,7 +635,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               >
                 Show Files
               </button>
-              <span style={{ color: "#6b7280", fontSize: 12 }}>Opens its folder in {FILE_MANAGER}.</span>
+              <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>Opens its folder in {FILE_MANAGER}.</span>
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -648,9 +647,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                   flex: "1 1 220px",
                   padding: 10,
                   borderRadius: 10,
-                  background: "#1b1b1b",
-                  color: "white",
-                  border: "1px solid #6d28d9",
+                  background: "var(--color-surface-sunken)",
+                  color: "var(--color-text)",
+                  border: "1px solid var(--color-border)",
                 }}
               />
               <button
@@ -668,25 +667,25 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 {busy === "duplicate" ? "Copying..." : "Duplicate"}
               </button>
             </div>
-            <p style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8 }}>
               A copy with the same mods, worlds and settings, under a new name. Logs and play history
               aren't copied.
             </p>
           </div>
 
           <div style={card} data-testid="instance-export">
-            <p style={{ color: "#d8b4fe", marginBottom: 6 }}>Export as a modpack</p>
-            <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 10 }}>
+            <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>Export as a modpack</p>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 13, marginBottom: 10 }}>
               Saves it as a Modrinth modpack (.mrpack) to share, which the Modrinth App, Prism and this
               launcher can install. Mods on Modrinth are linked, so it stays small; others, and its
               config, go inside it. Disabled mods are left out.
             </p>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
-              <label style={{ color: "#d4d4d8", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+              <label style={{ color: "var(--color-text-secondary)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="checkbox" checked={exportWorlds} onChange={(e) => setExportWorlds(e.target.checked)} />
                 Include worlds
               </label>
-              <label style={{ color: "#d4d4d8", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
+              <label style={{ color: "var(--color-text-secondary)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="checkbox" checked={exportOptions} onChange={(e) => setExportOptions(e.target.checked)} />
                 Include game settings (options.txt)
               </label>
@@ -713,8 +712,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           </div>
 
           <div style={card} data-testid="instance-java">
-            <p style={{ color: "#d8b4fe", marginBottom: 6 }}>Java</p>
-            <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 12 }}>
+            <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>Java</p>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 13, marginBottom: 12 }}>
               {instance.javaPath
                 ? `Uses its own Java: ${instance.javaPath}`
                 : globalJava
@@ -754,11 +753,11 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           </div>
 
           <div style={card}>
-            <p style={{ color: "#d8b4fe", marginBottom: 6 }}>
+            <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>
               Allocated RAM: {ramDraft ?? instance.ram} GB
             </p>
 
-            <p style={{ color: "#6b7280", fontSize: 12, marginBottom: 12 }}>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginBottom: 12 }}>
               {system
                 ? `This machine has ${system.totalRamGb} GB; allocating more than ` +
                   `${system.maxRecommendedGb} GB leaves too little for the system.`
@@ -772,21 +771,21 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               step={1}
               value={ramDraft ?? instance.ram}
               onChange={(e) => setRamDraft(Number(e.target.value))}
-              style={{ width: "100%", accentColor: "#7c3aed" }}
+              style={{ width: "100%", accentColor: "var(--color-accent)" }}
             />
 
             {system && (ramDraft ?? instance.ram) > system.maxRecommendedGb && (
-              <p style={{ color: "#fcd34d", fontSize: 12, marginTop: 8 }}>
+              <p style={{ color: "var(--color-warning-text)", fontSize: 12, marginTop: 8 }}>
                 Above the recommended maximum for this machine.
               </p>
             )}
           </div>
 
           <div style={card}>
-            <p style={{ color: "#d8b4fe", marginBottom: 4 }}>
+            <p style={{ color: "var(--color-accent-text)", marginBottom: 4 }}>
               JVM arguments for this instance
             </p>
-            <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 10 }}>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginBottom: 10 }}>
               The Minecraft Launcher's garbage collection settings are used for fewer stutters, unless you choose a garbage collector here (such as -XX:+UseZGC).
             </p>
 
@@ -798,23 +797,23 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 width: "100%",
                 padding: 12,
                 borderRadius: 10,
-                background: "#1b1b1b",
-                color: "white",
-                border: "1px solid #6d28d9",
+                background: "var(--color-surface-sunken)",
+                color: "var(--color-text)",
+                border: "1px solid var(--color-border)",
                 boxSizing: "border-box",
               }}
             />
 
-            <p style={{ color: "#6b7280", fontSize: 12, marginTop: 8 }}>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8 }}>
               Added before Minecraft's own arguments, e.g.
-              <code style={{ color: "#c084fc" }}> -XX:+UseG1GC</code>
+              <code style={{ color: "var(--color-accent-text)" }}> -XX:+UseG1GC</code>
             </p>
           </div>
 
           <div style={{ display: "flex", gap: 10 }}>
             <button
               className="sidebar-button"
-              style={{ background: "#7c3aed" }}
+              style={{ background: "var(--color-accent)", color: "var(--color-on-accent)" }}
               disabled={busy === "save"}
               onClick={() =>
                 run("save", async () => {
@@ -850,12 +849,12 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             <button className="sidebar-button" data-testid="back-to-content" onClick={() => setTab("mods")} style={{ padding: "6px 12px", fontSize: 13 }}>
               ← Back to Content
             </button>
-            <span style={{ color: "#d8b4fe", fontSize: 15 }}>Add Content</span>
+            <span style={{ color: "var(--color-accent-text)", fontSize: 15 }}>Add Content</span>
           </div>
 
           {contentTabs()}
 
-          <p style={{ color: "#9ca3af", fontSize: 13, marginBottom: 10 }}>
+          <p style={{ color: "var(--color-text-muted)", fontSize: 13, marginBottom: 10 }}>
             Showing only {currentTab.label.toLowerCase()} that work on Minecraft{" "}
             {instance.version}
             {contentType === "mod" ? ` with ${loaderLabel}` : ""}. Anything they
@@ -866,9 +865,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             <div
               style={{
                 ...card,
-                borderColor: "#b45309",
-                background: "#2a1a05",
-                color: "#fcd34d",
+                borderColor: "var(--color-warning-border)",
+                background: "var(--color-warning-bg)",
+                color: "var(--color-warning-text)",
                 fontSize: 12,
                 marginBottom: 10,
               }}
@@ -878,7 +877,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           )}
 
           {contentType === "datapack" && (
-            <label style={{ display: "block", color: "#9ca3af", fontSize: 13, marginBottom: 10 }}>
+            <label style={{ display: "block", color: "var(--color-text-muted)", fontSize: 13, marginBottom: 10 }}>
               Install data packs into{" "}
               <select
                 aria-label="World to install into"
@@ -887,9 +886,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 style={{
                   padding: "6px 10px",
                   borderRadius: 8,
-                  background: "#1b1b1b",
-                  color: "white",
-                  border: "1px solid #6d28d9",
+                  background: "var(--color-surface-sunken)",
+                  color: "var(--color-text)",
+                  border: "1px solid var(--color-border)",
                 }}
               >
                 {content.worlds.map((world) => (
@@ -931,9 +930,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               width: "100%",
               padding: 12,
               borderRadius: 10,
-              background: "#1b1b1b",
-              color: "white",
-              border: "1px solid #6d28d9",
+              background: "var(--color-surface-sunken)",
+              color: "var(--color-text)",
+              border: "1px solid var(--color-border)",
               boxSizing: "border-box",
               marginBottom: 12,
             }}
@@ -943,7 +942,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
           {browsed && !cantUseThisType && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-              <div data-testid="page-summary" style={{ fontSize: 12, color: "#9ca3af" }}>
+              <div data-testid="page-summary" style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
                 {browsed.totals.modrinth.toLocaleString()} on Modrinth •{" "}
                 {browsed.totals.curseforge.toLocaleString()}
                 {browsed.totals.curseforgeCapped ? "+" : ""} on CurseForge • Page {browsed.page.toLocaleString()} of{" "}
@@ -956,7 +955,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 onChange={(page) => setChosenPage({ browseKey, page })}
               />
               {browsed.totals.curseforgeCapped && (
-                <div data-testid="curseforge-limit" style={{ fontSize: 11, color: "#6b7280" }}>
+                <div data-testid="curseforge-limit" style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
                   CurseForge only lets apps reach the first 10,000 results of a search. Search to get to the rest.
                 </div>
               )}
@@ -968,9 +967,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               key={i}
               style={{
                 ...card,
-                borderColor: "#b45309",
-                background: "#2a1a05",
-                color: "#fcd34d",
+                borderColor: "var(--color-warning-border)",
+                background: "var(--color-warning-bg)",
+                color: "var(--color-warning-text)",
                 fontSize: 12,
                 marginBottom: 10,
               }}
@@ -980,13 +979,13 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           ))}
 
           {cantUseThisType ? (
-            <div style={{ ...card, color: "#9ca3af" }}>
+            <div style={{ ...card, color: "var(--color-text-muted)" }}>
               Vanilla can't load mods. Create an instance with a mod loader to use them.
             </div>
           ) : searching ? (
-            <div style={{ color: "#9ca3af" }}>Searching...</div>
+            <div style={{ color: "var(--color-text-muted)" }}>Searching...</div>
           ) : results.length === 0 ? (
-            <div style={{ ...card, color: "#9ca3af" }}>
+            <div style={{ ...card, color: "var(--color-text-muted)" }}>
               No {currentTab.label.toLowerCase()} found for Minecraft {instance.version}
               {contentType === "mod" ? ` on ${loaderLabel}` : ""}.
             </div>
@@ -1017,21 +1016,21 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                     )}
 
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "#c084fc", fontWeight: 600 }}>
+                      <div style={{ color: "var(--color-accent-text)", fontWeight: 600 }}>
                         {mod.name}
                       </div>
 
-                      <div style={{ fontSize: 12, color: "#aaa" }}>
+                      <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
                         {mod.summary?.slice(0, 140)}
                       </div>
 
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 4 }}>
                         {mod.author ? `${mod.author} • ` : ""}
                         <SourceDownloads sources={mod.sources} />
                       </div>
 
                       {added[mod.id] && (
-                        <div data-testid="browse-added" style={{ fontSize: 12, color: "#86efac", marginTop: 4 }}>
+                        <div data-testid="browse-added" style={{ fontSize: 12, color: "var(--color-success-text)", marginTop: 4 }}>
                           {added[mod.id]}
                         </div>
                       )}
@@ -1046,7 +1045,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                         className="sidebar-button"
                         disabled={installing === mod.id}
                         onClick={() => install(mod)}
-                        style={{ minWidth: 100, background: "#7c3aed" }}
+                        style={{ minWidth: 100, background: "var(--color-accent)", color: "var(--color-on-accent)" }}
                       >
                         {installing === mod.id ? "..." : "Install"}
                       </button>

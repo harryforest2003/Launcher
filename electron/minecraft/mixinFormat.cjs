@@ -5,7 +5,7 @@ const { withZip } = require("./zipFile.cjs");
 const { modInfo } = require("./modInfo.cjs");
 const { parseClass } = require("./mixinCheck.cjs");
 const { compare, parseVersion } = require("./compat.cjs");
-const { downloadFile } = require("./net.cjs");
+const { downloadFile, publishedSha1 } = require("./net.cjs");
 
 /*
  * Mods written with a newer way of patching the game than the instance's loader can read.
@@ -110,7 +110,10 @@ async function loaderJar(folder, loader, loaderVersion) {
     const kept = path.join(os.tmpdir(), "unity-launcher-loaders", `fabric-loader-${loaderVersion}.jar`);
     if (!fs.existsSync(kept)) {
         fs.mkdirSync(path.dirname(kept), { recursive: true });
-        await downloadFile(`https://maven.fabricmc.net/net/fabricmc/fabric-loader/${loaderVersion}/fabric-loader-${loaderVersion}.jar`, kept);
+        if (!/^[\w.+-]{1,64}$/.test(String(loaderVersion))) return null;
+        const url = `https://maven.fabricmc.net/net/fabricmc/fabric-loader/${loaderVersion}/fabric-loader-${loaderVersion}.jar`;
+        // Checked against the checksum Fabric's Maven repository publishes beside it.
+        await downloadFile(url, kept, { sha1: await publishedSha1(url), requireHash: true });
     }
     return kept;
 }

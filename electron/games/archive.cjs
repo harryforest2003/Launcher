@@ -58,6 +58,23 @@ async function untar(file, into) {
         const full = path.join(into, name);
         if (!insideOf(real, fs.realpathSync(full))) fs.rmSync(full, { recursive: true, force: true });
     }
+    // A mod needs no links of its own, and one left inside could point anywhere: all go.
+    removeLinks(into);
+}
+
+/* Removes every symbolic link under a folder (the links themselves, never what they point to). */
+function removeLinks(dir) {
+    let entries = [];
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return;
+    }
+    for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isSymbolicLink()) fs.rmSync(full, { force: true });
+        else if (entry.isDirectory()) removeLinks(full);
+    }
 }
 
 /*
@@ -119,4 +136,4 @@ function listFiles(root) {
     return out;
 }
 
-module.exports = { unpack, contents, listFiles, isArchive, tempDir, ARCHIVES };
+module.exports = { unpack, unzip, contents, listFiles, isArchive, tempDir, ARCHIVES };

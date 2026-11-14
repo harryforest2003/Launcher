@@ -9,7 +9,8 @@ type Props = {
   onDone: (result: UpdateResult & DependencyCheck & { loader: { name: string; from: string; to: string } }) => void;
 };
 
-const GREEN = "#16a34a";
+const GREEN = "var(--color-success-solid)";
+const GREEN_TEXT = "var(--color-success-text)";
 
 /*
  * Beside the loader's name: a green button when a newer build is out, or a tick when it's
@@ -53,7 +54,7 @@ export default function LoaderUpdate({ instanceName, loaderVersion, onDone }: Pr
             lineHeight: "18px",
             verticalAlign: "middle",
             background: GREEN,
-            color: "white",
+            color: "var(--color-on-success)",
             border: "none",
             borderRadius: 8,
             cursor: "pointer",
@@ -69,7 +70,7 @@ export default function LoaderUpdate({ instanceName, loaderVersion, onDone }: Pr
           title={`${state.loaderName} is up to date. Click to choose another version.`}
           aria-label={`Choose a version of ${state.loaderName}`}
           onClick={() => setOpen(true)}
-          style={{ display: "inline-flex", alignItems: "center", marginLeft: 4, padding: "1px 3px", verticalAlign: "middle", color: GREEN }}
+          style={{ display: "inline-flex", alignItems: "center", marginLeft: 4, padding: "1px 3px", verticalAlign: "middle", color: GREEN_TEXT }}
         >
           <CheckIcon size={14} />
         </button>

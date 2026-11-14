@@ -280,16 +280,16 @@ export default function SelectionStep({ draft, onChange, onApprove, onStartOver 
               position: "absolute",
               pointerEvents: "none",
               borderRadius: "50%",
-              border: "1px solid white",
-              boxShadow: "0 0 0 1px black",
+              border: "1px solid var(--color-text)",
+              boxShadow: "0 0 0 1px var(--color-bg)",
             }}
           />
         </div>
       </div>
 
       <div style={{ ...panelStyle, flex: "0 0 300px" }}>
-        <div style={{ color: "#c084fc", fontSize: 16, marginBottom: 6 }}>Check the selection</div>
-        <div style={{ color: "#aaa", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
+        <div style={{ color: "var(--color-accent-text)", fontSize: 16, marginBottom: 6 }}>Check the selection</div>
+        <div style={{ color: "var(--color-text-secondary)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
           Tinted areas will be removed. Brush or click to correct them. The cut-out re-runs after each stroke.
         </div>
 

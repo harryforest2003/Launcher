@@ -411,7 +411,7 @@ async function get(gameId, entry, progress) {
     if (entry.kind === "curseforge") {
         try {
             const file = await curseforge.resolveDownload(entry.modId, null);
-            return await installFromUrl(game, file.downloadUrl, { name: entry.name, source: { provider: "curseforge", modId: entry.modId, fileId: String(file.id), version: file.name } }, progress);
+            return await installFromUrl(game, file.downloadUrl, { name: entry.name, source: { provider: "curseforge", modId: entry.modId, fileId: String(file.id), version: file.name } }, progress, { sha1: file.sha1 });
         } catch (err) {
             if (err.code === "DISTRIBUTION_DENIED") return { needsWebsite: entry.url, external: true };
             throw err;

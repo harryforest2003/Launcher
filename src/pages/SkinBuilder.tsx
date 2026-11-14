@@ -205,8 +205,8 @@ export default function SkinBuilder({
       style={{
         display: "flex",
         height: "100vh",
-        backgroundColor: "#0d0d0d",
-        color: "white",
+        backgroundColor: "var(--color-bg)",
+        color: "var(--color-text)",
       }}
     >
       <Sidebar
@@ -238,7 +238,7 @@ export default function SkinBuilder({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 18, flexShrink: 0 }}>
-          <h2 style={{ color: "#c084fc", fontSize: "1.8rem", margin: 0, fontFamily: "'Orbitron', sans-serif" }}>
+          <h2 style={{ margin: 0 }}>
             Model Builder
           </h2>
 
@@ -254,9 +254,9 @@ export default function SkinBuilder({
                   style={{
                     padding: "5px 11px",
                     borderRadius: 999,
-                    border: "1px solid #6d28d9",
-                    background: entry.id === step ? "#6d28d9" : "transparent",
-                    color: index > stepIndex ? "#777" : "white",
+                    border: "1px solid var(--color-border)",
+                    background: entry.id === step ? "var(--color-accent-subtle)" : "transparent",
+                    color: index > stepIndex ? "var(--color-text-muted)" : "var(--color-text)",
                   }}
                 >
                   {index + 1}. {entry.label}
@@ -283,7 +283,7 @@ export default function SkinBuilder({
 
         {step === "library" && (
           <>
-            {error && <div style={{ color: "#fda4af", marginBottom: 12, flexShrink: 0 }}>{error}</div>}
+            {error && <div style={{ color: "var(--color-danger-text)", marginBottom: 12, flexShrink: 0 }}>{error}</div>}
             <LibraryView
               key={libraryVersion}
               notice={notice}

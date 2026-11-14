@@ -9,6 +9,9 @@ import GameSettings from "./games/GameSettings";
 import LoadOrderPage from "./games/LoadOrderPage";
 import CCBrowser from "./games/CCBrowser";
 import PlayPrompt from "./games/PlayPrompt";
+import { Button } from "../components/ui";
+import { timeAgo } from "./playedAgo";
+import "./dashboard/dashboard.css";
 import { errorText, installSummary, note } from "./games/shared";
 
 type Props = {
@@ -23,7 +26,7 @@ type Props = {
  * game has updated since it was last played.
  */
 export default function GameSection({ gameId, onLauncher, onLauncherSettings }: Props) {
-  const [page, setPage] = useState<GamePage>("mods");
+  const [page, setPage] = useState<GamePage>("home");
   const [openMod, setOpenMod] = useState<{ provider: "nexus" | "curseforge"; id: string } | null>(null);
   const [openCollection, setOpenCollection] = useState<string | null>(null);
   const deeper = Boolean(openMod || openCollection);
@@ -313,7 +316,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#0d0d0d", color: "white" }}>
+    <div style={{ display: "flex", height: "100vh", background: "var(--color-bg)", color: "var(--color-text)" }}>
       <GameSidebar
         game={detail?.name ?? ""}
         hasLoadOrder={Boolean(detail?.loadOrder)}
@@ -349,9 +352,35 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
           )}
 
           {!detail ? (
-            !loadError && <div style={{ color: "#9ca3af" }}>Loading...</div>
+            !loadError && <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>
           ) : (
             <>
+              {page === "home" && (
+                <div className="game-overview">
+                  <header className="db-header">
+                    <div>
+                      <h1 className="db-header__title">{detail.name}</h1>
+                      <p className="db-header__lead">{detail.tagline}</p>
+                    </div>
+                    {detail.found
+                      ? <Button disabled={Boolean(playing)} onClick={onPlay}>{playing ?? "Play"}</Button>
+                      : <Button onClick={() => go("settings")}>Choose game folder</Button>}
+                  </header>
+                  <section className="db-card" aria-label="Game overview">
+                    <dl className="db-kpis">
+                      <div><dt>Last launched</dt><dd>{detail.lastPlayed ? timeAgo(detail.lastPlayed) : "No launch recorded"}</dd></div>
+                      <div><dt>Play time</dt><dd className="db-unknown">Unavailable</dd></div>
+                      <div><dt>Version</dt><dd>{detail.version ?? "Unknown"}</dd></div>
+                      <div><dt>Enabled mods</dt><dd>{mods.filter((mod) => mod.enabled).length}</dd></div>
+                    </dl>
+                    <div className="db-actions">
+                      <Button variant="ghost" onClick={() => go("mods")}>Manage mods</Button>
+                      <Button variant="ghost" onClick={() => go("discover")}>Discover mods</Button>
+                    </div>
+                  </section>
+                </div>
+              )}
+
               {page === "mods" && !openMod && (
                 <GameMods
                   detail={detail}

@@ -105,7 +105,7 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
     <div
       data-testid="loader-picker"
       onClick={() => !busy && onClose()}
-      style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0, 0, 0, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{ position: "fixed", inset: 0, zIndex: 50, background: "var(--color-scrim)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
     >
       <div
         role="dialog"
@@ -116,22 +116,22 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
           maxHeight: "min(760px, 90vh)",
           display: "flex",
           flexDirection: "column",
-          background: "#17141f",
-          border: "1px solid #6d28d9",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
           borderRadius: 14,
-          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6)",
+          boxShadow: "0 20px 60px var(--color-shadow)",
           textAlign: "left",
-          color: "#e4e4e7",
+          color: "var(--color-text-secondary)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid #2e2640" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 600, color: "#e9d5ff" }}>{loaderName}</div>
-            <div style={{ fontSize: 12, color: "#9ca3af" }}>
+            <div style={{ fontSize: 17, fontWeight: 600, color: "var(--color-accent-text)" }}>{loaderName}</div>
+            <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
               {list ? `You have ${list.current}. ` : ""}Every mod is checked before the loader changes.
             </div>
           </div>
-          <button aria-label="Close" disabled={Boolean(busy)} onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "#9ca3af", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>
+          <button aria-label="Close" disabled={Boolean(busy)} onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-text-muted)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>
             ×
           </button>
         </div>
@@ -145,13 +145,13 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
 
               {plan.fixes.length > 0 && (
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 13, color: "#86efac", marginBottom: 4 }}>
+                  <div style={{ fontSize: 13, color: "var(--color-success-text)", marginBottom: 4 }}>
                     {plural(plan.fixes.length, "mod")} will be updated with it, so {plan.fixes.length === 1 ? "it keeps" : "they keep"} working:
                   </div>
                   <ul data-testid="loader-fixes" style={{ margin: "0 0 0 18px", padding: 0, fontSize: 13 }}>
                     {plan.fixes.map((fix) => (
                       <li key={fix.name}>
-                        {fix.name} <span style={{ color: "#9ca3af" }}>{fix.from} → {fix.to}</span>
+                        {fix.name} <span style={{ color: "var(--color-text-muted)" }}>{fix.from} → {fix.to}</span>
                       </li>
                     ))}
                   </ul>
@@ -159,7 +159,7 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
               )}
 
               {plan.blocking.length > 0 && (
-                <div role="alert" data-testid="loader-blocking" style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 10, background: "#2a1a05", border: "1px solid #b45309", color: "#fcd34d", fontSize: 13 }}>
+                <div role="alert" data-testid="loader-blocking" style={{ marginBottom: 12, padding: "10px 12px", borderRadius: 10, background: "var(--color-warning-bg)", border: "1px solid var(--color-warning-border)", color: "var(--color-warning-text)", fontSize: 13 }}>
                   <div style={{ fontWeight: 600, marginBottom: 4 }}>
                     {plan.blocking.length === 1 ? "A mod" : `${plan.blocking.length} mods`} won't work with {plan.loaderName} {plan.target}, so the game probably wouldn't start:
                   </div>
@@ -172,7 +172,7 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
               )}
 
               {!plan.fixes.length && !plan.blocking.length && (
-                <div style={{ fontSize: 13, color: "#86efac", marginBottom: 12 }}>All your mods work with it. Nothing else needs to change.</div>
+                <div style={{ fontSize: 13, color: "var(--color-success-text)", marginBottom: 12 }}>All your mods work with it. Nothing else needs to change.</div>
               )}
 
               {plan.upgrade && plan.otherUpdates > 0 && (
@@ -180,19 +180,19 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
                   <input type="checkbox" data-testid="also-update" checked={alsoUpdate} disabled={Boolean(busy)} onChange={(e) => setAlsoUpdate(e.target.checked)} style={{ marginTop: 2 }} />
                   <span>
                     Also install the other {plural(plan.otherUpdates, "mod update")}
-                    <span style={{ color: "#9ca3af" }}> (any that won't work are kept back, as with Update All)</span>
+                    <span style={{ color: "var(--color-text-muted)" }}> (any that won't work are kept back, as with Update All)</span>
                   </span>
                 </label>
               )}
 
-              <div style={{ fontSize: 12, color: "#9ca3af" }}>Undo puts back the old loader and every file this changes.</div>
+              <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Undo puts back the old loader and every file this changes.</div>
             </div>
           ) : loadError ? (
-            <div style={{ color: "#fca5a5", fontSize: 13, padding: 8 }}>{loadError}</div>
+            <div style={{ color: "var(--color-danger-text)", fontSize: 13, padding: 8 }}>{loadError}</div>
           ) : !list ? (
-            <div style={{ color: "#9ca3af", fontSize: 13, padding: 8 }}>Finding versions...</div>
+            <div style={{ color: "var(--color-text-muted)", fontSize: 13, padding: 8 }}>Finding versions...</div>
           ) : !list.versions.length ? (
-            <div style={{ color: "#9ca3af", fontSize: 13, padding: 8 }}>No builds of {loaderName} are listed for this Minecraft version.</div>
+            <div style={{ color: "var(--color-text-muted)", fontSize: 13, padding: 8 }}>No builds of {loaderName} are listed for this Minecraft version.</div>
           ) : (
             list.versions.map((version) => {
               const selected = version.version === chosen;
@@ -213,23 +213,23 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
                     marginBottom: 6,
                     borderRadius: 10,
                     cursor: "pointer",
-                    background: selected ? "#2b1d47" : "#100e16",
-                    border: `1px solid ${selected ? "#7c3aed" : "#231d31"}`,
+                    background: selected ? "var(--color-accent-subtle)" : "var(--color-surface-sunken)",
+                    border: `1px solid ${selected ? "var(--color-accent-line)" : "var(--color-border)"}`,
                   }}
                 >
                   <span
                     aria-hidden="true"
-                    style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `2px solid ${selected ? "#a78bfa" : "#52525b"}`, background: selected ? "#a78bfa" : "transparent" }}
+                    style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `2px solid ${selected ? "var(--color-accent-line)" : "var(--color-border-strong)"}`, background: selected ? "var(--color-accent-subtle)" : "transparent" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{version.version}</span>
-                      {!version.stable && <span style={{ fontSize: 10, color: "#f59e0b", border: "1px solid #f59e0b", borderRadius: 6, padding: "0 6px" }}>Beta</span>}
-                      {version.installed && <span style={{ fontSize: 10, color: "#e9d5ff", background: "#6d28d9", borderRadius: 6, padding: "1px 6px" }}>Installed</span>}
-                      {version.version === list.newest && <span style={{ fontSize: 10, color: "#86efac" }}>Newest</span>}
+                      {!version.stable && <span style={{ fontSize: 10, color: "var(--color-warning-text)", border: "1px solid var(--color-warning-border)", borderRadius: 6, padding: "0 6px" }}>Beta</span>}
+                      {version.installed && <span style={{ fontSize: 10, background: "var(--color-accent)", color: "var(--color-on-accent)", borderRadius: 6, padding: "1px 6px" }}>Installed</span>}
+                      {version.version === list.newest && <span style={{ fontSize: 10, color: "var(--color-success-text)" }}>Newest</span>}
                     </div>
                     {!version.installed && (
-                      <div style={{ fontSize: 11, color: version.problems ? "#fcd34d" : "#86efac" }}>
+                      <div style={{ fontSize: 11, color: version.problems ? "var(--color-warning-text)" : "var(--color-success-text)" }}>
                         {version.problems
                           ? `${plural(version.problems, "mod")} ${version.problems === 1 ? "doesn't" : "don't"} accept it as ${version.problems === 1 ? "it is" : "they are"}`
                           : "All your mods accept it"}
@@ -243,7 +243,7 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
         </div>
 
         {problems && (
-          <div role="alert" style={{ margin: "0 20px", padding: "10px 12px", borderRadius: 10, background: "#2a1a05", border: "1px solid #b45309", color: "#fcd34d", fontSize: 13 }}>
+          <div role="alert" style={{ margin: "0 20px", padding: "10px 12px", borderRadius: 10, background: "var(--color-warning-bg)", border: "1px solid var(--color-warning-border)", color: "var(--color-warning-text)", fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>The mod updates it needs probably won't work with the rest of the instance:</div>
             <ul style={{ margin: "0 0 0 18px", padding: 0 }}>
               {problems.map((problem) => (
@@ -252,10 +252,10 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
             </ul>
           </div>
         )}
-        {busy && progress && <div style={{ margin: "8px 20px 0", color: "#c4b5fd", fontSize: 12 }}>{progress}</div>}
-        {error && <div role="alert" style={{ margin: "8px 20px 0", color: "#fca5a5", fontSize: 13, whiteSpace: "pre-wrap" }}>{error}</div>}
+        {busy && progress && <div style={{ margin: "8px 20px 0", color: "var(--color-accent-text)", fontSize: 12 }}>{progress}</div>}
+        {error && <div role="alert" style={{ margin: "8px 20px 0", color: "var(--color-danger-text)", fontSize: 13, whiteSpace: "pre-wrap" }}>{error}</div>}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid #2e2640" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid var(--color-border)" }}>
           {plan ? (
             <>
               <button
@@ -278,7 +278,7 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
                 data-testid="apply-loader"
                 disabled={Boolean(busy)}
                 onClick={() => apply(blocked)}
-                style={{ padding: "8px 14px", fontSize: 13, background: blocked ? "#b45309" : "#16a34a", borderColor: blocked ? "#b45309" : "#16a34a" }}
+                style={{ padding: "8px 14px", fontSize: 13, background: blocked ? "var(--color-warning-solid)" : "var(--color-success-solid)", color: blocked ? "var(--color-on-warning)" : "var(--color-on-success)", borderColor: blocked ? "var(--color-warning-border)" : "var(--color-success-border)" }}
               >
                 {busy === "applying"
                   ? "Installing..."
@@ -291,7 +291,7 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
             </>
           ) : (
             <>
-              <span style={{ fontSize: 12, color: "#9ca3af", marginRight: "auto" }}>
+              <span style={{ fontSize: 12, color: "var(--color-text-muted)", marginRight: "auto" }}>
                 {picked && !picked.installed ? `${list?.newest && picked.version === list.newest ? "Updating" : "Changing"} to ${picked.version}` : "Pick a version"}
               </span>
               <button className="sidebar-button" disabled={Boolean(busy)} onClick={onClose} style={{ padding: "8px 14px", fontSize: 13 }}>
@@ -302,7 +302,7 @@ export default function LoaderPicker({ instanceName, onDone, onClose }: Props) {
                 data-testid="check-loader"
                 disabled={Boolean(busy) || !picked || picked.installed}
                 onClick={check}
-                style={{ padding: "8px 14px", fontSize: 13, background: picked && !picked.installed ? "#7c3aed" : undefined, borderColor: picked && !picked.installed ? "#7c3aed" : undefined }}
+                style={{ padding: "8px 14px", fontSize: 13, background: picked && !picked.installed ? "var(--color-accent-subtle)" : undefined, borderColor: picked && !picked.installed ? "var(--color-accent-line)" : undefined }}
               >
                 {busy === "planning" ? "Checking your mods..." : picked && !picked.installed ? `Check ${picked.version}` : "Check"}
               </button>

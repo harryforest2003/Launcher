@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SkinViewer } from "skinview3d";
+import Button from "./ui/Button";
 
 type Props = {
     skin: string;
@@ -43,6 +44,8 @@ export default function SkinPreview({
     fill = false,
 }: Props) {
 
+    const [failedSkin, setFailedSkin] = useState<string | null>(null);
+    const [attempt, setAttempt] = useState(0);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -56,14 +59,34 @@ export default function SkinPreview({
             canvas: document.createElement("canvas"),
             width: fill ? Math.max(container.clientWidth, 1) : size,
             height: fill ? Math.max(container.clientHeight, 1) : height,
-            // Mojang's profile gives http addresses, and only https is certain to load.
-            skin: skin.replace(/^http:\/\//, "https://"),
             // `playerObject.skin.slim` is private in skinview3d 3.x.
             // The supported way to pick the arm model is this option.
             model: slim === undefined ? "auto-detect" : slim ? "slim" : "default",
         });
 
         container.appendChild(viewer.canvas);
+        let disposed = false;
+        // Load the image before handing it to the viewer so an obsolete request cannot
+        // recreate GPU textures after the previous viewer has been disposed.
+        const texture = new Image();
+        texture.crossOrigin = "anonymous";
+        texture.onload = () => {
+            if (disposed) return;
+            try {
+                viewer.loadSkin(texture, {
+                    model: slim === undefined ? "auto-detect" : slim ? "slim" : "default",
+                });
+                setFailedSkin(null);
+            } catch {
+                setFailedSkin(skin);
+            }
+        };
+        texture.onerror = () => {
+            if (!disposed) setFailedSkin(skin);
+        };
+        texture.src = skin.replace(/^http:\/\//, "https://");
+        const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+
 
         if (cape) {
             // A missing cape only leaves the back bare, so a failed load is ignored.
@@ -104,10 +127,7 @@ export default function SkinPreview({
             : null;
         resized?.observe(container);
 
-        if (spin) {
-            viewer.autoRotate = true;
-            viewer.autoRotateSpeed = 0.8;
-        }
+        viewer.autoRotateSpeed = 0.8;
 
         let frame = 0;
         const looking = { turn: 0, nod: 0 };
@@ -134,34 +154,55 @@ export default function SkinPreview({
             frame = requestAnimationFrame(ease);
         };
 
-        if (followCursor) {
-            window.addEventListener("mousemove", lookAt);
-            frame = requestAnimationFrame(ease);
-        }
+        const updateMotion = () => {
+            cancelAnimationFrame(frame);
+            window.removeEventListener("mousemove", lookAt);
+            viewer.renderPaused = document.hidden;
+            viewer.autoRotate = spin && !motion.matches && !document.hidden;
+            if (followCursor && !motion.matches && !document.hidden) {
+                window.addEventListener("mousemove", lookAt);
+                frame = requestAnimationFrame(ease);
+            }
+        };
+        motion.addEventListener("change", updateMotion);
+        document.addEventListener("visibilitychange", updateMotion);
+        updateMotion();
 
         return () => {
+            disposed = true;
+            texture.onload = null;
+            texture.onerror = null;
+            document.removeEventListener("visibilitychange", updateMotion);
+            motion.removeEventListener("change", updateMotion);
             resized?.disconnect();
             window.removeEventListener("mousemove", lookAt);
             cancelAnimationFrame(frame);
             viewer.dispose();
             viewer.canvas.remove();
         };
-
-    }, [skin, slim, size, height, fullBody, still, followCursor, cape, spin, fill]);
+    }, [skin, slim, size, height, fullBody, still, followCursor, cape, spin, fill, attempt]);
 
     return (
-        <div
-            ref={containerRef}
-            style={{
-                width: "100%",
-                height: fill ? "100%" : height,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
-                borderRadius: "14px",
-            }}
-        />
+        <div style={{ position: "relative", width: "100%", height: fill ? "100%" : height }}>
+            {failedSkin === skin && (
+                <div role="status" style={{ position: "absolute", inset: 0, display: "grid", placeContent: "center", gap: 12, textAlign: "center" }}>
+                    <span>Your skin could not be loaded.</span>
+                    <Button size="sm" onClick={() => setAttempt((current) => current + 1)}>Retry skin</Button>
+                </div>
+            )}
+            <div
+                ref={containerRef}
+                style={{
+                    visibility: failedSkin === skin ? "hidden" : "visible",
+                    width: "100%",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    overflow: "hidden",
+                    borderRadius: "14px",
+                }}
+            />
+        </div>
     );
-
 }

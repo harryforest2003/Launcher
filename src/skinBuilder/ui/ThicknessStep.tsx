@@ -169,31 +169,31 @@ export default function ThicknessStep({ draft, params, onChange, onBack, onBuild
         </div>
 
         {shownLayer === "thickness" && (
-          <div style={{ color: "#999", fontSize: 12, marginTop: 10 }}>
+          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 10 }}>
             Blue is thin, pink is thick.{params.handleFraction > 0 ? " The white line marks where the handle starts." : ""}
           </div>
         )}
       </div>
 
       <div style={{ ...panelStyle, flex: "0 0 340px" }}>
-        <div style={{ color: "#c084fc", fontSize: 16, marginBottom: 10 }}>Item and thickness</div>
+        <div style={{ color: "var(--color-accent-text)", fontSize: 16, marginBottom: 10 }}>Item and thickness</div>
 
-        <label style={{ display: "block", fontSize: 13, color: "#ccc", marginBottom: 6 }}>Minecraft item</label>
+        <label style={{ display: "block", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 6 }}>Minecraft item</label>
         <SearchDropdown
           options={ITEM_OPTIONS}
           value={item.label}
           placeholder="Search items..."
           onChange={chooseItem}
         />
-        {profile.note && <div style={{ color: "#999", fontSize: 12, marginTop: 8 }}>{profile.note}</div>}
+        {profile.note && <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8 }}>{profile.note}</div>}
         {family.length > 1 && (
-          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "#ccc", marginTop: 10 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--color-text-secondary)", marginTop: 10 }}>
             <input
               type="checkbox"
               aria-label="Apply to every material"
               checked={params.allMaterials}
               onChange={(event) => patch({ allMaterials: event.target.checked })}
-              style={{ accentColor: "#a855f7" }}
+              style={{ accentColor: "var(--color-accent)" }}
             />
             Apply to all {family.length} {item.group.toLowerCase() === "armour" ? "pieces of this type" : item.group.toLowerCase()}
           </label>
@@ -247,18 +247,18 @@ export default function ThicknessStep({ draft, params, onChange, onBack, onBuild
           step={50}
           onChange={(maxElements) => patch({ maxElements })}
         />
-        <div style={{ color: "#999", fontSize: 12, margin: "-4px 0 8px" }}>
+        <div style={{ color: "var(--color-text-muted)", fontSize: 12, margin: "-4px 0 8px" }}>
           Flat areas stay as big blocks. Detail in the image becomes small voxels.
         </div>
 
         <SectionTitle>Glow</SectionTitle>
-        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "#ccc", marginBottom: 10 }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 10 }}>
           <input
             type="checkbox"
             aria-label="Add a glow layer"
             checked={params.glow}
             onChange={(event) => patch({ glow: event.target.checked })}
-            style={{ accentColor: "#a855f7" }}
+            style={{ accentColor: "var(--color-accent)" }}
           />
           Add a glow layer, animated with a still version
         </label>
@@ -274,7 +274,7 @@ export default function ThicknessStep({ draft, params, onChange, onBack, onBuild
           />
         )}
         {params.glow && built && !built.glow && (
-          <div style={{ color: "#fbbf24", fontSize: 12, marginBottom: 10 }}>
+          <div style={{ color: "var(--color-warning-text)", fontSize: 12, marginBottom: 10 }}>
             Nothing in this image is bright enough to glow.
           </div>
         )}
@@ -290,7 +290,7 @@ export default function ThicknessStep({ draft, params, onChange, onBack, onBuild
           onChange={(modelScale) => patch({ modelScale })}
         />
         <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-          <label style={{ flex: 1, fontSize: 13, color: "#ccc" }}>
+          <label style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)" }}>
             Texture
             <select
               aria-label="Texture size"
@@ -308,7 +308,7 @@ export default function ThicknessStep({ draft, params, onChange, onBack, onBuild
               <option value={1024}>1024 px</option>
             </select>
           </label>
-          <label style={{ flex: 1, fontSize: 13, color: "#ccc" }}>
+          <label style={{ flex: 1, fontSize: 13, color: "var(--color-text-secondary)" }}>
             Shape detail
             <select
               aria-label="Shape detail"
@@ -323,35 +323,35 @@ export default function ThicknessStep({ draft, params, onChange, onBack, onBuild
             </select>
           </label>
         </div>
-        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "#ccc", marginBottom: 12 }}>
+        <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
           <input
             type="checkbox"
             aria-label="Smooth outline"
             checked={params.smoothOutline}
             onChange={(event) => patch({ smoothOutline: event.target.checked })}
-            style={{ accentColor: "#a855f7" }}
+            style={{ accentColor: "var(--color-accent)" }}
           />
           Smooth outline, using the texture instead of extra elements
         </label>
 
         {textureOutgrowsImage && (
-          <div style={{ color: "#fbbf24", fontSize: 12, marginBottom: 10 }}>
+          <div style={{ color: "var(--color-warning-text)", fontSize: 12, marginBottom: 10 }}>
             Your image is only {sourceLongest} px, so a texture this large adds size without adding detail.
           </div>
         )}
 
         {stats && (
-          <div data-testid="build-stats" style={{ fontSize: 13, color: "#ccc", lineHeight: 1.7, marginBottom: 12 }}>
+          <div data-testid="build-stats" style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.7, marginBottom: 12 }}>
             <div>Texture: {stats.width} x {stats.height} px</div>
             <div>
               Atlas space: {stats.atlasPixels.toLocaleString()} px, {stats.atlasShare < 0.01 ? "under 0.01" : stats.atlasShare.toFixed(2)}% of the maximum
             </div>
             <div>Model: {stats.elements} elements</div>
             {stats.detailReduced && (
-              <div style={{ color: "#fbbf24", fontSize: 12 }}>Voxel detail was reduced to stay within the element limit.</div>
+              <div style={{ color: "var(--color-warning-text)", fontSize: 12 }}>Voxel detail was reduced to stay within the element limit.</div>
             )}
             {stats.elements > params.maxElements && (
-              <div style={{ color: "#fbbf24", fontSize: 12 }}>
+              <div style={{ color: "var(--color-warning-text)", fontSize: 12 }}>
                 This goes over the element limit. Lower the shape detail or the glow amount.
               </div>
             )}

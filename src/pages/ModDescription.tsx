@@ -107,8 +107,8 @@ function ModDescription({
 
   if (failed) {
     return (
-      <div style={{ color: "white", padding: 40 }}>
-        <p style={{ color: "#fca5a5", marginBottom: 16 }}>
+      <div style={{ color: "var(--color-text)", padding: 40 }}>
+        <p style={{ color: "var(--color-danger-text)", marginBottom: 16 }}>
           {failReason ?? "This project could not be loaded. Check your connection."}
         </p>
         <button className="sidebar-button" onClick={onBack}>← Back</button>
@@ -118,12 +118,12 @@ function ModDescription({
 
   if (!mod) {
     return (
-      <div style={{ color: "white", padding: 40 }}>Loading...</div>
+      <div style={{ color: "var(--color-text)", padding: 40 }}>Loading...</div>
     );
   }
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#0d0d0d", color: "white" }}>
+    <div style={{ display: "flex", height: "100vh", background: "var(--color-bg)", color: "var(--color-text)" }}>
       <Sidebar
         currentPage="discover"
         goHome={goHome}
@@ -148,10 +148,10 @@ function ModDescription({
 	    style={{
 	      display: "flex",
 	      gap: 20,
-	      background: "#151515",
+	      background: "var(--color-surface)",
 	      padding: 20,
 	      borderRadius: 12,
-	      border: "1px solid #6d28d9",
+	      border: "1px solid var(--color-border)",
 	      alignItems: "center",
 	    }}
 	  >
@@ -171,15 +171,12 @@ function ModDescription({
 	    <div style={{ minWidth: 0 }}>
 	      <h1
 	        style={{
-	          margin: 0,
-	          color: "#c084fc",
-	          fontSize: 30,
-	        }}
+	          margin: 0 }}
 	      >
 	        {mod.title}
 	      </h1>
 
-	      <p style={{ color: "#888", marginTop: 6 }}>
+	      <p style={{ color: "var(--color-text-muted)", marginTop: 6 }}>
 	        {mod.authors?.join(", ") || ""}
 	      </p>
 
@@ -191,8 +188,8 @@ function ModDescription({
 	          borderRadius: 8,
 	          background:
 	            source === "curseforge"
-	              ? "#f97316"
-	              : "#22c55e",
+	              ? "var(--color-warning-solid)"
+	              : "var(--color-success-solid)",
 	          fontSize: 12,
 	          fontWeight: 700,
 	        }}
@@ -205,7 +202,7 @@ function ModDescription({
 	      <p
 	        style={{
 	          marginTop: 14,
-	          color: "#bbb",
+	          color: "var(--color-text-secondary)",
 	        }}
 	      >
 	        {mod.description}
@@ -231,7 +228,7 @@ function ModDescription({
 
             {/* DESCRIPTION */}
             {tab === "desc" && (
-              <div style={{ color: "#ddd", lineHeight: 1.7, overflowX: "hidden", wordBreak: "break-word"}}>
+              <div style={{ color: "var(--color-text-secondary)", lineHeight: 1.7, overflowX: "hidden", wordBreak: "break-word"}}>
                 <div
                   className="mod-description"
                   onClick={followLink}
@@ -247,13 +244,13 @@ function ModDescription({
                   <div
                     key={v.id}
                     style={{
-                      background: "#1b1b1b",
+                      background: "var(--color-surface-sunken)",
                       padding: 12,
                       borderRadius: 10,
-                      border: "1px solid #333",
+                      border: "1px solid var(--color-border)",
                     }}
                   >
-                    <h4 style={{ color: "#c084fc" }}>
+                    <h4 style={{ color: "var(--color-accent-text)" }}>
                       {v.name || v.version_number}
                     </h4>
 
@@ -277,7 +274,7 @@ function ModDescription({
                     style={{
                       width: "100%",
                       borderRadius: 10,
-                      border: "1px solid #333",
+                      border: "1px solid var(--color-border)",
                     }}
                   />
                 ))}
@@ -295,10 +292,10 @@ function ModDescription({
 	    position: "relative",
 	    width: 320,
 	    flexShrink: 0,
-	    background: "rgba(21, 21, 21, 0.85)",
+	    background: "var(--color-surface)",
 	    borderRadius: 12,
 	    padding: 20,
-	    border: "1px solid #333",
+	    border: "1px solid var(--color-border)",
 	    height: "fit-content",
 	  }}
 	>
@@ -317,11 +314,11 @@ function ModDescription({
 	  </div>
 	)}
 
-	<h3 style={{ color: "#c084fc" }}>
+	<h3>
 	Compatibility
 	</h3>
 
-	<p style={{ color: "#888" }}>
+	<p style={{ color: "var(--color-text-muted)" }}>
 	Minecraft Versions
 	</p>
 
@@ -332,7 +329,7 @@ function ModDescription({
 	<p
 	style={{
 	marginTop:16,
-	color:"#888"
+	color:"var(--color-text-muted)"
 	}}
 	>
 	Loaders
@@ -347,7 +344,7 @@ function ModDescription({
 	<hr
 	style={{
 	margin:"20px 0",
-	borderColor:"#333"
+	borderColor:"var(--color-border)"
 	}}
 	/>
 
@@ -397,7 +394,7 @@ function ModDescription({
 	}
 	target="_blank"
 	style={{
-	color:"#8ab4ff"
+	color:"var(--color-info-text)"
 	}}
 	>
 	Open Project

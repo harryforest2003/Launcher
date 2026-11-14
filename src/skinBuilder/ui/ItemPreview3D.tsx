@@ -246,7 +246,7 @@ export default function ItemPreview3D({ built, display }: Props) {
           minHeight: 420,
           borderRadius: 10,
           overflow: "hidden",
-          background: "radial-gradient(circle at 50% 40%, #2a2140 0%, #121018 75%)",
+          background: "radial-gradient(circle at 50% 40%, var(--color-accent-subtle) 0%, var(--color-surface-sunken) 75%)",
           cursor: mode === "free" ? "grab" : "default",
         }}
       />

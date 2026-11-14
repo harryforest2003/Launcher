@@ -2,7 +2,8 @@ import type { ContentUpdates } from "./useContentUpdates";
 import { updateKey } from "./useContentUpdates";
 import { CheckIcon, DownloadIcon, RefreshIcon } from "./Icons";
 
-const GREEN = "#16a34a";
+const GREEN = "var(--color-success-solid)";
+const GREEN_TEXT = "var(--color-success-text)";
 
 /* In line with the content tabs: what the update check found, Check Again and Update All. */
 export function UpdatesControls({ updates }: { updates: ContentUpdates }) {
@@ -19,9 +20,9 @@ export function UpdatesControls({ updates }: { updates: ContentUpdates }) {
 
   return (
     <div data-testid="updates-bar" style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: count && !busy ? "#86efac" : "#9ca3af", fontSize: 12 }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: count && !busy ? "var(--color-success-text)" : "var(--color-text-muted)", fontSize: 12 }}>
         {!updates.checking && !busy && !count && (
-          <span style={{ color: GREEN, display: "inline-flex" }}>
+          <span style={{ color: GREEN_TEXT, display: "inline-flex" }}>
             <CheckIcon size={14} />
           </span>
         )}
@@ -56,6 +57,7 @@ export function UpdatesControls({ updates }: { updates: ContentUpdates }) {
             gap: 6,
             background: GREEN,
             borderColor: GREEN,
+            color: "var(--color-on-success)",
           }}
         >
           <DownloadIcon size={14} />
@@ -82,14 +84,14 @@ export function UpdatesMessages({ updates }: { updates: ContentUpdates }) {
   if (!updates.result && !updates.error && !batch) return null;
   return (
     <div style={{ marginBottom: 12, fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
-      {updates.result && <div style={{ color: "#86efac" }}>{updates.result}</div>}
+      {updates.result && <div style={{ color: "var(--color-success-text)" }}>{updates.result}</div>}
       {updates.error && (
-        <div role="alert" style={{ color: "#fca5a5" }}>
+        <div role="alert" style={{ color: "var(--color-danger-text)" }}>
           {updates.error}
         </div>
       )}
       {batch && (
-        <div data-testid="last-update" style={{ color: "#9ca3af", fontSize: 12, display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
+        <div data-testid="last-update" style={{ color: "var(--color-text-muted)", fontSize: 12, display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={batch.names.join("\n")}>
             Last change, {ago(batch.time)}: {batch.names.length === 1 ? batch.names[0] : `${batch.names.length} items`}
           </span>
@@ -97,7 +99,7 @@ export function UpdatesMessages({ updates }: { updates: ContentUpdates }) {
             data-testid="undo-update"
             disabled={updates.installing.length > 0}
             onClick={updates.undo}
-            style={{ background: "none", border: "none", color: "#c4b5fd", cursor: "pointer", fontSize: 12, padding: 0, whiteSpace: "nowrap" }}
+            style={{ background: "none", border: "none", color: "var(--color-accent-text)", cursor: "pointer", fontSize: 12, padding: 0, whiteSpace: "nowrap" }}
           >
             Undo
           </button>
@@ -119,11 +121,11 @@ export function ItemUpdateStatus({ item, updates, onPick }: { item: InstanceMod;
   const key = updateKey(item);
 
   if (updates.installing.includes(key)) {
-    return <span style={{ ...SLOT, width: "auto", color: "#86efac", fontSize: 11 }}>Updating...</span>;
+    return <span style={{ ...SLOT, width: "auto", color: "var(--color-success-text)", fontSize: 11 }}>Updating...</span>;
   }
 
   if (!status) {
-    return updates.checking ? <span style={{ ...SLOT, color: "#6b7280" }}>…</span> : null;
+    return updates.checking ? <span style={{ ...SLOT, color: "var(--color-text-muted)" }}>…</span> : null;
   }
 
   if (status.state === "update") {
@@ -134,7 +136,7 @@ export function ItemUpdateStatus({ item, updates, onPick }: { item: InstanceMod;
         aria-label={`Choose a version of ${status.name ?? item.name}`}
         disabled={updates.installing.length > 0}
         onClick={() => onPick(item)}
-        style={{ ...SLOT, padding: 0, background: GREEN, color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}
+        style={{ ...SLOT, padding: 0, background: GREEN, color: "var(--color-on-success)", border: "none", borderRadius: 8, cursor: "pointer" }}
       >
         <DownloadIcon size={16} />
       </button>
@@ -150,7 +152,7 @@ export function ItemUpdateStatus({ item, updates, onPick }: { item: InstanceMod;
         disabled={updates.installing.length > 0}
         onClick={() => onPick(item)}
         className="tick-button"
-        style={{ ...SLOT, padding: 0, color: GREEN }}
+        style={{ ...SLOT, padding: 0, color: GREEN_TEXT }}
       >
         <CheckIcon size={18} />
       </button>
@@ -158,7 +160,7 @@ export function ItemUpdateStatus({ item, updates, onPick }: { item: InstanceMod;
   }
 
   return (
-    <span title="Not from Modrinth or CurseForge, so it can't be checked for updates" style={{ ...SLOT, color: "#52525b" }}>
+    <span title="Not from Modrinth or CurseForge, so it can't be checked for updates" style={{ ...SLOT, color: "var(--color-text-muted)" }}>
       –
     </span>
   );

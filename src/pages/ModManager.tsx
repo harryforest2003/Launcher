@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Download, ExternalLink, FolderOpen, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Badge, Button, Notice, Panel } from "../components/ui";
+import { usePageNav } from "../components/ui/shellContext";
+import { initials } from "./playedAgo";
+import "./homeScreens.css";
 
 type Props = {
   game: DetectedGame;
@@ -6,6 +11,8 @@ type Props = {
 };
 
 type Tab = "installed" | "browse";
+
+const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -21,31 +28,38 @@ function formatBytes(bytes: number) {
 
 export default function ModManager({ game, onBack }: Props) {
   const [tab, setTab] = useState<Tab>("installed");
+  usePageNav({ area: "modGame", game: game.name, page: tab, go: setTab });
 
   /* ---------------- installed ---------------- */
   const [mods, setMods] = useState<InstalledMod[]>([]);
-  const [loadingMods, setLoadingMods] = useState(false);
+  const [loadingMods, setLoadingMods] = useState(true);
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadMods = useCallback(async () => {
-    setLoadingMods(true);
-    setError(null);
-
-    try {
-      setMods(await window.modAPI.list(game.id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setMods([]);
-    }
-
-    setLoadingMods(false);
-  }, [game.id]);
+  // Reads the mod folder; state is only set once the answer is in.
+  const readMods = useCallback(
+    () =>
+      window.modAPI
+        .list(game.id)
+        .then(setMods)
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : String(err));
+          setMods([]);
+        })
+        .finally(() => setLoadingMods(false)),
+    [game.id]
+  );
 
   useEffect(() => {
-    loadMods();
-  }, [loadMods]);
+    readMods();
+  }, [readMods]);
+
+  async function loadMods() {
+    setLoadingMods(true);
+    setError(null);
+    await readMods();
+  }
 
   async function toggle(mod: InstalledMod) {
     setBusy(mod.relativePath);
@@ -61,8 +75,22 @@ export default function ModManager({ game, onBack }: Props) {
     setBusy(null);
   }
 
+  // Delete asks in place: the first press turns the button into "Delete for good?", which
+  // goes back after 4 seconds.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+  }, []);
+
   async function remove(mod: InstalledMod) {
-    if (!confirm(`Delete "${mod.name}" permanently?`)) return;
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    if (confirming !== mod.relativePath) {
+      setConfirming(mod.relativePath);
+      confirmTimer.current = setTimeout(() => setConfirming(null), 4000);
+      return;
+    }
+    setConfirming(null);
 
     setBusy(mod.relativePath);
     setError(null);
@@ -99,7 +127,8 @@ export default function ModManager({ game, onBack }: Props) {
   const [debounced, setDebounced] = useState("");
   const [results, setResults] = useState<RemoteMod[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [searching, setSearching] = useState(false);
+  // The search the results on show answer; while it differs from the box, a search is running.
+  const [resultsFor, setResultsFor] = useState<string | null>(null);
   const [installing, setInstalling] = useState<string | null>(null);
   const [progress, setProgress] = useState<Record<string, number>>({});
 
@@ -113,7 +142,6 @@ export default function ModManager({ game, onBack }: Props) {
     if (game.availableProviders.length === 0) return;
 
     let active = true;
-    setSearching(true);
 
     window.modAPI
       .search(game.id, debounced)
@@ -121,14 +149,13 @@ export default function ModManager({ game, onBack }: Props) {
         if (!active) return;
         setResults(r.results);
         setWarnings(r.warnings);
+        setResultsFor(debounced);
       })
       .catch((err) => {
         if (!active) return;
         setResults([]);
         setWarnings([err instanceof Error ? err.message : String(err)]);
-      })
-      .finally(() => {
-        if (active) setSearching(false);
+        setResultsFor(debounced);
       });
 
     return () => {
@@ -171,348 +198,211 @@ export default function ModManager({ game, onBack }: Props) {
   );
 
   const enabledCount = mods.filter((m) => m.enabled).length;
-
-  const card: React.CSSProperties = {
-    background: "#151515",
-    border: "1px solid #6d28d9",
-    borderRadius: 12,
-    padding: 16,
-  };
+  const searching = resultsFor !== debounced;
 
   return (
-    <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", position: "relative" }}>
-      <button
-        className="sidebar-button"
-        onClick={onBack}
-        style={{ marginBottom: 20 }}
-      >
-        ← All Games
-      </button>
+    <div className="app-page">
+      <Button variant="ghost" className="mg-back" icon={<ArrowLeft size={16} aria-hidden="true" />} onClick={onBack}>
+        All games
+      </Button>
 
-      <h1 style={{ color: "#c084fc", marginBottom: 6 }}>{game.name}</h1>
+      <header className="page-header" style={{ marginBottom: "var(--space-5)" }}>
+        <h1 className="page-title">{game.name}</h1>
+        <p className="page-lead">
+          {mods.length} mod{mods.length === 1 ? "" : "s"} installed, {enabledCount} on. Found via {game.source}.
+        </p>
+        <p className="mg-path" style={{ marginTop: "var(--space-1)" }}>
+          {game.modDir ?? "No mod folder configured"}
+        </p>
+      </header>
 
-      <p style={{ color: "#9ca3af", marginBottom: 6 }}>
-        {mods.length} mod{mods.length === 1 ? "" : "s"} installed •{" "}
-        {enabledCount} enabled • detected via {game.source}
-      </p>
-
-      <p
-        style={{
-          color: "#6b7280",
-          fontSize: 12,
-          marginBottom: 16,
-          wordBreak: "break-all",
-        }}
-      >
-        {game.modDir ?? "No mod folder configured"}
-      </p>
-
-      {game.notes && (
-        <div
-          style={{
-            ...card,
-            borderColor: "#7c3aed",
-            background: "#1a1130",
-            marginBottom: 16,
-            color: "#d8b4fe",
-            fontSize: 13,
-          }}
-        >
-          {game.notes}
+      {(game.notes || (game.windowsOnlyModding && navigator.platform.includes("Mac")) || error) && (
+        <div className="mg-stack">
+          {game.notes && <Notice tone="info">{game.notes}</Notice>}
+          {game.windowsOnlyModding && navigator.platform.includes("Mac") && (
+            <Notice tone="warning">
+              Modding this game relies on Windows-only tools. You can manage files here, but the mods will not run on macOS.
+            </Notice>
+          )}
+          {error && (
+            <Notice tone="danger" style={{ whiteSpace: "pre-wrap" }}>
+              {error}
+            </Notice>
+          )}
         </div>
       )}
 
-      {game.windowsOnlyModding && navigator.platform.includes("Mac") && (
-        <div
-          style={{
-            ...card,
-            borderColor: "#b45309",
-            background: "#2a1a05",
-            marginBottom: 16,
-            color: "#fcd34d",
-            fontSize: 13,
-          }}
-        >
-          Modding this game relies on Windows-only tooling. You can manage
-          files here, but the mods will not run on macOS.
+      {/* Tabs, and what can be done to the mod folder */}
+      <div className="mg-toolbar" style={{ marginBottom: 0, maxWidth: "var(--content-max)" }}>
+        <div className="mg-tabs" role="tablist" aria-label="Mods" style={{ marginBottom: 0, flex: 1 }}>
+          <button type="button" role="tab" className="mg-tab" aria-selected={tab === "installed"} onClick={() => setTab("installed")}>
+            Installed<span className="mg-count">{mods.length}</span>
+          </button>
+          <button type="button" role="tab" className="mg-tab" aria-selected={tab === "browse"} onClick={() => setTab("browse")}>
+            Browse online
+          </button>
         </div>
-      )}
-
-      {error && (
-        <div
-          style={{
-            ...card,
-            borderColor: "#ef4444",
-            background: "#2a0d0d",
-            marginBottom: 16,
-            color: "#fca5a5",
-            fontSize: 13,
-            whiteSpace: "pre-wrap",
-          }}
-        >
-          {error}
+        <div className="mg-toolbar__end">
+          <Button size="sm" icon={<Upload size={14} aria-hidden="true" />} onClick={installFromFile}>
+            Install from file
+          </Button>
+          <Button size="sm" variant="ghost" icon={<FolderOpen size={14} aria-hidden="true" />} onClick={() => window.modAPI.openFolder(game.id).catch(() => {})}>
+            Open mods folder
+          </Button>
+          <Button size="sm" variant="ghost" icon={<RefreshCw size={14} aria-hidden="true" />} onClick={loadMods}>
+            Refresh
+          </Button>
         </div>
-      )}
-
-      {/* ACTIONS */}
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18 }}>
-        <button className="sidebar-button" onClick={() => setTab("installed")}
-          style={{ opacity: tab === "installed" ? 1 : 0.6 }}>
-          Installed ({mods.length})
-        </button>
-
-        <button className="sidebar-button" onClick={() => setTab("browse")}
-          style={{ opacity: tab === "browse" ? 1 : 0.6 }}>
-          Browse Online
-        </button>
-
-        <button className="sidebar-button" onClick={installFromFile}>
-          Install from File
-        </button>
-
-        <button
-          className="sidebar-button"
-          onClick={() => window.modAPI.openFolder(game.id).catch(() => {})}
-        >
-          Open Mods Folder
-        </button>
-
-        <button className="sidebar-button" onClick={loadMods}>
-          Refresh
-        </button>
       </div>
+
+      <div style={{ height: "var(--space-4)" }} />
 
       {/* ---------------- INSTALLED ---------------- */}
       {tab === "installed" && (
-        <>
+        <div role="tabpanel" aria-label="Installed">
           <input
+            className="ui-input mg-search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter installed mods..."
-            style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 10,
-              background: "#1b1b1b",
-              color: "white",
-              border: "1px solid #6d28d9",
-              boxSizing: "border-box",
-              marginBottom: 16,
-            }}
+            aria-label="Filter installed mods"
           />
 
           {loadingMods ? (
-            <div style={{ color: "#9ca3af" }}>Scanning mod folder...</div>
+            <p className="mg-muted" role="status">Scanning mod folder...</p>
           ) : visible.length === 0 ? (
-            <div style={{ ...card, color: "#9ca3af" }}>
+            <p className="mg-muted">
               {mods.length === 0
-                ? "No mods installed yet. Use “Install from File”, or browse online."
+                ? "No mods installed yet. Use Install from file, or browse online."
                 : "No mods match that filter."}
-            </div>
+            </p>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {visible.map((mod) => (
-                <div
-                  key={mod.relativePath}
-                  style={{
-                    ...card,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    opacity: mod.enabled ? 1 : 0.55,
-                    borderColor: mod.enabled ? "#6d28d9" : "#3f3f46",
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: "#c084fc", fontWeight: 600 }}>
-                      {mod.name}
+            <ul className="mg-list">
+              {visible.map((mod) => {
+                const working = busy === mod.relativePath;
+                const asking = confirming === mod.relativePath;
+                return (
+                  <li key={mod.relativePath} className={`mg-row${mod.enabled ? "" : " mg-row--off"}`}>
+                    <div className="mg-row__main">
+                      <div className="mg-row__name">
+                        {mod.name}
+                        <Badge tone={mod.enabled ? "success" : "neutral"}>{mod.enabled ? "On" : "Off"}</Badge>
+                      </div>
+                      <div className="mg-path">{mod.relativePath}</div>
+                      <div className="mg-row__meta">
+                        {mod.kind === "folder" ? "Folder" : "File"}, {formatBytes(mod.size)}
+                        {mod.source ? `, from ${mod.source}` : ""}
+                      </div>
                     </div>
 
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: "#888",
-                        wordBreak: "break-all",
-                      }}
-                    >
-                      {mod.relativePath}
+                    <div className="mg-row__actions">
+                      <Button size="sm" variant="secondary" disabled={working} onClick={() => toggle(mod)}>
+                        {working ? "Working..." : mod.enabled ? "Turn off" : "Turn on"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={asking ? "danger" : "ghost"}
+                        disabled={working}
+                        icon={<Trash2 size={14} aria-hidden="true" />}
+                        aria-label={asking ? `Delete ${mod.name} for good` : `Delete ${mod.name}`}
+                        onClick={() => remove(mod)}
+                      >
+                        {asking ? "Delete for good?" : "Delete"}
+                      </Button>
                     </div>
-
-                    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-                      {mod.kind} • {formatBytes(mod.size)}
-                      {mod.source ? ` • from ${mod.source}` : ""}
-                      {mod.enabled ? "" : " • disabled"}
-                    </div>
-                  </div>
-
-                  <button
-                    className="sidebar-button"
-                    disabled={busy === mod.relativePath}
-                    onClick={() => toggle(mod)}
-                    style={{
-                      minWidth: 100,
-                      background: mod.enabled ? "#6d28d9" : "#3f3f46",
-                    }}
-                  >
-                    {busy === mod.relativePath
-                      ? "..."
-                      : mod.enabled
-                      ? "Disable"
-                      : "Enable"}
-                  </button>
-
-                  <button
-                    className="sidebar-button"
-                    disabled={busy === mod.relativePath}
-                    onClick={() => remove(mod)}
-                    style={{ background: "#7f1d1d" }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
-        </>
+        </div>
       )}
 
       {/* ---------------- BROWSE ---------------- */}
       {tab === "browse" && (
-        <>
+        <div role="tabpanel" aria-label="Browse online">
           {game.availableProviders.length === 0 ? (
-            <div style={{ ...card, color: "#9ca3af" }}>
-              No mod site with a public API carries {game.name}, so there is
-              nothing to search here. Download mods from the community site you
-              use, then press <b>Install from File</b> — everything else on this
-              page still works.
-            </div>
+            <Panel tone="sunken" className="mg-empty">
+              <p style={{ margin: 0 }} className="mg-muted">
+                No mod site with a public API carries {game.name}, so there is nothing to search here. Download mods from
+                the community site you use, then press <strong>Install from file</strong>: everything else on this page still works.
+              </p>
+            </Panel>
           ) : (
             <>
               <input
+                className="ui-input mg-search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={`Search ${game.availableProviders
-                  .map((p) => p.label)
-                  .join(" + ")}...`}
-                style={{
-                  width: "100%",
-                  padding: 12,
-                  borderRadius: 10,
-                  background: "#1b1b1b",
-                  color: "white",
-                  border: "1px solid #6d28d9",
-                  boxSizing: "border-box",
-                  marginBottom: 12,
-                }}
+                placeholder={`Search ${game.availableProviders.map((p) => p.label).join(" and ")}...`}
+                aria-label={`Search ${game.availableProviders.map((p) => p.label).join(" and ")}`}
               />
 
-              {warnings.map((w, i) => (
-                <div
-                  key={i}
-                  style={{
-                    ...card,
-                    borderColor: "#b45309",
-                    background: "#2a1a05",
-                    color: "#fcd34d",
-                    fontSize: 12,
-                    marginBottom: 10,
-                  }}
-                >
-                  {w}
+              {warnings.length > 0 && (
+                <div className="mg-stack" style={{ marginBottom: "var(--space-3)" }}>
+                  {warnings.map((w, i) => (
+                    <Notice key={i} tone="warning">
+                      {w}
+                    </Notice>
+                  ))}
                 </div>
-              ))}
+              )}
 
               {searching ? (
-                <div style={{ color: "#9ca3af" }}>Searching...</div>
+                <p className="mg-muted" role="status">Searching...</p>
               ) : results.length === 0 ? (
-                <div style={{ ...card, color: "#9ca3af" }}>No results.</div>
+                <p className="mg-muted">No results.</p>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <ul className="mg-list">
                   {results.map((mod) => (
-                    <div
-                      key={`${mod.provider}-${mod.id}`}
-                      style={{ ...card, display: "flex", gap: 14, alignItems: "center" }}
-                    >
-                      {mod.icon && (
-                        <img
-                          src={mod.icon}
-                          alt=""
-                          style={{
-                            width: 60,
-                            height: 60,
-                            borderRadius: 10,
-                            objectFit: "cover",
-                            flexShrink: 0,
-                          }}
-                        />
+                    <li key={`${mod.provider}-${mod.id}`} className="mg-row">
+                      {mod.icon ? (
+                        <img className="mg-thumb" src={mod.icon} alt="" loading="lazy" />
+                      ) : (
+                        <span className="mg-thumb mh-monogram" style={{ width: 56, height: 56 }} aria-hidden="true">
+                          {initials(mod.name)}
+                        </span>
                       )}
 
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: "#c084fc", fontWeight: 600 }}>
-                          {mod.name}
-                        </div>
-
-                        <div style={{ fontSize: 12, color: "#aaa" }}>
-                          {mod.summary?.slice(0, 140)}
-                        </div>
-
-                        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>
-                          <span style={{ color: "#22c55e", fontWeight: 700 }}>
-                            {mod.providerLabel}
-                          </span>
-                          {mod.author ? ` • ${mod.author}` : ""} •{" "}
-                          {mod.downloads.toLocaleString()} downloads
+                      <div className="mg-row__main">
+                        <div className="mg-row__name">{mod.name}</div>
+                        {mod.summary && <div className="mg-row__summary">{mod.summary}</div>}
+                        <div className="mg-row__meta">
+                          <strong style={{ color: "var(--color-accent-text)" }}>{mod.providerLabel}</strong>
+                          {mod.author ? `, by ${mod.author}` : ""}, {compact.format(mod.downloads)} downloads
                         </div>
 
                         {installing === mod.id && progress[mod.id] > 0 && (
-                          <div
-                            style={{
-                              marginTop: 6,
-                              height: 4,
-                              background: "#333",
-                              borderRadius: 2,
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: `${progress[mod.id]}%`,
-                                height: "100%",
-                                background: "#7c3aed",
-                                borderRadius: 2,
-                              }}
-                            />
+                          <div className="mg-progress" role="progressbar" aria-valuenow={Math.round(progress[mod.id])} aria-valuemin={0} aria-valuemax={100} aria-label={`Installing ${mod.name}`}>
+                            <span style={{ width: `${progress[mod.id]}%` }} />
                           </div>
                         )}
                       </div>
 
-                      {mod.installable ? (
-                        <button
-                          className="sidebar-button"
-                          disabled={installing === mod.id}
-                          onClick={() => install(mod)}
-                          style={{ minWidth: 90, background: "#7c3aed" }}
-                        >
-                          {installing === mod.id ? "..." : "Install"}
-                        </button>
-                      ) : (
-                        <button
-                          className="sidebar-button"
-                          title="This author does not allow third-party downloads"
-                          onClick={() =>
-                            mod.url && window.modAPI.openUrl(mod.url).catch(() => {})
-                          }
-                          style={{ minWidth: 90 }}
-                        >
-                          Open Site
-                        </button>
-                      )}
-                    </div>
+                      <div className="mg-row__actions">
+                        {mod.installable ? (
+                          <Button size="sm" icon={<Download size={14} aria-hidden="true" />} disabled={installing === mod.id} onClick={() => install(mod)}>
+                            {installing === mod.id ? "Installing..." : "Install"}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<ExternalLink size={14} aria-hidden="true" />}
+                            data-tip="This author doesn't allow downloads from other apps: get it on the site"
+                            onClick={() => mod.url && window.modAPI.openUrl(mod.url).catch(() => {})}
+                          >
+                            Open site
+                          </Button>
+                        )}
+                      </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </>
           )}
-        </>
+        </div>
       )}
     </div>
   );

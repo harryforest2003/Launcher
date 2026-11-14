@@ -1,7 +1,20 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+/*
+ * The launcher's bridge. main.cjs registers this for its session (not for one window), so
+ * it hands its functions only to the launcher's own page, app://unity (or Vite's dev
+ * server when run from source): any other page in the session gets nothing. The main
+ * process checks every message's sender as well (security.cjs).
+ */
+const LAUNCHER_ORIGINS = ["app://unity", "http://localhost:5174"];
+const trusted = window.top === window && LAUNCHER_ORIGINS.includes(`${location.protocol}//${location.host}`);
 
-contextBridge.exposeInMainWorld("launcherAPI", {
+const expose = (name, api) => {
+    if (trusted) contextBridge.exposeInMainWorld(name, api);
+};
+
+
+expose("launcherAPI", {
     // ---------- Authentication ----------
     loginMicrosoft: () =>
         ipcRenderer.invoke("auth:login"),
@@ -10,8 +23,8 @@ contextBridge.exposeInMainWorld("launcherAPI", {
     getInstances: () =>
         ipcRenderer.invoke("instances:get"),
 
-    launchInstance: (instance) =>
-        ipcRenderer.invoke("minecraft:launch", instance),
+    launchInstance: (instance, accountId) =>
+        ipcRenderer.invoke("minecraft:launch", instance, accountId),
 
     getInstancesStorage: () =>
         ipcRenderer.invoke("instances:storage"),
@@ -52,7 +65,7 @@ contextBridge.exposeInMainWorld("launcherAPI", {
 
 // ---------------- MINECRAFT INSTANCES ----------------
 
-contextBridge.exposeInMainWorld("instanceAPI", {
+expose("instanceAPI", {
     list: () => ipcRenderer.invoke("instance:list"),
     get: (name) => ipcRenderer.invoke("instance:get", name),
 
@@ -66,8 +79,10 @@ contextBridge.exposeInMainWorld("instanceAPI", {
     repair: (name) => ipcRenderer.invoke("instance:repair", name),
     remove: (name) => ipcRenderer.invoke("instance:delete", name),
 
-    launch: (name) => ipcRenderer.invoke("instance:launch", name),
+    // accountId: a signed-in account's id, to play as it; left out, the active account.
+    launch: (name, accountId) => ipcRenderer.invoke("instance:launch", name, accountId),
     stop: (name) => ipcRenderer.invoke("instance:stop", name),
+    playing: () => ipcRenderer.invoke("instance:playing"),
 
     openFolder: (name) => ipcRenderer.invoke("instance:openFolder", name),
     worlds: (name) => ipcRenderer.invoke("instance:worlds", name),
@@ -183,12 +198,18 @@ contextBridge.exposeInMainWorld("instanceAPI", {
         ipcRenderer.on("instance:exit", h);
         return () => ipcRenderer.removeListener("instance:exit", h);
     },
+
+    onStarted: (cb) => {
+        const h = (_e, d) => cb(d);
+        ipcRenderer.on("instance:started", h);
+        return () => ipcRenderer.removeListener("instance:started", h);
+    },
 });
 
 // ---------------- SKIN BUILDER ----------------
 
 // Opens Blockbench, inside the launcher, to edit something and bring it back.
-contextBridge.exposeInMainWorld("blockbenchAPI", {
+expose("blockbenchAPI", {
     available: () => ipcRenderer.invoke("blockbench:available"),
     prepare: () => ipcRenderer.invoke("blockbench:prepare"),
     editSkin: (skin, slim, name, savedId) => ipcRenderer.invoke("blockbench:editSkin", { skin, slim, name, savedId }),
@@ -205,7 +226,7 @@ contextBridge.exposeInMainWorld("blockbenchAPI", {
 });
 
 // Changes the signed-in player's real skin and cape.
-contextBridge.exposeInMainWorld("skinAPI", {
+expose("skinAPI", {
     profile: () => ipcRenderer.invoke("skins:profile"),
     applyUrl: (url, slim) => ipcRenderer.invoke("skins:applyUrl", { url, slim }),
     pickFile: () => ipcRenderer.invoke("skins:pickFile"),
@@ -219,7 +240,7 @@ contextBridge.exposeInMainWorld("skinAPI", {
     deleteSaved: (id) => ipcRenderer.invoke("skins:deleteSaved", id),
 });
 
-contextBridge.exposeInMainWorld("skinBuilderAPI", {
+expose("skinBuilderAPI", {
     getLibrary: () => ipcRenderer.invoke("skinBuilder:getLibrary"),
     saveSkin: (meta, files) => ipcRenderer.invoke("skinBuilder:saveSkin", { meta, files }),
     readSkinFile: (id, file) => ipcRenderer.invoke("skinBuilder:readSkinFile", { id, file }),
@@ -241,7 +262,7 @@ contextBridge.exposeInMainWorld("skinBuilderAPI", {
 
 // ---------------- MOD MANAGER (all games) ----------------
 
-contextBridge.exposeInMainWorld("modAPI", {
+expose("modAPI", {
     // Games
     getGames: (opts) => ipcRenderer.invoke("mods:getGames", opts),
     refreshGames: () => ipcRenderer.invoke("mods:refreshGames"),
@@ -288,7 +309,7 @@ const listen = (channel) => (callback) => {
     return () => ipcRenderer.removeListener(channel, handler);
 };
 
-contextBridge.exposeInMainWorld("gamesAPI", {
+expose("gamesAPI", {
     list: () => ipcRenderer.invoke("games:list"),
     status: (id) => ipcRenderer.invoke("games:status", id),
     get: (id) => ipcRenderer.invoke("games:get", id),
@@ -318,6 +339,7 @@ contextBridge.exposeInMainWorld("gamesAPI", {
     update: (id, key) => ipcRenderer.invoke("games:update", id, key),
     undoUpdate: (id, key) => ipcRenderer.invoke("games:undoUpdate", id, key),
     nexusAccount: () => ipcRenderer.invoke("games:nexusAccount"),
+    account: (id) => ipcRenderer.invoke("games:account", id),
     adultStatus: (recheck) => ipcRenderer.invoke("games:adultStatus", recheck),
 
     saves: (id) => ipcRenderer.invoke("games:saves", id),
@@ -369,4 +391,12 @@ contextBridge.exposeInMainWorld("gamesAPI", {
 
     onProgress: listen("games:progress"),
     onNxm: listen("games:nxm"),
+});
+
+/* Home's dashboard: play time, recent activity, news (Minecraft or general gaming) and Steam deals. */
+expose("dashboardAPI", {
+    stats: () => ipcRenderer.invoke("dashboard:stats"),
+    activity: (limit) => ipcRenderer.invoke("dashboard:activity", limit),
+    news: (options) => ipcRenderer.invoke("dashboard:news", options),
+    deals: (options) => ipcRenderer.invoke("dashboard:deals", options),
 });

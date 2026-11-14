@@ -288,4 +288,5 @@ module.exports = {
     resolveModDir,
     getGame,
     steamLibraries,
+    steamRoots,
 };

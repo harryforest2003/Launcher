@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { ipcMain, shell, dialog, BrowserWindow } = require("electron");
+const { assertGranted, openExternalSafely } = require("../security.cjs");
 
 const { detectGames } = require("./gameDetector.cjs");
 const { getGame } = require("./gameRegistry.cjs");
@@ -183,11 +184,13 @@ function registerModIpc() {
 
         let downloadUrl;
         let fileName;
+        let sha1;
 
         if (provider === "curseforge") {
             const file = await curseforge.resolveDownload(projectId, fileId);
             downloadUrl = file.downloadUrl;
             fileName = file.fileName;
+            sha1 = file.sha1;
 
         } else if (provider === "nexus") {
             const link = await nexus.resolveDownload(definition, projectId, fileId);
@@ -201,19 +204,21 @@ function registerModIpc() {
             definition,
             detected.modDir,
             downloadUrl,
-            { name, source: provider, projectId, fileName },
+            { name, source: provider, projectId, fileName, sha1 },
             report
         );
     });
 
     // The primary path for Sims 4 CC and anything Nexus-hosted.
-    ipcMain.handle("mods:installFromFile", async (_e, { gameId, filePaths }) => {
+    ipcMain.handle("mods:installFromFile", async (event, { gameId, filePaths }) => {
         const { detected, definition } = findDetected(gameId);
 
-        let files = filePaths;
+        // Files a page names have to be ones the launcher offered it (see security.cjs);
+        // otherwise they're chosen here.
+        let files = Array.isArray(filePaths) ? filePaths.map((file) => assertGranted("game-download", file)) : [];
 
-        if (!files || files.length === 0) {
-            const picked = await dialog.showOpenDialog({
+        if (files.length === 0) {
+            const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
                 title: `Install mods for ${definition.name}`,
                 properties: ["openFile", "multiSelections"],
                 filters: [
@@ -260,7 +265,7 @@ function registerModIpc() {
             throw new Error("Refusing to open a non-http(s) URL.");
         }
 
-        return shell.openExternal(url);
+        if (!openExternalSafely(url)) throw new Error("Refusing to open that link.");
     });
 
     /* ----- settings ----- */

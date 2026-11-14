@@ -36,7 +36,7 @@ export default function ContentFilter({ filters, counts, matching, onChange, onC
     <div
       data-testid="filter-overlay"
       onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0, 0, 0, 0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      style={{ position: "fixed", inset: 0, zIndex: 50, background: "var(--color-scrim)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
     >
       <div
         role="dialog"
@@ -47,17 +47,17 @@ export default function ContentFilter({ filters, counts, matching, onChange, onC
           maxHeight: "min(720px, 90vh)",
           display: "flex",
           flexDirection: "column",
-          background: "#17141f",
-          border: "1px solid #6d28d9",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
           borderRadius: 14,
-          boxShadow: "0 20px 60px rgba(0, 0, 0, 0.6)",
+          boxShadow: "0 20px 60px var(--color-shadow)",
           textAlign: "left",
-          color: "#e4e4e7",
+          color: "var(--color-text-secondary)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid #2e2640" }}>
-          <span style={{ fontSize: 17, fontWeight: 600, color: "#e9d5ff" }}>Filter content</span>
-          <button aria-label="Close" onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "#9ca3af", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
+          <span style={{ fontSize: 17, fontWeight: 600, color: "var(--color-accent-text)" }}>Filter content</span>
+          <button aria-label="Close" onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--color-text-muted)", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>
             ×
           </button>
         </div>
@@ -106,22 +106,22 @@ export default function ContentFilter({ filters, counts, matching, onChange, onC
                   onChange={(e) => setAuthorSearch(e.target.value)}
                   placeholder="Find an author..."
                   aria-label="Find an author"
-                  style={{ padding: "5px 9px", borderRadius: 8, background: "#0f0d14", color: "white", border: "1px solid #3b3150", fontSize: 12, width: 150 }}
+                  style={{ padding: "5px 9px", borderRadius: 8, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 12, width: 150 }}
                 />
               )
             }
           >
             {counts.authors.length ? (
-              <div style={{ maxHeight: 210, overflowY: "auto", background: "#0f0d14", borderRadius: 10, padding: "6px 10px" }}>
+              <div style={{ maxHeight: 210, overflowY: "auto", background: "var(--color-surface-sunken)", borderRadius: 10, padding: "6px 10px" }}>
                 <Grid>
                   {authors.map(([author, count]) => (
                     <Check key={author} label={author} count={count} checked={filters.authors.includes(author)} onChange={() => set({ authors: toggle(filters.authors, author) })} />
                   ))}
                 </Grid>
-                {!authors.length && <div style={{ color: "#6b7280", fontSize: 12, padding: 6 }}>No author matches.</div>}
+                {!authors.length && <div style={{ color: "var(--color-text-muted)", fontSize: 12, padding: 6 }}>No author matches.</div>}
               </div>
             ) : (
-              <div style={{ color: "#6b7280", fontSize: 12 }}>Finding authors...</div>
+              <div style={{ color: "var(--color-text-muted)", fontSize: 12 }}>Finding authors...</div>
             )}
           </Section>
 
@@ -136,9 +136,9 @@ export default function ContentFilter({ filters, counts, matching, onChange, onC
                     borderRadius: 8,
                     fontSize: 13,
                     cursor: "pointer",
-                    color: "white",
-                    border: `1px solid ${filters.sort === value ? "#7c3aed" : "#3b3150"}`,
-                    background: filters.sort === value ? "#6d28d9" : "#0f0d14",
+                    color: "var(--color-text)",
+                    border: `1px solid ${filters.sort === value ? "var(--color-accent-line)" : "var(--color-border)"}`,
+                    background: filters.sort === value ? "var(--color-accent-subtle)" : "var(--color-surface-sunken)",
                   }}
                 >
                   {label}
@@ -148,15 +148,15 @@ export default function ContentFilter({ filters, counts, matching, onChange, onC
           </Section>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid #2e2640" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px", borderTop: "1px solid var(--color-border)" }}>
           <button
             onClick={() => onChange({ ...NO_FILTERS, sort: filters.sort })}
             disabled={!activeFilterCount(filters)}
-            style={{ background: "none", border: "none", color: activeFilterCount(filters) ? "#c4b5fd" : "#52525b", cursor: "pointer", fontSize: 13 }}
+            style={{ background: "none", border: "none", color: activeFilterCount(filters) ? "var(--color-accent-text)" : "var(--color-text-muted)", cursor: "pointer", fontSize: 13 }}
           >
             Clear filters
           </button>
-          <button className="sidebar-button" data-testid="filter-done" onClick={onClose} style={{ marginLeft: "auto", padding: "8px 16px", fontSize: 13, background: "#6d28d9" }}>
+          <button className="sidebar-button" data-testid="filter-done" onClick={onClose} style={{ marginLeft: "auto", padding: "8px 16px", fontSize: 13, background: "var(--color-accent)", color: "var(--color-on-accent)" }}>
             Show {matching} item{matching === 1 ? "" : "s"}
           </button>
         </div>
@@ -167,10 +167,10 @@ export default function ContentFilter({ filters, counts, matching, onChange, onC
 
 function Section({ title, hint, extra, children }: { title: string; hint?: string; extra?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div style={{ padding: "12px 0", borderBottom: "1px solid #231d31" }}>
+    <div style={{ padding: "12px 0", borderBottom: "1px solid var(--color-border)" }}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, color: "#a78bfa", textTransform: "uppercase" }}>{title}</span>
-        {hint && <span style={{ fontSize: 11, color: "#6b7280" }}>{hint}</span>}
+        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: 0.8, color: "var(--color-accent-text)", textTransform: "uppercase" }}>{title}</span>
+        {hint && <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{hint}</span>}
         {extra && <span style={{ marginLeft: "auto" }}>{extra}</span>}
       </div>
       {children}
@@ -185,9 +185,9 @@ function Grid({ children }: { children: React.ReactNode }) {
 function Check({ label, count, checked, onChange }: { label: string; count: number; checked: boolean; onChange: () => void }) {
   return (
     <label style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 13, cursor: "pointer", minWidth: 0 }}>
-      <input type="checkbox" checked={checked} onChange={onChange} style={{ accentColor: "#7c3aed", width: 15, height: 15, flexShrink: 0 }} />
+      <input type="checkbox" checked={checked} onChange={onChange} style={{ accentColor: "var(--color-accent)", width: 15, height: 15, flexShrink: 0 }} />
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      <span style={{ color: "#6b7280", fontSize: 12 }}>({count})</span>
+      <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>({count})</span>
     </label>
   );
 }

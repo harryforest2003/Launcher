@@ -49,7 +49,12 @@ function nameFromFile(file) {
         .trim() || "Mod";
 }
 
-const safeFolder = (name) => String(name).replace(/[/\\:*?"<>|]/g, "_").trim().slice(0, 80) || "Mod";
+// A folder name from a mod's name: no separators, and never "." or ".." (or only dots),
+// which would put the mod in the folder itself or the one above it.
+const safeFolder = (name) => {
+    const clean = String(name).replace(/[\u0000-\u001f/\\:*?"<>|]/g, "_").trim().slice(0, 80);
+    return /^\.*$/.test(clean) ? "Mod" : clean;
+};
 
 /* ---------------- The Sims 4 ---------------- */
 

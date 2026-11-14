@@ -1,5 +1,8 @@
 import { useState } from "react";
+import { Check, Download, ExternalLink, X } from "lucide-react";
+import { Button } from "./ui";
 import { dependencyNote } from "../utils/dependencyNote";
+import "../pages/discover.css";
 
 type Props = {
   source: "modrinth" | "curseforge";
@@ -11,30 +14,40 @@ type Props = {
   url?: string | null;
   /** Where else this project is published, tried if the first has no file that fits. */
   alternatives?: { source: "modrinth" | "curseforge"; id: string; installable: boolean }[];
+  /** solid: the one main action on the page (the project page). tonal: one of many (a result row). */
+  emphasis?: "solid" | "tonal";
+  /** Told after it is added, so a list can mark it installed. */
+  onInstalled?: (instanceName: string) => void;
 };
 
 const INSTALLABLE_TYPES = ["mod", "resourcepack", "shader", "datapack"];
 
-const selectStyle: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 10,
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #6d28d9",
-  fontSize: 12,
-  maxWidth: 190,
-};
-
 /*
  * Adds a project to a chosen instance. The main process works out which file fits
  * that instance and which folder it belongs in, so this works the same for any
- * content type from either source.
+ * content type from either source. An instance that already has it says so instead
+ * of adding a second copy.
  */
-export default function InstallToInstance({ source, projectId, name, icon, type, installable, url, alternatives = [] }: Props) {
+export default function InstallToInstance({
+  source,
+  projectId,
+  name,
+  icon,
+  type,
+  installable,
+  url,
+  alternatives = [],
+  emphasis = "tonal",
+  onInstalled,
+}: Props) {
   const [instances, setInstances] = useState<Instance[] | null>(null);
   const [chosen, setChosen] = useState("");
   const [worlds, setWorlds] = useState<string[]>([]);
   const [world, setWorld] = useState("");
+  // What the chosen instance already has from this project.
+  const [existing, setExisting] = useState<InstanceMod[]>([]);
+  // Instance (and world) pairs added to while this was open.
+  const [added, setAdded] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,16 +57,18 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
   // Restricted on one site can still mean available on the other.
   if (!installable && !alternatives.some((other) => other.installable)) {
     return (
-      <button
-        className="sidebar-button"
-        style={{ padding: "8px 12px" }}
+      <Button
+        size="sm"
+        icon={<ExternalLink size={14} aria-hidden="true" />}
         title="This author disabled third-party downloads"
         onClick={() => url && window.modAPI.openUrl(url).catch(() => {})}
       >
         Open Site
-      </button>
+      </Button>
     );
   }
+
+  const keys = new Set([`${source}:${projectId}`, ...alternatives.map((other) => `${other.source}:${other.id}`)]);
 
   const chooseInstance = async (instanceName: string) => {
     setChosen(instanceName);
@@ -61,13 +76,18 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
     setError(null);
     setWorlds([]);
     setWorld("");
+    setExisting([]);
 
-    if (type !== "datapack" || !instanceName) return;
+    if (!instanceName) return;
 
     try {
       const content = await window.instanceAPI.content(instanceName);
-      setWorlds(content.worlds);
-      setWorld(content.worlds[0] ?? "");
+      const mine = (content[type as ContentType] ?? []).filter((item) => item.projectId && keys.has(`${item.source}:${item.projectId}`));
+      setExisting(mine);
+      if (type === "datapack") {
+        setWorlds(content.worlds);
+        setWorld(content.worlds[0] ?? "");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -83,6 +103,10 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
       setError(err instanceof Error ? err.message : String(err));
     }
   };
+
+  // A data pack belongs to one world, so it is only "already there" for that world.
+  const already =
+    added.includes(`${chosen}\n${world}`) || existing.some((item) => type !== "datapack" || (item.world ?? "") === world);
 
   const install = async () => {
     setBusy(true);
@@ -110,7 +134,9 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
 
         const extras = dependencyNote(result);
         setDone(`Added to ${chosen}, in ${result.folder}, from ${attempt.source === "modrinth" ? "Modrinth" : "CurseForge"}.${extras ? ` ${extras}` : ""}`);
+        setAdded((list) => [...list, `${chosen}\n${world}`]);
         setBusy(false);
+        onInstalled?.(chosen);
         return;
       } catch (err) {
         firstError ??= err;
@@ -123,29 +149,30 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
 
   if (!instances) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-        <button className="sidebar-button" style={{ padding: "8px 12px", background: "#7c3aed" }} onClick={open}>
+      <div className="iti">
+        <Button
+          size="sm"
+          variant={emphasis === "solid" ? "primary" : "secondary"}
+          className={emphasis === "solid" ? undefined : "iti__install"}
+          icon={<Download size={14} aria-hidden="true" />}
+          aria-label={`Install ${name}`}
+          onClick={open}
+        >
           Install
-        </button>
-        {error && <div style={{ color: "#fca5a5", fontSize: 11, maxWidth: 240 }}>{error}</div>}
+        </Button>
+        {error && <div className="iti__msg iti__msg--bad">{error}</div>}
       </div>
     );
   }
 
   if (instances.length === 0) {
-    return <div style={{ color: "#fcd34d", fontSize: 12, maxWidth: 200 }}>Create an instance first.</div>;
+    return <div className="iti__msg iti__msg--warn">Create an instance first.</div>;
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, maxWidth: 380 }}>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <select
-          aria-label="Instance"
-          style={selectStyle}
-          value={chosen}
-          disabled={busy}
-          onChange={(event) => chooseInstance(event.target.value)}
-        >
+    <div className="iti">
+      <div className="iti__row">
+        <select aria-label="Instance" value={chosen} disabled={busy} onChange={(event) => chooseInstance(event.target.value)}>
           {instances.map((instance) => (
             <option key={instance.name} value={instance.name}>
               {instance.name} ({instance.version}
@@ -155,13 +182,7 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
         </select>
 
         {type === "datapack" && (
-          <select
-            aria-label="World"
-            style={selectStyle}
-            value={world}
-            disabled={busy}
-            onChange={(event) => setWorld(event.target.value)}
-          >
+          <select aria-label="World" value={world} disabled={busy} onChange={(event) => setWorld(event.target.value)}>
             {worlds.map((worldName) => (
               <option key={worldName} value={worldName}>
                 World: {worldName}
@@ -171,18 +192,39 @@ export default function InstallToInstance({ source, projectId, name, icon, type,
           </select>
         )}
 
-        <button
-          className="sidebar-button"
-          style={{ padding: "8px 12px", background: "#7c3aed" }}
-          disabled={busy || !chosen}
-          onClick={install}
-        >
-          {busy ? "Adding..." : "Add"}
-        </button>
+        {already ? (
+          <Button size="sm" disabled icon={<Check size={14} aria-hidden="true" />}>
+            Installed
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="primary"
+            icon={<Download size={14} aria-hidden="true" />}
+            disabled={busy || !chosen}
+            onClick={install}
+          >
+            {busy ? "Adding..." : "Add"}
+          </Button>
+        )}
+
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<X size={14} aria-hidden="true" />}
+          aria-label="Close the instance picker"
+          disabled={busy}
+          onClick={() => {
+            setInstances(null);
+            setDone(null);
+            setError(null);
+          }}
+        />
       </div>
 
-      {done && <div style={{ color: "#86efac", fontSize: 11, textAlign: "right" }}>{done}</div>}
-      {error && <div style={{ color: "#fca5a5", fontSize: 11, textAlign: "right" }}>{error}</div>}
+      {done && <div className="iti__msg iti__msg--ok">{done}</div>}
+      {already && !done && <div className="iti__msg iti__msg--muted">Already in this instance. Update it from the instance's Content tab.</div>}
+      {error && <div className="iti__msg iti__msg--bad">{error}</div>}
     </div>
   );
 }

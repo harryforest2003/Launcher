@@ -36,7 +36,7 @@ export default function InstanceScreenshots({ instanceName }: Props) {
   return (
     <div data-testid="screenshots-tab">
       <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ color: "#9ca3af", fontSize: 13, marginRight: "auto" }}>
+        <span style={{ color: "var(--color-text-muted)", fontSize: 13, marginRight: "auto" }}>
           {shots ? `${shots.length} screenshot${shots.length === 1 ? "" : "s"}` : "Loading..."}
           {shots && shots.length > 0 ? " • F2 in game takes one" : ""}
         </span>
@@ -49,13 +49,13 @@ export default function InstanceScreenshots({ instanceName }: Props) {
       </div>
 
       {error && (
-        <div role="alert" style={{ color: "#fca5a5", marginBottom: 12 }}>
+        <div role="alert" style={{ color: "var(--color-danger-text)", marginBottom: 12 }}>
           {error}
         </div>
       )}
 
       {shots && shots.length === 0 && (
-        <div style={{ background: "#151515", border: "1px solid #6d28d9", borderRadius: 12, padding: 14, color: "#9ca3af" }}>
+        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, padding: 14, color: "var(--color-text-muted)" }}>
           No screenshots yet. Press F2 in game to take one.
         </div>
       )}
@@ -65,22 +65,22 @@ export default function InstanceScreenshots({ instanceName }: Props) {
           <div
             key={shot.fileName}
             data-testid="screenshot"
-            style={{ background: "#151515", border: "1px solid #6d28d9", borderRadius: 12, overflow: "hidden" }}
+            style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 12, overflow: "hidden" }}
           >
             <button
               onClick={() => act({ kind: "screenshot", name: shot.fileName, action: "open" })}
               title="Open full size"
-              style={{ display: "block", width: "100%", padding: 0, border: "none", background: "#0d0d0d", cursor: "zoom-in" }}
+              style={{ display: "block", width: "100%", padding: 0, border: "none", background: "var(--color-bg)", cursor: "zoom-in" }}
             >
               {shot.thumbnail ? (
                 <img src={shot.thumbnail} alt={shot.fileName} style={{ width: "100%", aspectRatio: "16 / 9", objectFit: "cover", display: "block" }} />
               ) : (
-                <div style={{ aspectRatio: "16 / 9", color: "#6b7280", display: "grid", placeItems: "center" }}>No preview</div>
+                <div style={{ aspectRatio: "16 / 9", color: "var(--color-text-muted)", display: "grid", placeItems: "center" }}>No preview</div>
               )}
             </button>
             <div style={{ padding: 10 }}>
-              <div style={{ fontSize: 12, color: "#d4d4d8" }}>{new Date(shot.taken).toLocaleString()}</div>
-              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{new Date(shot.taken).toLocaleString()}</div>
+              <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginBottom: 8 }}>
                 {shot.width} × {shot.height}
               </div>
               <div style={{ display: "flex", gap: 6 }}>
@@ -89,7 +89,7 @@ export default function InstanceScreenshots({ instanceName }: Props) {
                 </button>
                 <button
                   className="sidebar-button"
-                  style={{ ...small, background: "#7f1d1d" }}
+                  style={{ ...small, background: "var(--color-danger-solid)" }}
                   onClick={() => {
                     if (window.confirm("Move this screenshot to the Bin?")) act({ kind: "screenshot", name: shot.fileName, action: "trash" });
                   }}

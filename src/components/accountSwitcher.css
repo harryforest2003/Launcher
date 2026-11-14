@@ -1,0 +1,11 @@
+/* A game's own sign-in in the sidebar (AccountSwitcher's StoreAccount). Tokens only. */
+
+.ui-account__name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

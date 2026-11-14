@@ -26,8 +26,8 @@ export function Button({ children, onClick, primary, danger, active, disabled, t
         fontSize: 14,
         opacity: disabled ? 0.45 : 1,
         cursor: disabled ? "not-allowed" : "pointer",
-        background: primary || active ? "#6d28d9" : danger ? "#3a1420" : undefined,
-        borderColor: danger ? "#b91c4b" : undefined,
+        background: primary || active ? "var(--color-accent-subtle)" : danger ? "var(--color-danger-bg)" : undefined,
+        borderColor: danger ? "var(--color-danger-border)" : undefined,
         ...style,
       }}
     >
@@ -48,10 +48,10 @@ type SliderProps = {
 
 export function Slider({ label, value, min, max, step, format, onChange }: SliderProps) {
   return (
-    <label style={{ display: "block", marginBottom: 12, fontSize: 13, color: "#ccc" }}>
+    <label style={{ display: "block", marginBottom: 12, fontSize: 13, color: "var(--color-text-secondary)" }}>
       <span style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
         <span>{label}</span>
-        <span style={{ color: "#c084fc" }}>{format ? format(value) : value}</span>
+        <span style={{ color: "var(--color-accent-text)" }}>{format ? format(value) : value}</span>
       </span>
       <input
         type="range"
@@ -61,7 +61,7 @@ export function Slider({ label, value, min, max, step, format, onChange }: Slide
         step={step}
         aria-label={label}
         onChange={(event) => onChange(Number(event.target.value))}
-        style={{ width: "100%", accentColor: "#a855f7" }}
+        style={{ width: "100%", accentColor: "var(--color-accent)" }}
       />
     </label>
   );
@@ -79,9 +79,9 @@ function PromptForm({ request }: { request: PromptRequest }) {
       onKeyDown={(event) => {
         if (event.key === "Escape") request.settle(null);
       }}
-      style={{ ...panelStyle, background: "#161616", width: 360, maxWidth: "calc(100vw - 40px)", borderColor: "#6d28d9" }}
+      style={{ ...panelStyle, background: "var(--color-chrome)", width: 360, maxWidth: "calc(100vw - 40px)", borderColor: "var(--color-border)" }}
     >
-      <label style={{ display: "block", color: "#c084fc", fontSize: 15, marginBottom: 12 }}>
+      <label style={{ display: "block", color: "var(--color-accent-text)", fontSize: 15, marginBottom: 12 }}>
         {request.title}
         <input
           autoFocus
@@ -98,7 +98,7 @@ function PromptForm({ request }: { request: PromptRequest }) {
           type="submit"
           className="sidebar-button"
           disabled={!value.trim()}
-          style={{ padding: "10px 14px", fontSize: 14, background: "#6d28d9", opacity: value.trim() ? 1 : 0.45 }}
+          style={{ padding: "10px 14px", fontSize: 14, background: "var(--color-accent)", color: "var(--color-on-accent)", opacity: value.trim() ? 1 : 0.45 }}
         >
           OK
         </button>
@@ -121,7 +121,7 @@ export function PromptDialog({ request }: { request: PromptRequest | null }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0, 0, 0, 0.6)",
+        background: "var(--color-scrim)",
       }}
     >
       <PromptForm key={request.title} request={request} />
@@ -130,7 +130,7 @@ export function PromptDialog({ request }: { request: PromptRequest | null }) {
 }
 
 export function SectionTitle({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 13, color: "#c084fc", margin: "14px 0 8px" }}>{children}</div>;
+  return <div style={{ fontSize: 13, color: "var(--color-accent-text)", margin: "14px 0 8px" }}>{children}</div>;
 }
 
 export function ErrorNote({ children }: { children: ReactNode }) {
@@ -140,9 +140,9 @@ export function ErrorNote({ children }: { children: ReactNode }) {
       style={{
         padding: "10px 12px",
         borderRadius: 10,
-        border: "1px solid #b91c4b",
-        background: "#2a0f18",
-        color: "#fda4af",
+        border: "1px solid var(--color-danger-border)",
+        background: "var(--color-danger-bg)",
+        color: "var(--color-danger-text)",
         fontSize: 13,
       }}
     >

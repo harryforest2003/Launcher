@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
-const { app, BrowserWindow, dialog, ipcMain, protocol, session, WebContentsView } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, WebContentsView } = require("electron");
+const security = require("../security.cjs");
 
 /*
  * Blockbench, the model editor, inside the launcher's own window. It runs from its own
@@ -11,30 +12,13 @@ const { app, BrowserWindow, dialog, ipcMain, protocol, session, WebContentsView 
  * space it sets aside, and recolours it to match the launcher.
  */
 
-const SCHEME = "blockbench";
-const PARTITION = "persist:blockbench";
-const START_PAGE = `${SCHEME}://app/index.html`;
+// Its scheme is registered, with the launcher's, in security.cjs (Electron takes one list).
+const SCHEME = security.BLOCKBENCH_SCHEME;
+const START_PAGE = `${security.BLOCKBENCH_ORIGIN}/index.html`;
 
-// Has to happen before the app is ready, which is why main.cjs loads this file early.
-protocol.registerSchemesAsPrivileged([
-    { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
-]);
-
-const TYPES = {
-    ".html": "text/html",
-    ".js": "text/javascript",
-    ".mjs": "text/javascript",
-    ".css": "text/css",
-    ".json": "application/json",
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".gif": "image/gif",
-    ".svg": "image/svg+xml",
-    ".woff": "font/woff",
-    ".woff2": "font/woff2",
-    ".ttf": "font/ttf",
-    ".wasm": "application/wasm",
-};
+// The launcher's own files on Blockbench's scheme, under a folder name Blockbench doesn't use.
+const OWN = "/__unity_launcher__/";
+const THEME_PATH = `${OWN}theme.css`;
 
 function filesRoot() {
     return app.isPackaged
@@ -45,57 +29,6 @@ function filesRoot() {
 function isAvailable() {
     return fs.existsSync(path.join(filesRoot(), "index.html"));
 }
-
-let prepared = false;
-
-function prepare() {
-    if (prepared) return;
-    prepared = true;
-
-    const editorSession = session.fromPartition(PARTITION);
-
-    editorSession.protocol.handle(SCHEME, async (request) => {
-        const root = filesRoot();
-        const file = path.normalize(path.join(root, decodeURIComponent(new URL(request.url).pathname)));
-
-        if (!file.startsWith(root + path.sep)) return new Response("Not found", { status: 404 });
-
-        try {
-            const data = await fs.promises.readFile(file);
-            const type = TYPES[path.extname(file).toLowerCase()] ?? "application/octet-stream";
-            return new Response(data, { headers: { "Content-Type": type } });
-        } catch {
-            return new Response("Not found", { status: 404 });
-        }
-    });
-
-    // Only its own files, and images it makes itself. Its usage statistics, plugin
-    // store and theme downloads would otherwise all go out to the internet.
-    editorSession.webRequest.onBeforeRequest((details, callback) => {
-        callback({ cancel: !/^(blockbench|data|blob|devtools):/i.test(details.url) });
-    });
-
-    editorSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-}
-
-// Each open editor, by the id of its page, and by the launcher window it sits in.
-const editors = new Map();
-const editorsByWindow = new Map();
-
-// The space each window's page last made for an editor. The page can report it before
-// the editor exists, while the thing to edit is still loading.
-const spaceByWindow = new Map();
-
-function fitBounds(rect) {
-    return {
-        x: Math.max(0, Math.round(rect.x)),
-        y: Math.max(0, Math.round(rect.y)),
-        width: Math.max(0, Math.round(rect.width)),
-        height: Math.max(0, Math.round(rect.height)),
-    };
-}
-
-const BRIDGE = fs.readFileSync(path.join(__dirname, "bridge.js"), "utf8");
 
 // Blockbench's own colour names, set to the launcher's.
 const THEME = `
@@ -122,6 +55,109 @@ body {
    project tabs have no place here. */
 #tab_bar { display: none !important; }
 `;
+
+/*
+ * Blockbench's page, with the launcher's colours linked in last (so they win, and are
+ * there from the first paint), and the policy it runs under: its own files and the images
+ * it makes itself, nothing from the internet, no plugins, no frames, no forms.
+ *
+ * Blockbench itself can't run without two things a stricter policy would take away
+ * (tried, with Electron 45, on the vendored build: the results are in security.md):
+ *   - eval: its interface library (Vue 2) compiles its templates at run time with
+ *     new Function. Without it Blockbench doesn't start (EvalError, then "reading 'vue'").
+ *   - inline script: its markup uses inline event handlers (onclick="DisplayMode.loadHead()",
+ *     and ones built as it runs, such as onclick="displayReferenceObjects.refmodels.<id>.load(<n>)").
+ *     With only its two inline scripts allowed by hash, it starts, but 13 handlers are
+ *     blocked at start alone, so those buttons do nothing.
+ * So both stay allowed here, and nowhere else, and this view is shut in instead: no Node,
+ * sandboxed, its own session with no permissions and no network (prepare), no navigation
+ * or new windows, and a bridge of four messages whose sender and contents are checked.
+ */
+const BLOCKBENCH_POLICY = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    "style-src 'self' 'unsafe-inline' data: blob:",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' data: blob:",
+    "worker-src 'self' blob:",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'",
+].join("; ");
+
+let page = null;
+
+async function blockbenchPage(file) {
+    if (page?.file !== file) {
+        const original = await fs.promises.readFile(file, "utf8");
+        const html = original.replace(/<\/head>/i, `\t<link rel="stylesheet" href="${THEME_PATH}">\n</head>`);
+        page = { file, html: Buffer.from(html) };
+    }
+    return page.html;
+}
+
+let prepared = false;
+
+function prepare() {
+    if (prepared) return;
+    prepared = true;
+
+    // No permissions at all (see security.cjs).
+    const editorSession = security.protectBlockbenchSession();
+
+    editorSession.protocol.handle(SCHEME, async (request) => {
+        const url = new URL(request.url);
+        if (`${url.protocol}//${url.host}` !== security.BLOCKBENCH_ORIGIN || request.method !== "GET") return security.notFound();
+
+        if (url.pathname === THEME_PATH) {
+            return new Response(THEME, { headers: { ...security.BASE_HEADERS, "Content-Type": "text/css; charset=utf-8" } });
+        }
+
+        const file = await security.fileInside(filesRoot(), url.pathname === "/" ? "/index.html" : url.pathname);
+        if (!file) return security.notFound();
+
+        try {
+            if (path.relative(filesRoot(), file) === "index.html") {
+                return new Response(await blockbenchPage(file), {
+                    headers: { ...security.BASE_HEADERS, "Content-Type": "text/html; charset=utf-8", "Content-Security-Policy": BLOCKBENCH_POLICY },
+                });
+            }
+            const data = await fs.promises.readFile(file);
+            return new Response(data, { headers: { ...security.BASE_HEADERS, "Content-Type": security.contentType(file) } });
+        } catch {
+            return security.notFound();
+        }
+    });
+
+    // Only its own files, and images it makes itself. Its usage statistics, plugin
+    // store and theme downloads would otherwise all go out to the internet.
+    editorSession.webRequest.onBeforeRequest((details, callback) => {
+        callback({ cancel: !/^(blockbench|data|blob|devtools):/i.test(details.url) });
+    });
+}
+
+// Each open editor, by the id of its page, and by the launcher window it sits in.
+const editors = new Map();
+const editorsByWindow = new Map();
+
+// The space each window's page last made for an editor. The page can report it before
+// the editor exists, while the thing to edit is still loading.
+const spaceByWindow = new Map();
+
+/* A rectangle in whole, non-negative pixels, whatever the page sent. */
+function fitBounds(rect) {
+    const whole = (value) => {
+        const number = Math.round(Number(value));
+        return Number.isFinite(number) ? Math.min(Math.max(0, number), 100000) : 0;
+    };
+    return { x: whole(rect?.x), y: whole(rect?.y), width: whole(rect?.width), height: whole(rect?.height) };
+}
+
+const BRIDGE = fs.readFileSync(path.join(__dirname, "bridge.js"), "utf8");
 
 // If Blockbench never says it's ready, it's shown anyway after this long, so any
 // message it has is seen instead of an empty space.
@@ -315,11 +351,20 @@ function createEditor(host) {
 
     const view = new WebContentsView({
         webPreferences: {
-            partition: PARTITION,
+            partition: security.BLOCKBENCH_PARTITION,
+            // Four bridge functions (preload.cjs), each one message, checked in registerBridgeIpc.
             preload: path.join(__dirname, "preload.cjs"),
             contextIsolation: true,
             nodeIntegration: false,
+            nodeIntegrationInWorker: false,
+            nodeIntegrationInSubFrames: false,
             sandbox: true,
+            webSecurity: true,
+            allowRunningInsecureContent: false,
+            experimentalFeatures: false,
+            webviewTag: false,
+            safeDialogs: true,
+            navigateOnDragDrop: false,
             // It loads while hidden, so it mustn't be slowed down as a background page.
             backgroundThrottling: false,
         },
@@ -337,12 +382,13 @@ function createEditor(host) {
     const contents = view.webContents;
 
     contents.setWindowOpenHandler(() => ({ action: "deny" }));
+    // Its own page, by origin, and nowhere else.
     contents.on("will-navigate", (event, url) => {
-        if (!url.startsWith(`${SCHEME}://`)) event.preventDefault();
+        if (security.originOf(url) !== security.BLOCKBENCH_ORIGIN) event.preventDefault();
     });
 
+    // The launcher's colours are already in its page (see prepare); the bridge goes in once it's loaded.
     contents.on("did-finish-load", () => {
-        contents.insertCSS(THEME).catch(() => {});
         contents.executeJavaScript(BRIDGE).catch(() => {});
     });
 
@@ -388,10 +434,26 @@ function broken(editor) {
     setTimeout(() => warmUp(host), RESTART_SPARE_MS);
 }
 
+/* The editor a bridge message came from: one this file made, still running. */
 function editorFor(event) {
     const editor = editors.get(event.sender.id);
-    if (!editor) throw new Error("This window isn't editing anything for the launcher.");
+    if (!editor || editor.done || editor.view.webContents !== event.sender) {
+        throw new Error("This window isn't editing anything for the launcher.");
+    }
     return editor;
+}
+
+// The most a save may hand back (a big model with its textures is a few megabytes).
+const MAX_SAVE_CHARS = 64 * 1024 * 1024;
+
+/* What a Save sends back: an image, or a model with its textures, as text, within reason. */
+function checkSaved(result) {
+    if (!result || typeof result !== "object") throw new Error("Blockbench didn't send anything back.");
+    const size = (value) => (typeof value === "string" ? value.length : 0);
+    const textures = Array.isArray(result.textures) ? result.textures : [];
+    const total = size(result.image) + size(result.model) + textures.reduce((sum, texture) => sum + size(texture?.source) + size(texture?.name), 0);
+    if (total > MAX_SAVE_CHARS) throw new Error("That's too big to save back to the launcher.");
+    return result;
 }
 
 function registerBridgeIpc() {
@@ -420,6 +482,8 @@ function registerBridgeIpc() {
 
     ipcMain.handle("blockbench-bridge:save", async (event, result) => {
         const editor = editorFor(event);
+        if (!editor.onSave) throw new Error("Nothing is open to save.");
+        checkSaved(result);
         const message = await editor.onSave(result);
         editor.last = result;
 
@@ -445,7 +509,7 @@ function registerBlockbenchIpc() {
         const host = BrowserWindow.fromWebContents(event.sender);
         if (!host) return;
 
-        spaceByWindow.set(host.id, rect);
+        spaceByWindow.set(host.id, fitBounds(rect));
         const active = editorsByWindow.get(host.id);
         active?.view.setBounds(fitBounds(rect));
         // Where it goes is known now, so Blockbench can open what it was given.
@@ -528,7 +592,9 @@ function registerBlockbenchIpc() {
      * (savedId), or as a copy the first time and over that copy after. So it's kept
      * however the editor is left. Resolves with the saved skin, or null if nothing was saved.
      */
-    ipcMain.handle("blockbench:editSkin", async (event, { skin, slim, name, savedId }) => {
+    ipcMain.handle("blockbench:editSkin", async (event, request) => {
+        const { skin, slim, name, savedId } = request ?? {};
+        if (typeof skin !== "string") throw new Error("There's no skin to edit.");
         const image = await skins.skinImage(skin);
         const title = String(name || "Skin").slice(0, 60);
         let kept = null;

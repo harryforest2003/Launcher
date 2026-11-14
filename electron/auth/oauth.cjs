@@ -1,4 +1,4 @@
-const { shell } = require("electron");
+const { openExternalSafely } = require("../security.cjs");
 const config = require("./config.cjs");
 const pkce = require("./pkce.cjs");
 const oauthServer = require("./oauthServer.cjs");
@@ -31,7 +31,7 @@ async function beginOAuth() {
     // Listening first, so a quick sign-in can't arrive before anything is waiting.
     const waiting = oauthServer.waitForCode(config.CALLBACK_PORT, state);
 
-    await shell.openExternal(url);
+    if (!openExternalSafely(url)) throw new Error("The Microsoft sign-in page couldn't be opened.");
 
     return {
         code: await waiting,

@@ -1,4 +1,7 @@
-export type GamePage = "mods" | "discover" | "cc" | "loadorder" | "settings";
+import type { ReactNode } from "react";
+import { usePageNav, type GamePageKey } from "./ui/shellContext";
+
+export type GamePage = GamePageKey;
 
 type Props = {
   game: string;
@@ -6,79 +9,33 @@ type Props = {
   hasLoadOrder?: boolean;
   /* The Sims 4: its CC, as pictures. */
   hasCC?: boolean;
+  /** The page on screen; null while a mod's page or a collection (opened from Discover) is. */
   current: GamePage | null;
   go: (page: GamePage) => void;
+  /** A mod's page or a collection is open: Back returns to the Discover results. */
   showBack?: boolean;
   onBack?: () => void;
+  /** Leaves the game's section (the app's sidebar has its own way out now). */
   onLauncher: () => void;
+  /** Optional: something to show at the end of a page's row, e.g. { mods: <Badge tone="warning">2</Badge> }. */
+  badges?: Partial<Record<GamePage, ReactNode>>;
 };
 
-/* The sidebar of a game's section: its mods, finding more, and its settings. */
-export default function GameSidebar({ game, hasLoadOrder = false, hasCC = false, current, go, showBack = false, onBack, onLauncher }: Props) {
-  const buttonStyle = (active: boolean): React.CSSProperties => ({
-    background: active ? "#6d28d9" : "#232323",
-    color: "white",
-    border: "1px solid #6d28d9",
-    borderRadius: "10px",
-    padding: "12px",
-    cursor: "pointer",
-    textAlign: "left",
-    transition: "0.2s",
-    width: "100%",
+/*
+ * A game's section renders this. It draws nothing itself: the app's one sidebar lists the game
+ * with its pages (Mods, Discover Mods, CC, Load Order, Settings) under it, and this tells it
+ * which is on and what Back does.
+ */
+export default function GameSidebar({ game, hasLoadOrder = false, hasCC = false, current, go, showBack = false, onBack, badges }: Props) {
+  usePageNav({
+    area: "game",
+    game,
+    page: current,
+    hasCC,
+    hasLoadOrder,
+    go,
+    back: showBack && onBack ? { label: "Back to results", run: onBack } : null,
+    badges,
   });
-
-  return (
-    <div
-      style={{
-        width: "300px",
-        flexShrink: 0,
-        background: "#161616",
-        borderRight: "1px solid #6d28d9",
-        padding: "20px",
-        position: "relative",
-        display: "flex",
-        flexDirection: "column",
-        // 300px plus its padding, the same as the launcher's and Minecraft's sidebars.
-        boxSizing: "content-box",
-      }}
-    >
-      <h1 style={{ color: "#a855f7", lineHeight: "1.1", marginBottom: "14px" }}>
-        Unity
-        <br />
-        Launcher
-      </h1>
-      <div style={{ color: "#9ca3af", fontSize: 13, marginBottom: 36 }}>{game}</div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-        {showBack && onBack && (
-          <button className="sidebar-button" onClick={onBack} style={{ textAlign: "left" }}>
-            ← Back
-          </button>
-        )}
-        <button style={buttonStyle(current === "mods")} onClick={() => go("mods")} aria-current={current === "mods" ? "page" : undefined}>
-          Mods
-        </button>
-        <button style={buttonStyle(current === "discover")} onClick={() => go("discover")} aria-current={current === "discover" ? "page" : undefined}>
-          Discover Mods
-        </button>
-        {hasCC && (
-          <button style={buttonStyle(current === "cc")} onClick={() => go("cc")} aria-current={current === "cc" ? "page" : undefined}>
-            CC
-          </button>
-        )}
-        {hasLoadOrder && (
-          <button style={buttonStyle(current === "loadorder")} onClick={() => go("loadorder")} aria-current={current === "loadorder" ? "page" : undefined}>
-            Load Order
-          </button>
-        )}
-        <button style={buttonStyle(current === "settings")} onClick={() => go("settings")} aria-current={current === "settings" ? "page" : undefined}>
-          Settings
-        </button>
-      </div>
-
-      <button className="sidebar-button" onClick={onLauncher} style={{ position: "absolute", bottom: "20px", left: "20px", width: "260px" }}>
-        ← Back to Launcher
-      </button>
-    </div>
-  );
+  return null;
 }

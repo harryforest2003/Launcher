@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Button, Notice } from "./ui";
+import { color, font, space } from "../theme/tokens";
 
 type Props = {
   instanceName: string;
@@ -7,14 +9,7 @@ type Props = {
   onInstalled: (result: { name: string; folder: string; type: ContentType } & Partial<DependencyCheck>) => void;
 };
 
-const fieldStyle: React.CSSProperties = {
-  flex: "1 1 240px",
-  padding: 10,
-  borderRadius: 10,
-  background: "#1b1b1b",
-  color: "white",
-  border: "1px solid #6d28d9",
-};
+const fieldStyle: React.CSSProperties = { flex: "1 1 240px", minWidth: 0 };
 
 function formatSize(bytes: number) {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -79,9 +74,9 @@ export default function GitHubInstall({ instanceName, contentType, world, onInst
   }
 
   return (
-    <div data-testid="github-install" style={{ marginBottom: 14 }}>
+    <div data-testid="github-install" style={{ marginBottom: space[4], fontFamily: font.ui }}>
       <form
-        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
+        style={{ display: "flex", gap: space[2], flexWrap: "wrap" }}
         onSubmit={(event) => {
           event.preventDefault();
           if (input.trim()) lookUp();
@@ -92,56 +87,49 @@ export default function GitHubInstall({ instanceName, contentType, world, onInst
           onChange={(event) => setInput(event.target.value)}
           placeholder='GitHub repository, like "CaffeineMC/sodium", or its link'
           aria-label="GitHub repository"
+          className="ui-input"
           style={fieldStyle}
         />
-        <button className="sidebar-button" type="submit" disabled={!input.trim() || !!busy}>
+        <Button type="submit" disabled={!input.trim() || !!busy}>
           {busy === "lookup" ? "Looking..." : "Find releases"}
-        </button>
+        </Button>
       </form>
 
-      {error && <div style={{ color: "#fca5a5", fontSize: 12, marginTop: 8 }}>{error}</div>}
+      {error && <div role="alert" style={{ color: color.dangerText, fontSize: font.size.xs, marginTop: space[2] }}>{error}</div>}
 
       {warning && (
-        <div
-          role="alert"
-          data-testid="github-warning"
-          style={{ marginTop: 10, padding: 12, borderRadius: 10, background: "#2a1a05", border: "1px solid #b45309", color: "#fcd34d", fontSize: 13 }}
-        >
+        <Notice tone="warning" data-testid="github-warning" role="alert" style={{ marginTop: space[3] }}>
           {warning.reason}
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <button className="sidebar-button" style={{ padding: "6px 12px" }} onClick={() => install(warning.release, warning.asset, true)}>
+          <div style={{ display: "flex", gap: space[2], marginTop: space[3] }}>
+            <Button size="sm" onClick={() => install(warning.release, warning.asset, true)}>
               Install anyway
-            </button>
-            <button className="sidebar-button" style={{ padding: "6px 12px" }} onClick={() => setWarning(null)}>
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setWarning(null)}>
               Cancel
-            </button>
+            </Button>
           </div>
-        </div>
+        </Notice>
       )}
 
       {found?.releases.map((release) => (
-        <div key={release.tag} data-testid="github-release" style={{ marginTop: 12 }}>
-          <div style={{ color: "#c084fc", fontSize: 13, marginBottom: 6 }}>
+        <div key={release.tag} data-testid="github-release" style={{ marginTop: space[3] }}>
+          <div style={{ color: color.text, fontSize: font.size.sm, fontWeight: font.weight.semibold, marginBottom: space[1.5] }}>
             {release.name}
-            <span style={{ color: "#6b7280" }}>
-              {" "}• {new Date(release.published).toLocaleDateString()}
-              {release.prerelease ? " • pre-release" : ""}
+            <span style={{ color: color.textMuted, fontWeight: font.weight.regular }}>
+              {", "}
+              {new Date(release.published).toLocaleDateString()}
+              {release.prerelease ? ", pre-release" : ""}
             </span>
           </div>
 
           {release.assets.map((asset) => (
-            <div key={asset.url} style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 0" }}>
-              <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: "#ddd", wordBreak: "break-all" }}>
-                {asset.name} <span style={{ color: "#6b7280" }}>({formatSize(asset.size)})</span>
+            <div key={asset.url} style={{ display: "flex", alignItems: "center", gap: space[3], padding: `${space[1]} 0` }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: font.size.xs, fontFamily: font.mono, color: color.textSecondary, wordBreak: "break-all" }}>
+                {asset.name} <span style={{ color: color.textMuted }}>({formatSize(asset.size)})</span>
               </span>
-              <button
-                className="sidebar-button"
-                style={{ padding: "4px 12px", fontSize: 12, background: "#7c3aed" }}
-                disabled={!!busy}
-                onClick={() => install(release, asset)}
-              >
+              <Button size="sm" disabled={!!busy} onClick={() => install(release, asset)}>
                 {busy === asset.url ? "Installing..." : "Install"}
-              </button>
+              </Button>
             </div>
           ))}
         </div>

@@ -212,7 +212,7 @@ async function update(gameId, key, progress) {
     if (found.provider === "curseforge") {
         if (found.website) return { needsWebsite: null, reason: "Its author only allows downloads from CurseForge's website." };
         const file = await curseforge.resolveDownload(found.modId, found.toFileId);
-        const result = await installFromUrl(game, file.downloadUrl, { name: mod.name, replaces: mod.id, source: { provider: "curseforge", modId: found.modId, fileId: found.toFileId, version: found.toVersion } }, progress);
+        const result = await installFromUrl(game, file.downloadUrl, { name: mod.name, replaces: mod.id, source: { provider: "curseforge", modId: found.modId, fileId: found.toFileId, version: found.toVersion } }, progress, { sha1: file.sha1 });
         forget(gameId, key);
         return result;
     }

@@ -75,9 +75,9 @@ function SearchDropdown({
           width: "100%",
           padding: compact ? "8px 10px" : "15px",
           borderRadius: "10px",
-          border: `1px solid ${active ? "#c084fc" : "#6d28d9"}`,
-          background: active ? "#2b1d47" : "#1a1a1a",
-          color: "white",
+          border: `1px solid ${active ? "var(--color-accent-line)" : "var(--color-border)"}`,
+          background: active ? "var(--color-accent-subtle)" : "var(--color-surface)",
+          color: "var(--color-text)",
           fontSize: compact ? "14px" : "15px",
           boxSizing: "border-box",
         }}
@@ -91,8 +91,8 @@ function SearchDropdown({
             left: 0,
             right: 0,
             marginTop: "5px",
-            background: "#161616",
-            border: "1px solid #6d28d9",
+            background: "var(--color-chrome)",
+            border: "1px solid var(--color-border)",
             borderRadius: "10px",
             maxHeight: "300px",
             overflowY: "auto",
@@ -103,7 +103,7 @@ function SearchDropdown({
             <div
               style={{
                 padding: "12px",
-                color: "#777",
+                color: "var(--color-text-muted)",
               }}
             >
               No results
@@ -120,10 +120,10 @@ function SearchDropdown({
                 style={{
                   padding: "12px 16px",
                   cursor: "pointer",
-                  color: "white",
+                  color: "var(--color-text)",
                 }}
                 onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "#2b1647")
+                  (e.currentTarget.style.background = "var(--color-accent-subtle)")
                 }
                 onMouseLeave={(e) =>
                   (e.currentTarget.style.background = "transparent")

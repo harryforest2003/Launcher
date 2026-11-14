@@ -249,7 +249,7 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
   const groupOptions = library.groups
     .map((group) => ({ value: group.id, label: `${group.name} (${groupCount(group.id)})` }))
     .sort((a, b) => a.label.localeCompare(b.label));
-  const fieldLabel = (text: string) => <div style={{ fontSize: 12, color: "#bbb", marginBottom: 4 }}>{text}</div>;
+  const fieldLabel = (text: string) => <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>{text}</div>;
   const folderName = outputFolder.split(/[\\/]/).filter(Boolean).pop() ?? outputFolder;
 
   /*
@@ -264,12 +264,12 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
         style={{ flex: 1, minWidth: 300, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", position: "relative" }}
       >
         <BackgroundLogo />
-        {notice && <div style={{ color: "#86efac", fontSize: 14, marginBottom: 12, flexShrink: 0, position: "relative" }}>{notice}</div>}
+        {notice && <div style={{ color: "var(--color-success-text)", fontSize: 14, marginBottom: 12, flexShrink: 0, position: "relative" }}>{notice}</div>}
         {error && <div style={{ marginBottom: 12, flexShrink: 0, position: "relative" }}><ErrorNote>{error}</ErrorNote></div>}
 
         <div data-testid="skin-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "-4px", padding: 4, position: "relative" }}>
         {visible.length === 0 ? (
-          <div style={{ color: "#999", padding: "50px 10px", textAlign: "center", fontSize: 14 }}>
+          <div style={{ color: "var(--color-text-muted)", padding: "50px 10px", textAlign: "center", fontSize: 14 }}>
             No skins here yet.
           </div>
         ) : (
@@ -279,10 +279,10 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
                 key={skin.id}
                 data-testid="skin-card"
                 style={{
-                  border: `1px solid ${selected.has(skin.id) ? "#c084fc" : "#2b2140"}`,
+                  border: `1px solid ${selected.has(skin.id) ? "var(--color-accent-line)" : "var(--color-border)"}`,
                   borderRadius: 12,
                   padding: 10,
-                  background: "#1a1a1a",
+                  background: "var(--color-surface)",
                 }}
               >
                 <label style={{ display: "block", cursor: "pointer" }}>
@@ -301,14 +301,14 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
                       aria-label={`Select ${skin.name}`}
                       checked={selected.has(skin.id)}
                       onChange={() => toggle(skin.id)}
-                      style={{ accentColor: "#a855f7" }}
+                      style={{ accentColor: "var(--color-accent)" }}
                     />
-                    <span style={{ color: "white", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ color: "var(--color-text)", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {skin.name}
                     </span>
                   </div>
                 </label>
-                <div style={{ color: "#999", fontSize: 12, lineHeight: 1.6, margin: "4px 0 8px" }}>
+                <div style={{ color: "var(--color-text-muted)", fontSize: 12, lineHeight: 1.6, margin: "4px 0 8px" }}>
                   <div>{findItem(skin.itemId).label}</div>
                   <div>{skin.textureWidth} x {skin.textureHeight} px, {skin.elementCount} elements</div>
                 </div>
@@ -394,8 +394,8 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
           // Never smaller than its form; a long result after building scrolls inside it instead.
           style={{ ...panelStyle, padding: 16, flex: "0 1 auto", minHeight: result ? 0 : undefined, display: "flex", flexDirection: "column" }}
         >
-        <div style={{ color: "#c084fc", fontSize: 16, marginBottom: 2 }}>Build a resource pack</div>
-        <div style={{ color: "#aaa", fontSize: 12, marginBottom: 10 }}>{packSource}</div>
+        <div style={{ color: "var(--color-accent-text)", fontSize: 16, marginBottom: 2 }}>Build a resource pack</div>
+        <div style={{ color: "var(--color-text-secondary)", fontSize: 12, marginBottom: 10 }}>{packSource}</div>
 
         <label style={{ display: "block", marginBottom: 8 }}>
           {fieldLabel("Pack name")}
@@ -425,7 +425,7 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
           </div>
         </div>
         {rangeBackwards && (
-          <div style={{ color: "#fda4af", fontSize: 12, margin: "-4px 0 10px" }}>
+          <div style={{ color: "var(--color-danger-text)", fontSize: 12, margin: "-4px 0 10px" }}>
             "Up to" must be the same as or newer than the first version.
           </div>
         )}
@@ -454,7 +454,7 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
         {packSkins.length > 0 && (
           <div
             data-testid="atlas-meter"
-            style={{ fontSize: 12, margin: "-4px 0 10px", color: packAtlasShare > atlasBudget ? "#fbbf24" : "#86efac" }}
+            style={{ fontSize: 12, margin: "-4px 0 10px", color: packAtlasShare > atlasBudget ? "var(--color-warning-text)" : "var(--color-success-text)" }}
           >
             These skins take {packAtlasShare < 0.01 ? "under 0.01" : packAtlasShare.toFixed(2)}% of the atlas.
             {packAtlasShare > atlasBudget ? " Their largest textures will shrink to fit." : ""}
@@ -462,11 +462,11 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
         )}
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontSize: 12, color: "#bbb", flexShrink: 0 }}>Output folder</span>
+          <span style={{ fontSize: 12, color: "var(--color-text-secondary)", flexShrink: 0 }}>Output folder</span>
           <div
             data-testid="output-folder"
             title={outputFolder || undefined}
-            style={{ flex: 1, minWidth: 0, fontSize: 12, color: outputFolder ? "#ddd" : "#888", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            style={{ flex: 1, minWidth: 0, fontSize: 12, color: outputFolder ? "var(--color-text-secondary)" : "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           >
             {outputFolder ? folderName : "Not chosen yet"}
           </div>
@@ -480,14 +480,14 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
         </Button>
 
         {result && (
-          <div data-testid="pack-result" style={{ marginTop: 12, fontSize: 13, color: "#ddd", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
-            <div style={{ color: "#86efac", marginBottom: 6 }}>Pack written.</div>
-            <div style={{ wordBreak: "break-all", color: "#aaa", fontSize: 12, marginBottom: 8 }}>{result.path}</div>
-            <div style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>
+          <div data-testid="pack-result" style={{ marginTop: 12, fontSize: 13, color: "var(--color-text-secondary)", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
+            <div style={{ color: "var(--color-success-text)", marginBottom: 6 }}>Pack written.</div>
+            <div style={{ wordBreak: "break-all", color: "var(--color-text-secondary)", fontSize: 12, marginBottom: 8 }}>{result.path}</div>
+            <div style={{ color: "var(--color-text-secondary)", fontSize: 12, marginBottom: 8 }}>
               Adds {result.atlasPixels.toLocaleString()} px to the item atlas, {((result.atlasPixels / ATLAS_PIXELS) * 100).toFixed(2)}% of its maximum.
             </div>
             {result.shrunk.length > 0 && (
-              <div style={{ color: "#aaa", fontSize: 12, marginBottom: 8 }}>
+              <div style={{ color: "var(--color-text-secondary)", fontSize: 12, marginBottom: 8 }}>
                 Shrunk to fit the budget: {result.shrunk.join(", ")}.
               </div>
             )}
@@ -496,20 +496,20 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
             </Button>
 
             {result.warnings.map((warning) => (
-              <div key={warning} style={{ color: "#fbbf24", fontSize: 12, marginBottom: 6 }}>{warning}</div>
+              <div key={warning} style={{ color: "var(--color-warning-text)", fontSize: 12, marginBottom: 6 }}>{warning}</div>
             ))}
 
             <SectionTitle>Commands to get each skin</SectionTitle>
             {result.assignments.map((assignment) => (
               <div key={assignment.skinId} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 12, color: "#ccc", marginBottom: 2 }}>{assignment.skinName}</div>
+                <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 2 }}>{assignment.skinName}</div>
                 <code
                   style={{
                     display: "block",
                     fontSize: 11,
                     padding: 6,
-                    background: "#0d0d0d",
-                    color: "#c084fc",
+                    background: "var(--color-bg)",
+                    color: "var(--color-accent-text)",
                     borderRadius: 6,
                     wordBreak: "break-all",
                   }}
