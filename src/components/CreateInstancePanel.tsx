@@ -479,7 +479,9 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
                 </div>
               </div>
 
-              <div className="nc-row">
+              <details className="nc-advanced">
+                <summary>Advanced Java options{jvmArgs.trim() ? " · Custom arguments set" : ""}</summary>
+                <div className="nc-row">
                 <label className="nc-q" htmlFor="nc-jvm">
                   Java arguments
                   <small>Optional. Leave empty unless a mod tells you to add some.</small>
@@ -496,7 +498,8 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
                   />
                   <p className="nc-hint">The right Java for this version is downloaded automatically. You can choose a different one in the instance's settings.</p>
                 </div>
-              </div>
+                </div>
+              </details>
 
               <div className="nc-row">
                 <div className="nc-q">Starter mods</div>

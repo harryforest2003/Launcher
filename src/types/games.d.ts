@@ -3,7 +3,9 @@ export {};
 declare global {
     type GameId = "sims4" | "gtav" | "skyrimse" | "fallout4" | "cyberpunk2077" | "stardew";
 
-    /** How a game signs in. name: the Steam app's signed-in player (null when unknown or not Steam). */
+    /** How a game signs in. name: the last-used local Steam profile, not a verified session. */
+    type GameLaunchProgress = { gameId: GameId; stage: "checking" | "backup" | "starting" };
+
     type GameStoreAccount = {
         store: "steam" | "ea" | "gog" | "epic" | "rockstar" | null;
         storeName: string | null;
@@ -320,6 +322,7 @@ declare global {
             chooseDocs: (id: GameId) => Promise<unknown>;
             openFolder: (id: GameId, which: "game" | "docs") => Promise<void>;
 
+            onLaunchProgress?: (callback: (progress: GameLaunchProgress) => void) => () => void;
             launch: (id: GameId, options?: { safe?: boolean }) => Promise<{ how: string; safe: boolean; backedUp: GameSaveBackup | null; backupError: string | null }>;
             setSimsOptions: (options: { mods?: boolean; scripts?: boolean }) => Promise<{ mods: boolean; scripts: boolean } | null>;
 
@@ -340,6 +343,7 @@ declare global {
             nexusAccount: () => Promise<{ name: string; premium: boolean } | null>;
             /** Who the game signs in as: Steam's signed-in player (display name only), or which app handles sign-in. */
             account: (id: GameId) => Promise<GameStoreAccount>;
+            openAccount: (provider: NonNullable<GameStoreAccount["store"]>) => Promise<void>;
             /* recheck: ask Nexus again (after verifying on the website). */
             adultStatus: (recheck?: boolean) => Promise<GameAdultStatus>;
             setAdult: (on: boolean) => Promise<GameAdultStatus>;

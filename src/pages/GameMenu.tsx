@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import {
   CircleAlert,
   TriangleAlert,
-  Search,
+  ArrowUpRight,
 } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
 import LauncherSidebar from "../components/LauncherSidebar";
-import { Badge, Button, Notice, Segmented, Tabs, type Tone } from "../components/ui";
+import { Badge, Button, Notice, SearchField, Segmented, Tabs, type Tone } from "../components/ui";
 import { formatHours } from "../components/charts";
 import ActivityPanel from "./dashboard/ActivityPanel";
 import DealsPanel from "./dashboard/DealsPanel";
@@ -17,6 +17,7 @@ import { defaultRange, type Range } from "./dashboard/range";
 import { useDashboard } from "./dashboard/useDashboard";
 import { useInstances } from "./dashboard/useInstances";
 import { initials, timeAgo } from "./playedAgo";
+import { useScrollMemory } from "./useScrollMemory";
 import "./dashboard/dashboard.css";
 
 type Props = {
@@ -177,10 +178,20 @@ function Chips({
   );
 }
 
+// Keep navigation context for this launcher session, without saving searches to disk.
+const homeContext: {
+  query: string;
+  filter: "all" | "installed" | "attention";
+  view: "activity" | "news";
+} = { query: "", filter: "all", view: "activity" };
+
 function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }: Props) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "installed" | "attention">("all");
-  const [view, setView] = useState<"activity" | "news">("activity");
+  const [query, setQuery] = useState(homeContext.query);
+  const [filter, setFilter] = useState(homeContext.filter);
+  const [view, setView] = useState(homeContext.view);
+  useEffect(() => {
+    Object.assign(homeContext, { query, filter, view });
+  }, [query, filter, view]);
   const [detected, setDetected] = useState<DetectedGame[]>([]);
   const [games, setGames] = useState<GameSummary[]>([]);
   const [listed, setListed] = useState(false);
@@ -194,12 +205,14 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
     {},
   );
 
-  const { instances, loaded: instancesLoaded } =
+  const { instances, loaded: instancesLoaded, loadError: instanceLoadError, reload: reloadInstances } =
     useInstances();
   const { stats, activity, news, refreshNews, deals, refreshDeals } = useDashboard(true, { feed: "gaming", deals: true });
   // The time range for the play time cards; until chosen, one that has play in it.
   const [chosenRange, setRange] = useState<Range | null>(null);
   const range = chosenRange ?? defaultRange(stats.data);
+  const pageScroll = useScrollMemory("launcher-home", listed && detectedLoaded && instancesLoaded &&
+    (view === "activity" ? !stats.loading && !activity.loading : !news.loading && !deals.loading));
 
   useEffect(() => {
     let active = true;
@@ -228,6 +241,7 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
   }, [scanAttempt]);
 
   const retryScan = () => {
+    void reloadInstances();
     setScanFailed(false);
     setStatusFailed(false);
     setCheckingStatus(true);
@@ -258,7 +272,7 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
     );
     const shown = game.found ? summarise(all) : all;
     const meta = game.found
-      ? `${plural(game.modCount, "mod", "mods")} on, found via ${game.source}`
+      ? `${plural(game.modCount, "enabled mod", "enabled mods")}`
       : game.windowsOnly && isMac
         ? "Windows game: CrossOver or Whisky"
         : "Choose its folder";
@@ -280,9 +294,12 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
             {looking.length > 0 && (
               <Chips chips={shown} testId="home-game-status" />
             )}
-            <span className="db-game__meta">Play time unavailable · {game.lastPlayed ? `Launched ${timeAgo(game.lastPlayed)}` : "No launch recorded"}</span>
+            {game.lastPlayed && <span className="db-game__meta">Launched {timeAgo(game.lastPlayed)}</span>}
           </span>
-          {!looking.length && <Chips chips={shown} />}
+          <span className="db-game__footer">
+            <span>{game.found ? "Open game" : "Set up game"}</span>
+            <ArrowUpRight size={15} aria-hidden="true" />
+          </span>
         </button>
       </li>
     );
@@ -302,7 +319,7 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
           <BackgroundLogo />
         </div>
 
-        <div className="app-page db-page">
+        <div ref={pageScroll} className="app-page db-page">
           <header className="db-header">
             <div>
               <h1 className="db-header__title">Launcher home</h1>
@@ -325,8 +342,8 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                       : "Looking..."}
                   </span>
                 </header>
-                {(scanFailed || statusFailed) && <Notice tone="warning" actions={<Button size="sm" variant="ghost" onClick={retryScan}>Retry</Button>}>
-                  {scanFailed ? "Some games could not be loaded." : "Some game checks could not be completed."}
+                {(scanFailed || statusFailed || instanceLoadError) && <Notice tone="warning" actions={<Button size="sm" variant="ghost" onClick={retryScan}>Retry</Button>}>
+                  {instanceLoadError ?? (scanFailed ? "Some games could not be loaded." : "Some game checks could not be completed.")}
                 </Notice>}
                 {attention.length > 0 && (
                   <p className="db-games__alert">
@@ -336,10 +353,7 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                   </p>
                 )}
                 <div className="db-library-tools">
-                  <label className="db-game-search">
-                    <Search size={16} aria-hidden="true" />
-                    <input type="search" aria-label="Search games" placeholder="Search your games" value={query} onChange={(event) => setQuery(event.target.value)} />
-                  </label>
+                  <SearchField wrapperClassName="db-game-search" label="Search games" placeholder="Search your games…" value={query} onChange={(event) => setQuery(event.target.value)} />
                   <Segmented label="Games to show" value={filter} onChange={setFilter} options={[
                     { value: "all", label: "All games" },
                     { value: "installed", label: "On this computer" },
@@ -347,6 +361,12 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                   ]} />
                 </div>
                 {visibleCount === 0 && <p className="db-empty" role="status">{!listed || !detectedLoaded || !instancesLoaded || (filter === "attention" && checkingStatus) ? "Checking your games…" : scanFailed || (filter === "attention" && statusFailed) ? "Results are incomplete. Retry the checks above." : filter === "attention" && !query.trim() ? "No checked games need attention." : "No games match these filters."}</p>}
+                {(query || filter !== "all") && (
+                  <div className="db-filter-summary">
+                    <span>{query.trim() ? `Searching for “${query.trim()}”` : "Filtered games"}</span>
+                    <Button size="sm" variant="ghost" onClick={() => { setQuery(""); setFilter("all"); }}>Clear filters</Button>
+                  </div>
+                )}
                 <ul className="db-games__list">
                   {showMinecraft && <li>
                     <button
@@ -366,12 +386,15 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                         <span className="db-game__meta">
                           {latest?.lastPlayed
                             ? `${latest.name}, ${timeAgo(latest.lastPlayed)}`
-                            : `${plural(instances.length, "instance", "instances")}`}
+                            : instanceLoadError ? "Library check unavailable" : `${plural(instances.length, "instance", "instances")}`}
                         </span>
-                        <span className="db-game__meta">
-                          {stats.data?.totals.playSeconds != null ? formatHours(stats.data.totals.playSeconds) : "Play time unavailable"}
-                        </span>
+                        {stats.data?.totals.playSeconds != null && (
+                          <span className="db-game__meta">
+                            {formatHours(stats.data.totals.playSeconds)} played
+                          </span>
+                        )}
                       </span>
+                      <span className="db-game__footer"><span>Open Minecraft</span><ArrowUpRight size={15} aria-hidden="true" /></span>
                       {running && (
                         <Chips
                           chips={[{ label: "Playing now", tone: "accent" }]}
@@ -386,8 +409,9 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                         <GameArt id={game.id} name={game.name} />
                         <span className="db-game__text">
                           <span className="db-game__name">{game.name}</span>
-                          <span className="db-game__meta">Manage mods · Play time unavailable</span>
+                          <span className="db-game__meta">Installed · Mod management</span>
                         </span>
+                        <span className="db-game__footer"><span>Open game</span><ArrowUpRight size={15} aria-hidden="true" /></span>
                       </button>
                     </li>
                   ))}

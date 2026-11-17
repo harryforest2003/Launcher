@@ -2,6 +2,8 @@ import { useEffect, useId, useState } from "react";
 import { UserRound } from "lucide-react";
 import Monogram from "./ui/Monogram";
 import Select from "./ui/Select";
+import Button from "./ui/Button";
+import PlatformAccountAction from "./PlatformAccountAction";
 import { ACCOUNTS_EVENT, watchAccountChanges } from "./ui/accountsSignal";
 import "./accountSwitcher.css";
 
@@ -33,24 +35,33 @@ const message = (err: unknown) =>
 function StoreAccount({ game, compact, rail }: { game: GameId; compact: boolean; rail: boolean }) {
   const [account, setAccount] = useState<{ game: GameId; info: GameStoreAccount } | null>(null);
 
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [checking, setChecking] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    const look = () =>
-      Promise.resolve(window.gamesAPI?.account?.(game))
-        .then((info) => live && info && setAccount({ game, info }))
-        .catch(() => {});
-    look();
-    // Signing in or out in the Steam app happens elsewhere: look again on coming back.
-    window.addEventListener("focus", look);
-    return () => {
-      live = false;
-      window.removeEventListener("focus", look);
+    let request = 0;
+    const look = async () => {
+      const current = ++request;
+      setChecking(true);
+      setError(null);
+      try {
+        const info = await window.gamesAPI.account(game);
+        if (live && current === request) setAccount({ game, info });
+      } catch (err) {
+        if (live && current === request) setError(message(err));
+      } finally {
+        if (live && current === request) setChecking(false);
+      }
     };
-  }, [game]);
+    void look();
+    window.addEventListener("focus", look);
+    return () => { live = false; window.removeEventListener("focus", look); };
+  }, [game, refreshCount]);
 
   const info = account?.game === game ? account.info : null;
-  const who = info?.name ?? (info?.store === "steam" ? "Not signed in" : info?.storeName ?? "");
-  const label = info?.storeName ? (info.store === "steam" ? "Steam account" : `Signs in with the ${info.storeName}`) : "Sign-in";
+  const who = info?.name ?? (info?.store === "steam" ? "No local profile found" : info?.storeName ?? "");
+  const label = info?.storeName ? (info.store === "steam" ? "Last-used Steam profile" : `Signs in with the ${info.storeName}`) : "Sign-in";
   const avatar = <Monogram name={info?.name ?? info?.storeName ?? ""} icon={info?.name ? undefined : <UserRound size={16} />} size={28} />;
 
   if (rail) {
@@ -68,7 +79,12 @@ function StoreAccount({ game, compact, rail }: { game: GameId; compact: boolean;
         {compact && avatar}
         {who && <strong className="ui-account__name">{who}</strong>}
       </div>
+      {checking && <div className="ui-account__note" role="status">Checking account information…</div>}
       {info && <div className="ui-account__note">{info.how}</div>}
+      {info?.store && <PlatformAccountAction key={`${game}:${info.store}`} provider={info.store} />}
+      {game === "sims4" && info?.store === "steam" && <p className="ui-account__note">The Sims 4 also uses your linked EA account.</p>}
+      {error && <div role="alert" className="ui-account__error">Couldn’t check the account: {error}</div>}
+      <Button size="sm" variant="ghost" disabled={checking} onClick={() => setRefreshCount((value) => value + 1)}>{error ? "Retry account check" : "Refresh account"}</Button>
     </div>
   );
 }
@@ -82,36 +98,59 @@ export default function AccountSwitcher({ compact = false, rail = false, game }:
 function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; rail: boolean; inMinecraft: boolean }) {
   const [accounts, setAccounts] = useState<MinecraftAccount[]>([]);
   const [busy, setBusy] = useState(false);
+  const [operation, setOperation] = useState<"signin" | "switch" | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectId = useId();
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [refreshCount, setRefreshCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
-    const refresh = () => {
-      window.instanceAPI.listAccounts().then(setAccounts).catch(() => {});
+    let live = true;
+    let request = 0;
+    const refresh = async () => {
+      const current = ++request;
+      setLoading(true);
+      try {
+        const next = await window.instanceAPI.listAccounts();
+        if (live && current === request) { setAccounts(next); setLoadError(null); }
+      } catch (err) {
+        if (live && current === request) setLoadError(message(err));
+      } finally {
+        if (live && current === request) setLoading(false);
+      }
     };
-    refresh();
+    void refresh();
     watchAccountChanges();
     window.addEventListener(ACCOUNTS_EVENT, refresh);
     window.addEventListener("focus", refresh);
-    const stop = typeof window.instanceAPI.onAccountsChanged === "function" ? window.instanceAPI.onAccountsChanged(setAccounts) : undefined;
+    const stop = typeof window.instanceAPI.onAccountsChanged === "function" ? window.instanceAPI.onAccountsChanged(() => { void refresh(); }) : undefined;
     return () => {
+      live = false;
       window.removeEventListener(ACCOUNTS_EVENT, refresh);
       window.removeEventListener("focus", refresh);
       if (typeof stop === "function") stop();
     };
-  }, []);
+  }, [refreshCount]);
 
   const active = accounts.find((account) => account.active);
 
   async function choose(value: string) {
     setBusy(true);
+    setOperation(value === ADD ? "signin" : "switch");
+    setStatus(null);
     setError(null);
     try {
       if (value === ADD) {
         await window.launcherAPI.loginMicrosoft();
-        setAccounts(await window.instanceAPI.listAccounts());
+        const next = await window.instanceAPI.listAccounts();
+        setAccounts(next);
+        setStatus(`Signed in as ${next.find((entry) => entry.active)?.name ?? "your Microsoft account"}.`);
       } else {
-        setAccounts(await window.instanceAPI.switchAccount(value));
+        const next = await window.instanceAPI.switchAccount(value);
+        setAccounts(next);
+        setStatus(`Minecraft will launch as ${next.find((entry) => entry.active)?.name ?? "the selected account"}.`);
       }
     } catch (err) {
       setError(message(err));
@@ -121,7 +160,7 @@ function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; r
 
   const options = (
     <>
-      {!active && <option value="">{busy ? "Signing in..." : "Not signed in"}</option>}
+      {!active && <option value="">{loading ? "Checking accounts…" : loadError ? "Account check unavailable" : busy ? "Signing in..." : "Not signed in"}</option>}
       {accounts.map((account) => (
         <option key={account.uuid} value={account.uuid}>
           {account.name}
@@ -141,7 +180,7 @@ function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; r
           className="ui-account__overlay"
           aria-label={active ? `Playing as ${active.name}. Switch account` : "Minecraft account: not signed in"}
           value={active?.uuid ?? ""}
-          disabled={busy}
+          disabled={busy || loading}
           onChange={(e) => choose(e.target.value)}
         >
           {options}
@@ -166,13 +205,15 @@ function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; r
           wrapperClassName="ui-account__select"
           style={{ width: "100%" }}
           value={active?.uuid ?? ""}
-          disabled={busy}
+          disabled={busy || loading}
           onChange={(e) => choose(e.target.value)}
         >
           {options}
         </Select>
       </div>
-      {busy && <div className="ui-account__note">Finish signing in in your browser.</div>}
+      {busy && <div className="ui-account__note" role="status">{operation === "signin" ? "Finish signing in in your browser." : "Switching Minecraft account…"}</div>}
+      {!busy && status && <div className="ui-account__note" role="status">{status}</div>}
+      {loadError && <div role="alert" className="ui-account__error">Couldn’t load Minecraft accounts: {loadError}<Button size="sm" variant="ghost" disabled={loading} onClick={() => setRefreshCount((value) => value + 1)}>Retry account check</Button></div>}
       {error && (
         <div role="alert" className="ui-account__error">
           {error}

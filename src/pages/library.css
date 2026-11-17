@@ -55,26 +55,7 @@
   margin-top: var(--space-5);
 }
 
-.lx-search {
-  position: relative;
-  flex: 1 1 240px;
-  display: flex;
-}
-
-.lx-search > svg {
-  position: absolute;
-  left: var(--space-3);
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-text-muted);
-  pointer-events: none;
-}
-
-.lx-search input {
-  flex: 1;
-  min-width: 0;
-  padding-left: calc(var(--space-3) + 16px + var(--space-2));
-}
+.lx-search { flex: 1 1 240px; }
 
 .lx-select {
   min-height: var(--control-md);
@@ -1519,4 +1500,34 @@
     grid-template-columns: 1fr;
     gap: var(--space-3);
   }
+}
+
+/* Measure the workspace after the navigation rail has taken its share. */
+.lx-container { container: library / inline-size; }
+.nc-advanced {
+  border-top: 1px solid var(--color-border);
+  padding-block: var(--space-3);
+}
+.nc-advanced summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  padding-block: var(--space-2);
+}
+.nc-advanced summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+}
+@container library (max-width: 760px) {
+  .lx {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .lx-col { height: auto; flex: 0 0 auto; }
+  .lx-body { height: auto; overflow: visible; padding: var(--space-5); }
+  .lx-panel { overflow: visible; flex-shrink: 0; margin: 0 var(--space-5) var(--space-5); }
+  .lx-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 256px), 1fr)); }
+  .lx-list { overflow-x: auto; }
+  .lx-list .lx-tile, .lx-list-head { min-width: 540px; }
 }

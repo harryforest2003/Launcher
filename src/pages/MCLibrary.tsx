@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import CreateInstancePanel from "../components/CreateInstancePanel";
 import InstanceArt from "../components/InstanceArt";
 import Sidebar from "../components/MCSidebar";
-import { Badge, Button, Notice } from "../components/ui";
+import { Badge, Button, Notice, SearchField, Select } from "../components/ui";
 import { BinIcon, RefreshIcon } from "../components/Icons";
 import {
   ArrowLeft,
@@ -25,7 +25,6 @@ import {
   PackageOpen,
   Play,
   Plus,
-  Search,
   SlidersHorizontal,
   Square,
   SquarePlus,
@@ -37,6 +36,7 @@ import { playAsItems, useAccountChoice } from "../components/playAsChoice";
 import { timeAgo } from "./playedAgo";
 import { formatDuration } from "../components/charts";
 import "./library.css";
+import { useScrollMemory } from "./useScrollMemory";
 
 type Props = {
   onBack: () => void;
@@ -110,9 +110,14 @@ function readView(): View {
   }
 }
 
+// Returning from another workspace should not discard the current library selection.
+const libraryContext: { search: string; sort: Sort; loaderFilter: string } = {
+  search: "", sort: "name", loaderFilter: "all",
+};
+
 function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSelector, goSettings }: Props) {
-  const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<Sort>("name");
+  const [search, setSearch] = useState(libraryContext.search);
+  const [sort, setSort] = useState<Sort>(libraryContext.sort);
   const [groupBy, setGroupBy] = useState<GroupBy>(readGroupBy);
   const [storageUsed, setStorageUsed] = useState(0);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -120,7 +125,10 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
   const [groups, setGroups] = useState<Record<string, string[]>>({});
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [view, setView] = useState<View>(readView);
-  const [loaderFilter, setLoaderFilter] = useState("all");
+  const [loaderFilter, setLoaderFilter] = useState(libraryContext.loaderFilter);
+  useEffect(() => {
+    Object.assign(libraryContext, { search, sort, loaderFilter });
+  }, [search, sort, loaderFilter]);
   // Real play time and mod counts per instance, from the dashboard data (null seconds = not known).
   const [played, setPlayed] = useState<Record<string, Played>>({});
   // Installs and repairs in progress, by instance.
@@ -136,6 +144,8 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
   const [starting, setStarting] = useState<string | null>(null);
   // Making or importing an instance takes over the list, under the same sidebar.
   const [creating, setCreating] = useState<"new" | "import" | null>(null);
+  const libraryScroll = useScrollMemory("library-list", loaded && !creating && !open);
+  const compactScroll = useScrollMemory("library-compact", loaded && !creating && !open);
   const [message, setMessage] = useState<{ tone: "bad" | "good"; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [naming, setNaming] = useState<string | null>(null);
@@ -953,7 +963,7 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
         onBack={onBack}
       />
 
-      <main className="app-main">
+      <main className="app-main lx-container">
         <div className="app-logo-tint">
           <BackgroundLogo />
         </div>
@@ -979,9 +989,9 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
             </div>
           </div>
         ) : (
-          <div className="lx">
+          <div ref={compactScroll} className="lx">
             <div className="lx-col">
-              <div className={`lx-body${selecting ? " lx-ticking" : ""}`} style={selecting ? { paddingBottom: 110 } : undefined}>
+              <div ref={libraryScroll} className={`lx-body${selecting ? " lx-ticking" : ""}`} style={selecting ? { paddingBottom: 110 } : undefined}>
                 <div className="lx-head">
                   <div>
                     <h1 className="page-title">Library</h1>
@@ -1008,38 +1018,34 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
                     >
                       Import
                     </Button>
-                    <Button icon={<Plus size={16} aria-hidden="true" />} onClick={() => setCreating("new")}>
+                    <Button variant="primary" icon={<Plus size={16} aria-hidden="true" />} onClick={() => setCreating("new")}>
                       New Instance
                     </Button>
                   </div>
                 </div>
 
                 <div className="lx-tools">
-                  <label className="lx-search">
-                    <Search size={16} aria-hidden="true" />
-                    <span className="u-visually-hidden">Search instances</span>
-                    <input className="ui-input" type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search instances..." />
-                  </label>
-                  <select className="lx-select" aria-label="Filter by loader" value={loaderFilter} onChange={(e) => setLoaderFilter(e.target.value)}>
+                  <SearchField wrapperClassName="lx-search" label="Search instances" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search instances…" />
+                  <Select aria-label="Filter by loader" value={loaderFilter} onChange={(e) => setLoaderFilter(e.target.value)}>
                     <option value="all">All loaders</option>
                     {LOADER_ORDER.filter((key) => instances.some((i) => loaderOf(i) === key)).map((key) => (
                       <option key={key} value={key}>
                         {LOADER_NAMES[key]} only
                       </option>
                     ))}
-                  </select>
-                  <select className="lx-select" aria-label="Sort instances" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
+                  </Select>
+                  <Select aria-label="Sort instances" value={sort} onChange={(e) => setSort(e.target.value as Sort)}>
                     <option value="name">Sort: Name</option>
                     <option value="lastPlayed">Sort: Last played</option>
                     <option value="version">Sort: Version</option>
                     <option value="added">Sort: Recently added</option>
-                  </select>
-                  <select className="lx-select" aria-label="Group instances" value={groupBy} onChange={(e) => chooseGroupBy(e.target.value as GroupBy)}>
+                  </Select>
+                  <Select aria-label="Group instances" value={groupBy} onChange={(e) => chooseGroupBy(e.target.value as GroupBy)}>
                     <option value="groups">Group: Your groups</option>
                     <option value="loader">Group: Loader</option>
                     <option value="version">Group: Version</option>
                     <option value="none">Group: None</option>
-                  </select>
+                  </Select>
                   <div className="lx-views" role="radiogroup" aria-label="Show as">
                     {(
                       [

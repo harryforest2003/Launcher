@@ -254,6 +254,30 @@
   font-family: var(--font-mono);
 }
 
+.ui-search {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.ui-search > svg {
+  position: absolute;
+  left: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.ui-search > input {
+  width: 100%;
+  min-width: 0;
+  padding-left: calc(var(--space-3) + 16px + var(--space-2));
+}
+.ui-search > input::placeholder { color: var(--color-text-muted); }
+.ui-search > input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
 /* ---------------- Segmented (one of a few) ---------------- */
 
 /* The options share the control equally, like the tabs. */
@@ -825,7 +849,7 @@
   /* Turned, it's about 1.23 times as wide and 1.17 times as tall as this width. */
   width: min(74cqw, 78cqh);
   height: auto;
-  opacity: 0.1;
+  opacity: 0.035;
   filter: var(--logo-filter);
   user-select: none;
 }

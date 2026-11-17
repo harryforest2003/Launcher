@@ -327,6 +327,11 @@ expose("gamesAPI", {
     openFolder: (id, which) => ipcRenderer.invoke("games:openFolder", id, which),
 
     launch: (id, options) => ipcRenderer.invoke("games:launch", id, options),
+    onLaunchProgress: (callback) => {
+        const handler = (_event, progress) => callback(progress);
+        ipcRenderer.on("games:launchProgress", handler);
+        return () => ipcRenderer.removeListener("games:launchProgress", handler);
+    },
     setSimsOptions: (options) => ipcRenderer.invoke("games:setSimsOptions", options),
 
     search: (id, options) => ipcRenderer.invoke("games:search", id, options),
@@ -340,6 +345,7 @@ expose("gamesAPI", {
     undoUpdate: (id, key) => ipcRenderer.invoke("games:undoUpdate", id, key),
     nexusAccount: () => ipcRenderer.invoke("games:nexusAccount"),
     account: (id) => ipcRenderer.invoke("games:account", id),
+    openAccount: (provider) => ipcRenderer.invoke("games:openAccount", provider),
     adultStatus: (recheck) => ipcRenderer.invoke("games:adultStatus", recheck),
 
     saves: (id) => ipcRenderer.invoke("games:saves", id),

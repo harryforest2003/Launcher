@@ -1,5 +1,6 @@
 import { Component, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Box, Compass, FolderPlus, LayoutGrid, LogIn, Play, Shirt, UserRound } from "lucide-react";
+import { ArrowLeft, Box, Compass, FolderPlus, LayoutGrid, LogIn, Play, Shirt, UserRound } from "lucide-react";
+import CreateInstancePanel from "../components/CreateInstancePanel";
 import BackgroundLogo from "../components/BackgroundLogo";
 import AccountSwitcher from "../components/AccountSwitcher";
 import Sidebar from "../components/MCSidebar";
@@ -15,6 +16,7 @@ import ActivityPanel from "./dashboard/ActivityPanel";
 import PlayHero from "./dashboard/PlayHero";
 import PlayStats from "./dashboard/PlayStats";
 import NewsPanel from "./dashboard/NewsPanel";
+import MinecraftOffers from "./dashboard/MinecraftOffers";
 import { useDashboard } from "./dashboard/useDashboard";
 import { defaultRange, type Range } from "./dashboard/range";
 import { loaderName, useInstances } from "./dashboard/useInstances";
@@ -67,7 +69,10 @@ function MinecraftMenu({
     skin?: string;
   } | null>(null);
 
-  const { instances, loaded, starting, launchError, clearError, launch } = useInstances();
+  const { instances, loaded, loadError, starting, launchError, clearError, launch, reload } = useInstances();
+  const [creatingInstance, setCreatingInstance] = useState(false);
+  const [createdName, setCreatedName] = useState<string | null>(null);
+  const firstTime = loaded && !loadError && instances.length === 0;
   // The rows' Play: an account already in another game is offered the free ones instead.
   const choice = useAccountChoice();
   const dashboard = useDashboard();
@@ -134,6 +139,8 @@ function MinecraftMenu({
   const latest = instances[0];
   // Every other instance stays one click from playing, most recently played first.
   const others = instances.slice(1);
+  const [showAllInstances, setShowAllInstances] = useState(false);
+  const visibleOthers = showAllInstances ? others : others.slice(0, 3);
   const statFor = (name: string) => stats?.instances.find((i) => i.name === name);
 
   // The world last played in the latest instance, when it has any.
@@ -218,24 +225,39 @@ function MinecraftMenu({
         </div>
 
         <div className="app-page mh-page">
+          {creatingInstance ? (
+            <div className="nc-page">
+              <Button variant="ghost" icon={<ArrowLeft size={16} aria-hidden="true" />} onClick={() => setCreatingInstance(false)}>Back to Minecraft</Button>
+              <h1 className="page-title">Create an instance</h1>
+              <p className="page-lead">An instance is a separate Minecraft setup with its own mods, worlds and settings. Choose Vanilla for the original game, a modpack for a ready-made collection, or import an existing setup.</p>
+              <CreateInstancePanel onCancel={() => setCreatingInstance(false)} onDone={(name) => {
+                setCreatedName(name ?? "Your instance");
+                void reload();
+                setCreatingInstance(false);
+              }} />
+            </div>
+          ) : <>
+          {createdName && <Notice tone="success" actions={<Button size="sm" variant="ghost" onClick={goLibrary}>Open Library</Button>}>
+            {createdName} is ready. Open Library to play or manage it.
+          </Notice>}
           {/* The top: the welcome and the last-played card on the left, and the signed-in player
               (or a way to sign in) on the right, as tall as both together. */}
           <div className="mh-top">
             <div className="mh-top__main">
               <header className="mh-head">
                 <div className="mh-head__text">
-                  <h1 className="page-title">Welcome back, {account?.loggedIn ? account.username : "Player"}!</h1>
-                  <p className="page-lead">Pick up where you left off, or find something new.</p>
+                  <h1 className="page-title">{firstTime ? "Welcome to Minecraft" : `Welcome back, ${account?.loggedIn ? account.username : "Player"}!`}</h1>
+                  <p className="page-lead">{firstTime ? "Start with your own setup, a modpack, or an instance you already have." : "Pick up where you left off, or find something new."}</p>
                 </div>
 
               </header>
-              <PlayHero
+              {loadError ? <Notice tone="danger" actions={<Button size="sm" variant="ghost" onClick={() => void reload()}>Retry</Button>}>{loadError}</Notice> : <PlayHero
                 instance={latest}
                 stat={latest ? statFor(latest.name) : undefined}
                 loaded={loaded}
                 starting={starting}
                 onPlay={launch}
-                onCreate={goLibrary}
+                onCreate={() => setCreatingInstance(true)}
                 extra={
                   world && (
                     <span>
@@ -243,7 +265,7 @@ function MinecraftMenu({
                     </span>
                   )
                 }
-              />
+              />}
             </div>
 
             {account?.loggedIn ? (
@@ -305,6 +327,7 @@ function MinecraftMenu({
 
           <div className="mh-layout mh-layout--solo">
             <div className="mh-main">
+              <MinecraftOffers />
 
               {launchError && (
                 <Notice tone="danger" actions={<Button size="sm" variant="ghost" onClick={clearError}>Dismiss</Button>}>
@@ -319,7 +342,7 @@ function MinecraftMenu({
                 }}
               />
 
-              <div className="mh-split">
+              {instances.length > 0 && <div className="mh-split">
                 <section aria-labelledby="mh-others">
                   <div className="mh-section-head">
                     <h2 className="mh-section-title" id="mh-others">
@@ -329,8 +352,11 @@ function MinecraftMenu({
                       Open Library
                     </Button>
                   </div>
-                  <ul className="mh-cards">
-                    {others.map((instance) => {
+                  {others.length > 3 && <Button variant="ghost" size="sm" aria-expanded={showAllInstances} aria-controls="mh-recent-instances" onClick={() => setShowAllInstances((show) => !show)}>
+                    {showAllInstances ? "Show recent instances" : `Show all ${others.length} other instances`}
+                  </Button>}
+                  <ul className="mh-cards" id="mh-recent-instances">
+                    {visibleOthers.map((instance) => {
                       const stat = statFor(instance.name);
                       const trend = recent(instance.name);
                       return (
@@ -369,7 +395,7 @@ function MinecraftMenu({
                       );
                     })}
                     <li>
-                      <button type="button" className="mh-card mh-card--new" onClick={goLibrary}>
+                      <button type="button" className="mh-card mh-card--new" onClick={() => setCreatingInstance(true)}>
                         <FolderPlus size={20} aria-hidden="true" />
                         <span className="mh-card__name">New instance</span>
                         <span className="mh-row__facts">Create one, start from a modpack, or import from another launcher</span>
@@ -379,9 +405,9 @@ function MinecraftMenu({
                 </section>
 
                 <ActivityPanel items={dashboard.activity.data} loading={dashboard.activity.loading} failed={dashboard.activity.failed} />
-              </div>
+              </div>}
 
-              <PlayStats stats={stats} loading={dashboard.stats.loading} failed={dashboard.stats.failed} range={range} onRange={setRange} show={["trend", "most"]} onInstance={goLibrary} />
+              {instances.length > 0 && <PlayStats stats={stats} loading={dashboard.stats.loading} failed={dashboard.stats.failed} range={range} onRange={setRange} show={["trend", "most"]} onInstance={goLibrary} />}
               <NewsPanel news={dashboard.news.data} loading={dashboard.news.loading} failed={dashboard.news.failed} onRefresh={dashboard.refreshNews} title="Minecraft news" from="Mojang, Java and Bedrock releases, Fabric, Forge and NeoForge" />
 
               <section aria-labelledby="mh-links">
@@ -406,6 +432,7 @@ function MinecraftMenu({
               </section>
             </div>
           </div>
+          </>}
         </div>
       </main>
     </div>

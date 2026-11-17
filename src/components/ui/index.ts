@@ -7,6 +7,7 @@ export { default as Field } from "./Field";
 export { default as Segmented } from "./Segmented";
 export { default as SectionIndex, type IndexEntry } from "./SectionIndex";
 export { default as Select } from "./Select";
+export { default as SearchField } from "./SearchField";
 export { default as Monogram } from "./Monogram";
 export { initials } from "./initials";
 export { Sidebar, SidebarBrand, SidebarExit, SidebarSection, SidebarNav, NavGroup, NavItem, NavBack, SidebarFooter } from "./Sidebar";

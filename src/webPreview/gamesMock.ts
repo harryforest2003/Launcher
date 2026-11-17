@@ -6,6 +6,14 @@
 const now = Date.now();
 const daysAgo = (days: number) => new Date(now - days * 86400000).toISOString();
 
+// Preview-only fixture for checking launch errors without starting a real game.
+const launchListeners = new Set<(event: GameLaunchProgress) => void>();
+let failNextPreviewLaunch = new URLSearchParams(window.location.search).get("launchPreview") === "fail-once";
+const launchStage = async (gameId: GameId, stage: GameLaunchProgress["stage"]) => {
+  launchListeners.forEach((listener) => listener({ gameId, stage }));
+  await new Promise((resolve) => setTimeout(resolve, 250));
+};
+
 const GAMES: GameSummary[] = [
   { id: "sims4", name: "The Sims 4", tagline: "Custom content, script mods and Gallery downloads", colour: "#22c55e", found: true, gameDir: "/Applications/The Sims 4.app", docsDir: "~/Documents/Electronic Arts/The Sims 4", source: "the EA app (sample)", chosen: false, windowsOnly: false, nexus: "thesims4", curseforge: 78062, modCount: 0, updated: null },
   { id: "gtav", name: "Grand Theft Auto V", tagline: "Script mods, trainers and add-on vehicles", colour: "#16a34a", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "gta5", curseforge: null, modCount: 0, updated: null },
@@ -318,7 +326,18 @@ export const gamesBridge = {
   forgetFolder: async () => null,
   chooseDocs: async () => null,
   openFolder: async () => {},
+  onLaunchProgress: (callback: (event: GameLaunchProgress) => void) => {
+    launchListeners.add(callback);
+    return () => { launchListeners.delete(callback); };
+  },
   launch: async (id: GameId, options?: { safe?: boolean }) => {
+    await launchStage(id, "checking");
+    await launchStage(id, "backup");
+    await launchStage(id, "starting");
+    if (failNextPreviewLaunch) {
+      failNextPreviewLaunch = false;
+      throw new Error("Simulated Steam handoff failure. No game was launched. Retry to test recovery.");
+    }
     if (!need(id).found) throw new Error(`${need(id).name} couldn't be started from here: choose its folder in Settings, or start it as you usually do.`);
     if (id === "sims4") {
       if (options?.safe) simsOptions = { ...simsOptions, scripts: false };
@@ -390,11 +409,16 @@ export const gamesBridge = {
   },
   nexusAccount: async () => ({ name: "PreviewUser", premium: false }),
   // As the desktop app: Steam's signed-in player for games found in Steam, else where sign-in happens.
+  openAccount: async (provider: NonNullable<GameStoreAccount["store"]>) => {
+    if (provider === "steam") throw new Error("Opening the Steam app is available in the desktop launcher. Open Steam manually while using this web preview.");
+    const urls = { ea: "https://myaccount.ea.com/", epic: "https://www.epicgames.com/account/personal", gog: "https://www.gog.com/account/settings/security", rockstar: "https://signin.rockstargames.com/signin/user-form" };
+    window.open(urls[provider], "_blank", "noopener,noreferrer");
+  },
   account: async (id: GameId): Promise<GameStoreAccount> => {
     const game = GAMES.find((entry) => entry.id === id);
     if (!game?.gameDir) return { store: null, storeName: null, name: null, how: "Find the game on this computer to see how it signs in." };
     if (/steamapps/i.test(game.gameDir)) {
-      return { store: "steam", storeName: "Steam", name: "PreviewSteamPlayer", how: "Steam signs you in. To play as someone else, switch account in the Steam app." };
+      return { store: "steam", storeName: "Steam", name: "PreviewSteamPlayer", how: "Last-used local Steam profile, not a verified live session. Sign in or switch accounts in Steam before playing." };
     }
     return { store: "ea", storeName: "EA app", name: null, how: "The EA app handles sign-in. Sign in there to play." };
   },

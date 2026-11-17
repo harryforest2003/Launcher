@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import BackgroundLogo from "../components/BackgroundLogo";
 import GameSidebar, { type GamePage } from "../components/GameSidebar";
 import GameDiscover from "./games/GameDiscover";
@@ -9,10 +9,10 @@ import GameSettings from "./games/GameSettings";
 import LoadOrderPage from "./games/LoadOrderPage";
 import CCBrowser from "./games/CCBrowser";
 import PlayPrompt from "./games/PlayPrompt";
-import { Button } from "../components/ui";
+import { Button, Notice, ProgressBar } from "../components/ui";
 import { timeAgo } from "./playedAgo";
 import "./dashboard/dashboard.css";
-import { errorText, installSummary, note } from "./games/shared";
+import { errorText, installSummary } from "./games/shared";
 
 type Props = {
   gameId: GameId;
@@ -35,6 +35,13 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const [playing, setPlaying] = useState<string | null>(null);
+  const launchPending = useRef(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [slowLaunch, setSlowLaunch] = useState(false);
+  useEffect(() => window.gamesAPI.onLaunchProgress?.((event) => {
+    if (event.gameId !== gameId || !launchPending.current) return;
+    setPlaying(event.stage === "checking" ? "Checking game files…" : event.stage === "backup" ? "Backing up saves…" : "Opening game launcher…");
+  }), [gameId]);
   const [banner, setBanner] = useState<{ tone: "good" | "bad" | "warn" | "info"; text: string; notes?: string[] } | null>(null);
   const [updates, setUpdates] = useState<GameUpdateCheck | null>(null);
   const [checking, setChecking] = useState(false);
@@ -220,22 +227,31 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
   }
 
   async function play(safe: boolean) {
+    if (launchPending.current) return;
+    launchPending.current = true;
     setAsking(false);
     setBanner(null);
-    setPlaying("Starting...");
+    setLaunchError(null);
+    setSlowLaunch(false);
+    setPlaying("Preparing launch…");
+    const slowTimer = window.setTimeout(() => setSlowLaunch(true), 15000);
     try {
       const started = await window.gamesAPI.launch(gameId, { safe });
       setBanner({
         tone: started.backupError ? "warn" : "good",
-        text: `Started ${detail?.name} through ${started.how}${safe ? `, without the mods that hook into its code. Turn them back on once they're updated${gameId === "sims4" ? " (Settings, or the note on the Mods page)" : ": playing normally next time does that"}.` : "."}${
+        text: `Launch request sent for ${detail?.name} through ${started.how}. Check the game or platform launcher for sign-in and startup${safe ? `, with the mods that hook into its code disabled. Turn them back on once they're updated${gameId === "sims4" ? " (Settings, or the note on the Mods page)" : ": playing normally next time does that"}.` : "."}${
           started.backedUp ? ` Your saves were backed up first (${started.backedUp.reason.replace(/^Before /, "before ")}); Settings can put them back.` : ""
         }${started.backupError ? ` Your saves couldn't be backed up first: ${started.backupError}` : ""}`,
       });
-      await reload();
+      void reload();
     } catch (err) {
-      setBanner({ tone: "bad", text: errorText(err) });
+      setLaunchError(errorText(err));
+    } finally {
+      window.clearTimeout(slowTimer);
+      launchPending.current = false;
+      setPlaying(null);
+      setSlowLaunch(false);
     }
-    setPlaying(null);
   }
 
   const risky = mods.filter((mod) => mod.mayNeedUpdate && mod.enabled);
@@ -334,9 +350,24 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
       <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
         <BackgroundLogo />
         <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", position: "relative", boxSizing: "border-box", textAlign: "left" }}>
-          {loadError && <div style={{ ...note("bad"), marginBottom: 16 }}>{loadError}</div>}
+          {loadError && <Notice tone="danger" style={{ marginBottom: 16 }} actions={<Button size="sm" variant="ghost" onClick={() => void reload()}>Retry loading game</Button>}>{loadError}</Notice>}
+          {playing && <Notice style={{ marginBottom: 16 }}>
+            <strong>{playing}</strong>
+            <ProgressBar label={playing} />
+            <p>{slowLaunch ? "This is taking longer than usual. Save backups can take time. The request is still pending; check the platform launcher for prompts before trying to launch again." : "Keep this request open while Unity prepares the game. Any platform sign-in happens in its own launcher."}</p>
+          </Notice>}
+          {launchError && <Notice tone="danger" style={{ marginBottom: 16 }} data-testid="launch-error">
+            <strong>{detail?.name ?? "The game"} could not be launched.</strong>
+            <p>Check the game folder and sign in to the platform launcher, then try again.</p>
+            <details><summary>Technical details</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", userSelect: "text" }}>{launchError}</pre></details>
+            <div className="db-actions">
+              <Button size="sm" onClick={onPlay}>Try again</Button>
+              <Button size="sm" variant="ghost" onClick={() => go("settings")}>Game settings</Button>
+              <Button size="sm" variant="ghost" onClick={() => setLaunchError(null)}>Dismiss</Button>
+            </div>
+          </Notice>}
           {banner && (
-            <div style={{ ...note(banner.tone), marginBottom: 16 }} data-testid="game-banner">
+            <Notice tone={banner.tone === "bad" ? "danger" : banner.tone === "warn" ? "warning" : banner.tone === "good" ? "success" : "info"} style={{ marginBottom: 16 }} data-testid="game-banner">
               <div style={{ display: "flex", gap: 12 }}>
                 <span style={{ flex: 1 }}>{banner.text}</span>
                 <button onClick={() => setBanner(null)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16 }}>
@@ -348,7 +379,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                   • {line}
                 </div>
               ))}
-            </div>
+            </Notice>
           )}
 
           {!detail ? (

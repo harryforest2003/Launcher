@@ -1,12 +1,13 @@
 import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useRef, useState } from "react";
 import { SlidersHorizontal } from "lucide-react";
-import { Button, Tabs } from "../components/ui";
+import { Button, SearchField, Select, Tabs } from "../components/ui";
 import "./discover.css";
 import InstallToInstance from "../components/InstallToInstance";
 import Sidebar from "../components/MCSidebar";
 import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
+import { useScrollMemory } from "./useScrollMemory";
 
 type Props = {
   onBack: () => void;
@@ -56,6 +57,13 @@ const TYPE_LABELS: Record<string, string> = {
   resourcepack: "Resource Pack",
 };
 
+// Preserve browsing context when opening a project or switching launcher pages.
+const discoverContext = {
+  search: "", source: "Any Source", loader: "Any Loader", version: "Any Version",
+  sort: "Relevance", tab: "all" as Tab,
+  chosenPage: { filterKey: "", page: 1 },
+};
+
 function MCDiscover({
   onBack,
   goHome,
@@ -66,14 +74,14 @@ function MCDiscover({
   goSettings,
   openMod,
 }: Props) {
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [source, setSource] = useState("Any Source");
-  const [loader, setLoader] = useState("Any Loader");
-  const [version, setVersion] = useState("Any Version");
-  const [sort, setSort] = useState("Relevance");
+  const [search, setSearch] = useState(discoverContext.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(discoverContext.search.trim());
+  const [source, setSource] = useState(discoverContext.source);
+  const [loader, setLoader] = useState(discoverContext.loader);
+  const [version, setVersion] = useState(discoverContext.version);
+  const [sort, setSort] = useState(discoverContext.sort);
 
-  const [tab, setTab] = useState<Tab>("all");
+  const [tab, setTab] = useState<Tab>(discoverContext.tab);
 
   // The loader, version, source and sort choices live behind one Filters button, so the
   // content tabs can take the full width of the page.
@@ -102,16 +110,22 @@ function MCDiscover({
     };
   }, [filtersOpen]);
 
-  const [versions, setVersions] = useState<any[]>([]);
+  const [versions, setVersions] = useState<(string | { version?: string; id?: string })[]>([]);
   const [result, setResult] = useState<CatalogPage | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   // A chosen page belongs to the search it was chosen in, so any new search starts
   // at page 1 without first asking for that page of the new results.
   const filterKey = JSON.stringify([debouncedSearch, version, loader, tab, source, sort]);
-  const [chosenPage, setChosenPage] = useState({ filterKey, page: 1 });
+  const [chosenPage, setChosenPage] = useState(discoverContext.chosenPage);
   const page = chosenPage.filterKey === filterKey ? chosenPage.page : 1;
+  const requestKey = JSON.stringify([filterKey, page]);
+  const discoverScroll = useScrollMemory(`discover:${requestKey}`, loadedKey === requestKey && !loading);
+  useEffect(() => {
+    Object.assign(discoverContext, { search, source, loader, version, sort, tab, chosenPage });
+  }, [search, source, loader, version, sort, tab, chosenPage]);
   const listTop = useRef<HTMLDivElement>(null);
 
   // Installing a modpack creates a whole instance, so it gets its own
@@ -206,6 +220,7 @@ function MCDiscover({
       }
 
       setLoading(false);
+      setLoadedKey(requestKey);
     }
 
     loadPage();
@@ -213,7 +228,7 @@ function MCDiscover({
     return () => {
       active = false;
     };
-  }, [debouncedSearch, version, loader, tab, source, sort, page]);
+  }, [debouncedSearch, version, loader, tab, source, sort, page, requestKey]);
 
   useEffect(() => {
     listTop.current?.scrollIntoView({ block: "start" });
@@ -231,17 +246,10 @@ function MCDiscover({
     result?.warnings.find((warning) => warning.startsWith("CurseForge: "))?.slice("CurseForge: ".length) ??
     "CurseForge isn't available in this copy of the launcher yet.";
 
-  const dropdownStyle = {
-    padding: "10px 12px",
-    borderRadius: 10,
-    background: "var(--color-surface-sunken)",
-    color: "var(--color-text)",
-    border: "1px solid var(--color-border)",
-    fontSize: 13,
-  };
+
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "var(--color-bg)", color: "var(--color-text)" }}>
+    <div className="app-screen">
       <Sidebar
         currentPage="discover"
         goHome={goHome}
@@ -256,23 +264,11 @@ function MCDiscover({
 
       <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
       <BackgroundLogo />
-      <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", position: "relative" }}>
-        <h1>Discover Content</h1>
+      <div ref={discoverScroll} className="app-page dc-workspace">
+        <header className="page-header"><h1 className="page-title">Discover Content</h1></header>
 
         {/* SEARCH */}
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search Modrinth and CurseForge..."
-          style={{
-            width: "100%",
-            padding: 14,
-            borderRadius: 10,
-            background: "var(--color-surface-sunken)",
-            color: "var(--color-text)",
-            border: "1px solid var(--color-border)",
-          }}
-        />
+        <SearchField label="Search mods and modpacks" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Modrinth and CurseForge…" />
 
         {/* FILTERS (one button) and the content TABS, which share the rest of the row equally */}
         <div className="dc-toolbar">
@@ -292,42 +288,42 @@ function MCDiscover({
               <div id="discover-filters" role="group" aria-label="Filters" className="dc-filters__panel">
                 <label className="dc-field">
                   <span>Loader</span>
-                  <select style={dropdownStyle} value={loader} onChange={(e) => setLoader(e.target.value)}>
+                  <Select value={loader} onChange={(e) => setLoader(e.target.value)}>
                     <option>Any Loader</option>
                     <option>Fabric</option>
                     <option>Forge</option>
                     <option>NeoForge</option>
                     <option>Quilt</option>
-                  </select>
+                  </Select>
                 </label>
 
                 <label className="dc-field">
                   <span>Minecraft version</span>
-                  <select style={dropdownStyle} value={version} onChange={(e) => setVersion(e.target.value)}>
+                  <Select value={version} onChange={(e) => setVersion(e.target.value)}>
                     <option>Any Version</option>
-                    {versions.map((v: any, i) => {
+                    {versions.map((v, i) => {
                       const val = typeof v === "string" ? v : v.version || v.id;
                       return <option key={i}>{val}</option>;
                     })}
-                  </select>
+                  </Select>
                 </label>
 
                 <label className="dc-field">
                   <span>Source</span>
-                  <select style={dropdownStyle} value={source} onChange={(e) => setSource(e.target.value)}>
+                  <Select value={source} onChange={(e) => setSource(e.target.value)}>
                     <option>Any Source</option>
                     <option>Modrinth</option>
                     <option>CurseForge</option>
-                  </select>
+                  </Select>
                 </label>
 
                 <label className="dc-field">
                   <span>Sort by</span>
-                  <select style={dropdownStyle} value={sort} onChange={(e) => setSort(e.target.value)}>
+                  <Select value={sort} onChange={(e) => setSort(e.target.value)}>
                     <option>Relevance</option>
                     <option>Downloads</option>
                     <option>Newest</option>
-                  </select>
+                  </Select>
                 </label>
 
                 <div className="dc-filters__actions">

@@ -7,6 +7,7 @@ import Button from "../components/ui/Button";
 import Notice from "../components/ui/Notice";
 import SectionIndex, { type IndexEntry } from "../components/ui/SectionIndex";
 import AppearanceSettings from "../theme/AppearanceSettings";
+import PlatformAccounts from "../components/PlatformAccounts";
 import "../theme/appearance.css";
 
 type Props = {
@@ -33,6 +34,7 @@ export default function LauncherSettings({ onHome, onModManager, onMinecraftSett
 
   const sections = useMemo<IndexEntry[]>(
     () => [
+      { id: "platform-accounts", label: "Game accounts" },
       { id: "appearance", label: "Appearance" },
       { id: "appearance-colour", label: "Colour", sub: true },
       { id: "appearance-base", label: "Light or dark", sub: true },
@@ -73,6 +75,7 @@ export default function LauncherSettings({ onHome, onModManager, onMinecraftSett
             <SectionIndex label="Settings sections" entries={sections} scroller={scroller} />
 
             <div className="page-sections">
+              <PlatformAccounts />
               <section id="appearance" aria-labelledby="appearance-title" className="page-section">
                 <AppearanceSettings />
               </section>

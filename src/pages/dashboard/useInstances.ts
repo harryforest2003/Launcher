@@ -24,16 +24,20 @@ const cleanError = (message: string) => message.replace(/^Error invoking remote 
 export function useInstances() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
 
   const reload = useCallback(
     () =>
-      Promise.resolve(window.launcherAPI?.getInstances?.())
-        .then((list) => setInstances(Array.isArray(list) ? list : []))
+      Promise.resolve().then(() => window.launcherAPI.getInstances())
+        .then((list) => {
+          setInstances(Array.isArray(list) ? list : []);
+          setLoadError(null);
+        })
         .catch((err) => {
           console.error("Failed to load instances:", err);
-          setInstances([]);
+          setLoadError("Your instances could not be loaded. Retry to check your library.");
         })
         .finally(() => setLoaded(true)),
     []
@@ -65,5 +69,5 @@ export function useInstances() {
 
   const sorted = useMemo(() => [...instances].sort(byLastPlayed), [instances]);
 
-  return { instances: sorted, loaded, starting, launchError, clearError: () => setLaunchError(null), launch, reload };
+  return { instances: sorted, loaded, loadError, starting, launchError, clearError: () => setLaunchError(null), launch, reload };
 }

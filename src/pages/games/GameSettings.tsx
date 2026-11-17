@@ -46,7 +46,7 @@ export default function GameSettings({ detail, reload, goLauncherSettings }: Pro
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <h1 style={{ margin: 0 }}>{detail.name} Settings</h1>
+      <h1 className="page-title">{detail.name} Settings</h1>
       {error && <div style={note("bad")}>{error}</div>}
 
       <div style={panel}>

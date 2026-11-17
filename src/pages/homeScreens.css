@@ -830,3 +830,19 @@
   height: 100%;
   border-radius: var(--radius-lg);
 }
+
+.mh-offers__links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--space-3);
+}
+.mh-offers__link { text-decoration: none; }
+.mh-offers__copy { min-width: 0; flex: 1; }
+.mh-offers__link > svg { flex-shrink: 0; color: var(--color-text-muted); }
+.mh-offers__link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.mh-offers__source, .mh-offers__note {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-relaxed);
+}
+.mh-offers__note { margin: var(--space-3) 0 0; max-width: var(--reading-max); }

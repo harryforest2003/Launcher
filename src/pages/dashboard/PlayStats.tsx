@@ -247,8 +247,15 @@ export default function PlayStats({
                   setHidden((current) => current.includes(line.id) ? current.filter((id) => id !== line.id) : [...current, line.id])
                 }><i style={{ background: line.color }} />{line.id}</button>
               ))}
-              {games?.map((game) => <span key={game.name}><i style={{ background: game.colour }} />{game.name} · unavailable</span>)}
+
             </div>
+          )}
+
+          {games && games.length > 0 && (
+            <details className="db-coverage">
+              <summary>Playtime coverage · Minecraft</summary>
+              <p>Session durations are unavailable for {games.map((game) => game.name).join(", ")}. Recorded totals include Minecraft instances.</p>
+            </details>
           )}
 
           {loading ? (

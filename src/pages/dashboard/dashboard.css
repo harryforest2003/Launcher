@@ -750,7 +750,8 @@
 
 .db-games__list .db-game__art {
   width: 100%;
-  height: 90px;
+  height: auto;
+  aspect-ratio: 231 / 100;
 }
 
 .db-games__list .db-game__meta {
@@ -921,33 +922,21 @@
   margin-bottom: var(--space-4);
 }
 .db-game-search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   flex: 1 1 200px;
   max-width: 340px;
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-}
-.db-game-search:focus-within {
-  border-color: var(--color-focus);
-  outline: 2px solid var(--color-accent-subtle);
-}
-.db-game-search input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  font-size: var(--font-size-sm);
 }
 .db-dashboard-panel[hidden] { display: none; }
+.db-filter-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
 .db-games__list .db-game:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 3px;
@@ -976,3 +965,41 @@
 .db-library-tools .ui-segmented__option {
   flex: 1 1 auto;
 }
+
+.db-games__list .db-game__name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: var(--leading-tight);
+  margin-bottom: var(--space-1);
+}
+
+/* Keep secondary facts quiet and align navigation affordances across each row. */
+.db-games__list .db-game__meta {
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+.db-games__list .db-game__text { gap: var(--space-1); }
+.db-game__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+.db-game:hover .db-game__footer,
+.db-game:focus-visible .db-game__footer { color: var(--color-accent-text); }
+.db-game__footer svg { flex-shrink: 0; }
+.db-feed__detail, .db-card__note { font-family: var(--font-body); }
+
+.db-coverage {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs);
+}
+.db-coverage summary { cursor: pointer; padding: var(--space-1) 0; }
+.db-coverage p { margin: var(--space-2) 0; line-height: var(--leading-relaxed); }

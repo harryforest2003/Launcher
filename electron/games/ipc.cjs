@@ -226,6 +226,8 @@ async function searchCurseForge(game, { query, sort, page, size }) {
 
 const statusCache = new Map();
 
+const pendingLaunches = new Set();
+
 function registerGamesIpc() {
     // The download queue: started with what was left last time.
     queue.start({
@@ -412,6 +414,13 @@ function registerGamesIpc() {
     // from here) the saves are backed up. While finding a broken mod, its start did that.
     ipcMain.handle("games:launch", async (_e, id, options) => {
         const game = need(id);
+        if (pendingLaunches.has(game.id)) throw new Error("A launch request is already in progress for this game. Wait for it to finish before trying again.");
+        pendingLaunches.add(game.id);
+        const progress = (stage) => {
+            if (!_e.sender.isDestroyed()) _e.sender.send("games:launchProgress", { gameId: game.id, stage });
+        };
+        try {
+        progress("checking");
         const loc = detect.locate(id);
         const played = protect.lastPlayed(id);
         const changedAt = Date.parse(store.readState(id).changedAt ?? "") || 0;
@@ -425,17 +434,23 @@ function registerGamesIpc() {
         let backedUp = null;
         let backupError = null;
         if (reason && !finder.read(id)) {
+            progress("backup");
             try {
                 backedUp = await saves.backup(game, loc, reason);
             } catch (err) {
                 backupError = err.message;
             }
         }
-        const started = await launch(game, loc, { safe: options?.safe === true, open: (url) => {
+        progress("starting");
+        const started = await launch(game, loc, { safe: options?.safe === true, open: async (url) => {
             // Only Steam's "start this game" link (steam://rungameid/<number>).
-            if (!openExternalSafely(url, { steam: true })) throw new Error("Steam couldn't be asked to start the game.");
+            if (!/^steam:\/\/rungameid\/\d+$/.test(String(url))) throw new Error("Invalid Steam game link.");
+            await shell.openExternal(url);
         } });
         return { ...started, backedUp, backupError };
+        } finally {
+            pendingLaunches.delete(game.id);
+        }
     });
 
     // Saves and their backups.
@@ -745,6 +760,10 @@ function registerGamesIpc() {
 
     // Who the game signs in as: the Steam app's signed-in player, or which app handles it.
     ipcMain.handle("games:account", (_e, id) => gameAccount.storeAccount(need(id).id));
+    // Fixed destinations only; never accept a renderer-supplied URL or command.
+    ipcMain.handle("games:openAccount", async (_e, provider) => {
+        await shell.openExternal(gameAccount.accountTarget(provider));
+    });
 
     ipcMain.handle("games:nexusAccount", async () => {
         nexus.forgetAccount();

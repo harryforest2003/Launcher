@@ -1,4 +1,12 @@
 /* A game's own sign-in in the sidebar (AccountSwitcher's StoreAccount). Tokens only. */
+.ui-account__action { min-width: 0; }
+.ui-account__action .ui-button { white-space: normal; text-align: start; }
+.platform-account-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); padding: var(--space-5); }
+.platform-account-row + .platform-account-row { border-top: 1px solid var(--color-border); }
+.platform-account-row > div:first-child { flex: 1 1 240px; }
+.platform-account-row h3 { margin: 0; font-size: var(--font-size-sm); }
+.platform-account-row p { margin: var(--space-2) 0 0; color: var(--color-text-muted); font-size: var(--font-size-sm); line-height: var(--leading-relaxed); }
+.platform-account-row > .ui-account__action { flex: 0 1 320px; }
 
 .ui-account__name {
   min-width: 0;

@@ -99,10 +99,10 @@ export default function PlayHero({ instance, stat, loaded, starting, onPlay, onC
         ) : (
           <>
             <p className="db-hero__when">{loaded ? "No instances yet" : "Loading your instances..."}</p>
-            <H className="db-hero__name">Make your first instance</H>
-            <p className="db-hero__facts">Pick a Minecraft version and a mod loader, or start from a modpack.</p>
+            <H className="db-hero__name">{loaded ? "Make your first instance" : "Getting your library ready"}</H>
+            <p className="db-hero__facts">An instance keeps its own mods, worlds and settings. Start with Vanilla for the original game, or choose a modpack.</p>
             <div className="db-hero__actions">
-              <Button variant="primary" size="lg" icon={<FolderPlus size={18} aria-hidden="true" />} onClick={onCreate}>
+              <Button variant="primary" size="lg" disabled={!loaded} icon={<FolderPlus size={18} aria-hidden="true" />} onClick={onCreate}>
                 Create an instance
               </Button>
               {actions}

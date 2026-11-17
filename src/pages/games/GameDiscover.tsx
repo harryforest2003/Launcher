@@ -4,7 +4,7 @@ import { DownloadIcon } from "../../components/Icons";
 import Pagination from "../../components/Pagination";
 import CollectionsList from "./CollectionsList";
 import { countText, errorText, installSummary, MORE_SITES, note, panel, shortDate } from "./shared";
-import { Tabs } from "../../components/ui";
+import { SearchField, Select, Tabs } from "../../components/ui";
 
 type Props = {
   detail: GameDetail;
@@ -139,14 +139,14 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
     setInstalling(null);
   }
 
-  const dropdownStyle = { padding: "10px 12px", borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 13 };
+
   const mods = result?.mods ?? [];
   const label = provider === "curseforge" ? "CurseForge" : provider === "nexus" ? "Nexus Mods" : "Nexus Mods and CurseForge";
   const showsNexus = provider !== "curseforge";
 
   return (
     <div>
-      <h1 style={{ marginTop: 0 }}>Discover Mods</h1>
+      <header className="page-header"><h1 className="page-title">Discover Mods</h1></header>
       {detail.nexus && (
         <div style={{ marginBottom: 12 }}>
           <Tabs
@@ -166,28 +166,23 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
       ) : (
       <>
 
-      <input
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-        placeholder={`Search ${label} for ${detail.name} mods...`}
-        style={{ width: "100%", padding: 14, borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", boxSizing: "border-box" }}
-      />
+      <SearchField label={`Search ${detail.name} mods`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${label} for ${detail.name} mods…`} />
 
       <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
         {detail.curseforge && (
-          <select style={dropdownStyle} value={provider} onChange={(event) => setProvider(event.target.value as "any" | "nexus" | "curseforge")} aria-label="Where to search">
+          <Select value={provider} onChange={(event) => setProvider(event.target.value as "any" | "nexus" | "curseforge")} aria-label="Where to search">
             <option value="any">Any source</option>
             <option value="nexus">Nexus Mods</option>
             <option value="curseforge">CurseForge</option>
-          </select>
+          </Select>
         )}
-        <select style={dropdownStyle} value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort by">
+        <Select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort by">
           {SORTS.map((option) => (
             <option key={option.id} value={option.id}>
               {option.label}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {MORE_SITES[detail.id] && (

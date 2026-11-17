@@ -20,6 +20,19 @@ const STORES = {
     rockstar: "Rockstar Games Launcher",
 };
 
+const ACCOUNT_TARGETS = Object.freeze({
+    steam: "steam://open/main",
+    ea: "https://myaccount.ea.com/",
+    epic: "https://www.epicgames.com/account/personal",
+    gog: "https://www.gog.com/account/settings/security",
+    rockstar: "https://signin.rockstargames.com/signin/user-form",
+});
+
+function accountTarget(provider) {
+    if (typeof provider !== "string" || !Object.hasOwn(ACCOUNT_TARGETS, provider)) throw new Error("Unsupported account provider.");
+    return ACCOUNT_TARGETS[provider];
+}
+
 const HOW = {
     ea: "The EA app handles sign-in. Sign in there to play.",
     gog: "GOG Galaxy handles sign-in, if you use it.",
@@ -76,7 +89,7 @@ function storeAccount(id) {
     if (store === "steam") {
         for (const root of steamFolders(loc)) {
             const user = steamUser(root);
-            if (user) return { store, storeName: STORES.steam, name: user.name, how: "Steam signs you in. To play as someone else, switch account in the Steam app." };
+            if (user) return { store, storeName: STORES.steam, name: user.name, how: "Last-used local Steam profile, not a verified live session. Sign in or switch accounts in Steam before playing." };
         }
         return { store, storeName: STORES.steam, name: null, how: "Sign in through the Steam app." };
     }
@@ -84,4 +97,4 @@ function storeAccount(id) {
     return { store: null, storeName: null, name: null, how: "This game signs in through the app you installed it with." };
 }
 
-module.exports = { storeAccount, steamUser, storeOf };
+module.exports = { storeAccount, steamUser, storeOf, accountTarget };
