@@ -29,11 +29,13 @@ type Props = {
   /** A strip along the bottom (Home puts the overview numbers there). */
   footer?: ReactNode;
   headingLevel?: "h2" | "h3";
+  /** A tall, full-bleed art banner with the words laid over it. */
+  banner?: boolean;
 };
 
 /* The quick-launch card: what was played last and when, with the screen's one solid Play.
    Home and the Minecraft home both use it, so they look and launch the same. */
-export default function PlayHero({ instance, stat, loaded, starting, onPlay, onCreate, actions, extra, footer, headingLevel: H = "h2" }: Props) {
+export default function PlayHero({ instance, stat, loaded, starting, onPlay, onCreate, actions, extra, footer, headingLevel: H = "h2", banner }: Props) {
   const [artFailed, setArtFailed] = useState(false);
   const choice = useAccountChoice();
   // An account already in another game is offered the free ones instead of failing.
@@ -42,7 +44,7 @@ export default function PlayHero({ instance, stat, loaded, starting, onPlay, onC
   };
 
   return (
-    <section className="db-hero" aria-label={instance ? "Last played" : "Get started"}>
+    <section className={banner ? "db-hero db-hero--banner" : "db-hero"} aria-label={instance ? "Last played" : "Get started"}>
       <div className="db-hero__art" aria-hidden="true">
         {!artFailed && <img src={MINECRAFT_ART} alt="" referrerPolicy="no-referrer" draggable={false} onError={() => setArtFailed(true)} />}
       </div>

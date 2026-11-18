@@ -1,0 +1,225 @@
+/* Game Discover and Custom Content: the Minecraft result rows (discover.css) plus what is specific to games. */
+
+.gd-page { padding-bottom: var(--space-8); }
+
+.gd-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.gd-count {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.gd-sites {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.gd-sites__label {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.gd-sites__hint { flex: 1 1 220px; min-width: 0; }
+
+/* Every row uses the same wide picture slot (Nexus shows screenshots) so the columns line up. */
+.gd-row { grid-template-columns: 96px minmax(0, 1fr) auto auto; }
+.gd-row .gd-art { width: 96px; height: 54px; }
+.gd-art .ui-monogram { width: 100%; height: 100%; }
+
+@container discover (max-width: 760px) {
+  .gd-row { grid-template-columns: 72px minmax(0, 1fr) auto auto; }
+  .gd-row .gd-art { width: 72px; height: 44px; }
+}
+
+@container discover (max-width: 520px) {
+  .gd-row { grid-template-columns: 72px minmax(0, 1fr) auto; }
+}
+
+.gd-pager { margin-top: var(--space-3); }
+
+/* ---------------- CC browser ---------------- */
+
+.cc-page { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.cc-toolbar { display: flex; align-items: center; gap: var(--space-2); }
+.cc-search { flex: 1; min-width: 0; }
+
+.cc-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: var(--control-sm);
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.cc-chip span { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.cc-chip:hover { background: var(--color-hover); color: var(--color-text); }
+.cc-chip[aria-pressed="true"] {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+.cc-chip[aria-pressed="true"] span { color: inherit; }
+.cc-onoff { margin-left: auto; }
+
+.cc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
+}
+
+.cc-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  min-width: 0;
+  padding: var(--space-2) var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--ui-hairline, var(--color-border));
+  border-radius: var(--radius-cut-lg);
+  corner-shape: var(--corner-cut);
+  background: var(--ui-card-fill, var(--color-surface));
+  box-shadow: var(--edge-highlight);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.cc-card:hover, .cc-card:focus-within { border-color: var(--color-accent-line); }
+.cc-card[data-off] .cc-picture img { opacity: 0.45; }
+.cc-card[data-off] .cc-name { color: var(--color-text-muted); }
+
+.cc-picture {
+  position: relative;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+  border-radius: var(--radius-cut);
+  corner-shape: var(--corner-cut);
+  background: var(--color-surface-sunken);
+}
+
+.cc-name {
+  padding: 0 var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+.cc-sub {
+  padding: 0 var(--space-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.cc-badge {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-scrim);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.cc-actions {
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  padding: var(--space-1-5) var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+.cc-actions > :first-child { margin-right: auto; }
+.cc-card:hover .cc-actions, .cc-card:focus-within .cc-actions { opacity: 1; transform: none; }
+
+/* ---------------- compact Discover Mods header ---------------- */
+
+.gd-toolbar { flex-wrap: nowrap; margin-top: 0; }
+.gd-toolbar .gd-search { flex: 1; min-width: 0; }
+.gd-page .dc-head .gd-count { margin-left: auto; white-space: nowrap; }
+.gd-page .dc-head { margin-bottom: var(--space-2); }
+.gd-page .dc-notices { margin-top: var(--space-2); }
+.gd-page .dc-notices:empty { display: none; }
+
+.gd-sites {
+  gap: var(--space-1);
+  padding: var(--space-0-5) var(--space-2);
+  border: var(--border-width) solid var(--ui-hairline, var(--color-border));
+  background: var(--color-surface-sunken);
+}
+.gd-sites__label { margin-right: var(--space-1); }
+.gd-sites__hint { flex: 1 1 160px; margin-left: var(--space-2); }
+.gd-sites__close {
+  display: inline-grid;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.gd-sites__close:hover { background: var(--color-hover); color: var(--color-text); }
+.gd-sites__close:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+.gd-page .gd-row { padding-block: var(--space-1-5); }
+.gd-page .dc-summary { -webkit-line-clamp: 1; }
+.gd-row .gd-art { width: 80px; height: 46px; }
+.gd-row { grid-template-columns: 80px minmax(0, 1fr) auto auto; }
+.gd-tabs { width: 220px; flex-shrink: 0; }
+
+/* CC: one-line header, shorter tiles */
+.cc-page { gap: var(--space-2); }
+.cc-page .page-header { display: flex; align-items: baseline; gap: var(--space-3); margin-bottom: 0; }
+.cc-page .page-subtitle { margin: 0; }
+.cc-grid { grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: var(--space-2); }
+.cc-picture { aspect-ratio: 4 / 3; margin-bottom: var(--space-1-5); }
+.cc-card { padding-bottom: var(--space-2); }
+
+/* Discover Mods toolbar: search takes the room; the source picker sits with the tabs and count. */
+.gd-page .dc-bar__row .gd-search { min-width: 180px; }
+.gd-page .dc-bar__row--tabs { gap: var(--space-3); }
+.gd-page .dc-bar__source { margin-left: auto; flex-shrink: 0; }
+.gd-page .dc-bar__row--tabs .dc-bar__count { margin-left: 0; }

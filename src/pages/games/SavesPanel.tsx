@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { ArchiveRestore } from "lucide-react";
+import { ArchiveRestore, FolderOpen, Save } from "lucide-react";
+import Button from "../../components/ui/Button";
 import IconButton from "../../components/IconButton";
 import { BinIcon } from "../../components/Icons";
-import { errorText, note, panel, shortDate, sizeText, smallButton } from "./shared";
+import { errorText, note, shortDate, sizeText } from "./shared";
 
 type Props = { detail: GameDetail };
 
@@ -50,36 +51,40 @@ export default function SavesPanel({ detail }: Props) {
   }
 
   return (
-    <div style={panel} data-testid="saves-panel">
-      <div style={{ color: "var(--color-accent-text)", fontWeight: 600, marginBottom: 6 }}>Saves</div>
-      <div style={{ color: "var(--color-text-muted)", fontSize: 12, lineHeight: 1.5, marginBottom: 10 }}>
-        Before a risky play (the first after a game update, the first after your mods change, and the first from the launcher) your saves are
-        copied here, so a save loaded with a broken mod can be put back. The last 8 copies are kept.
+    <section className="ui-panel set-panel" data-testid="saves-panel">
+      <div className="set-panel-head">
+        <div>
+          <h2 className="set-panel-title">
+            <Save size={18} aria-hidden="true" />
+            Saves
+          </h2>
+          <p className="set-lead">
+            Before a risky play (the first after a game update, the first after your mods change, and the first from the launcher) your saves are
+            copied here, so a save loaded with a broken mod can be put back. The last 8 copies are kept.
+          </p>
+        </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: "1px solid var(--color-border)" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div>Saves folder</div>
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3, wordBreak: "break-all" }}>{info === null ? "Looking..." : info.dir ?? "Not found yet: it appears once the game has saved, or choose it."}</div>
+      <div className="set-switch-row">
+        <div>
+          <h3 className="set-row-name">Saves folder</h3>
+          <p className="set-help set-path">{info === null ? "Looking..." : info.dir ?? "Not found yet: it appears once the game has saved, or choose it."}</p>
         </div>
-        {info?.dir && (
-          <button className="sidebar-button" style={smallButton} onClick={() => act("open", () => window.gamesAPI.openSaves(detail.id))}>
-            Open
-          </button>
-        )}
-        <button className="sidebar-button" style={smallButton} onClick={() => act("choose", () => window.gamesAPI.chooseSaves(detail.id))}>
-          Choose...
-        </button>
-        {info?.dir && (
-          <button
-            className="sidebar-button"
-            data-testid="backup-now"
-            style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
-            onClick={() => act("backup", () => window.gamesAPI.backupSaves(detail.id), "Your saves are backed up.")}
-          >
-            {busy === "backup" ? "Backing up..." : "Back up now"}
-          </button>
-        )}
+        <div className="set-actions">
+          {info?.dir && (
+            <Button size="sm" icon={<FolderOpen size={14} aria-hidden="true" />} onClick={() => act("open", () => window.gamesAPI.openSaves(detail.id))}>
+              Open
+            </Button>
+          )}
+          <Button size="sm" onClick={() => act("choose", () => window.gamesAPI.chooseSaves(detail.id))}>
+            Choose...
+          </Button>
+          {info?.dir && (
+            <Button size="sm" variant="primary" data-testid="backup-now" onClick={() => act("backup", () => window.gamesAPI.backupSaves(detail.id), "Your saves are backed up.")}>
+              {busy === "backup" ? "Backing up..." : "Back up now"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {message && <div style={{ ...note(message.tone), marginTop: 8 }}>{message.text}</div>}
@@ -122,6 +127,6 @@ export default function SavesPanel({ detail }: Props) {
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

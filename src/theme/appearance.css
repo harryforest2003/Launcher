@@ -19,13 +19,26 @@
   flex-wrap: wrap;
 }
 
-.appearance-top .page-section-title {
-  margin: 0 auto 0 0;
+.appearance-top {
+  justify-content: flex-end;
+}
+
+.set-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .appearance-block {
+  container-type: inline-size;
   scroll-margin-top: var(--space-6);
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-3) var(--space-4);
 }
 
 /* Heading and its one-line help side by side, to keep the first screen for the choices. */
@@ -79,25 +92,26 @@
   color: var(--color-success-text);
 }
 
-/* Ready-made colours on the left, the mixer on the right. */
+/* Ready-made colours on the left, a live preview of the current one on the right. */
 .appearance-colour {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 264px;
-  gap: var(--space-6);
-  align-items: start;
-  margin-top: var(--space-4);
+  display: flex;
+  gap: var(--space-5);
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-top: var(--space-3);
 }
 
-@media (max-width: 1100px) {
-  .appearance-colour {
-    grid-template-columns: minmax(0, 1fr);
+@container (max-width: 590px) {
+  .appearance-now {
+    display: none;
   }
 }
 
 .appearance-swatches {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-3);
   min-width: 0;
 }
 
@@ -200,48 +214,107 @@
 
 .swatch-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(106px, 1fr));
-  gap: var(--space-1);
+  grid-template-columns: repeat(auto-fill, 48px);
+  gap: var(--space-2);
 }
 
 .swatch {
-  display: flex;
+  position: relative;
+  width: 48px;
+  height: 48px;
+  box-sizing: border-box;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  min-height: var(--control-md);
-  padding: var(--space-1) var(--space-1-5);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-family: var(--font-ui);
-  font-size: var(--font-size-sm);
-  font-weight: var(--weight-medium);
-  text-align: start;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  /* The colour's own edge, so near-white and near-black swatches show on any theme. */
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+  transition: transform var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .swatch:hover {
-  background: var(--color-hover);
-  color: var(--color-text);
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px var(--color-border-strong), var(--shadow-sm);
 }
 
 .swatch:active {
-  transform: translateY(1px);
+  transform: translateY(0);
 }
 
+.swatch:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus, var(--color-accent-line));
+  outline-offset: 3px;
+}
+
+/* Chosen: a ring in the accent colour, set off from the swatch, and a tick on it. */
 .swatch[aria-pressed="true"] {
-  background: var(--color-accent-subtle);
-  color: var(--color-text);
-  box-shadow: inset var(--rail-width) 0 0 var(--color-accent-line);
+  outline: var(--focus-width) solid var(--color-accent-line);
+  outline-offset: 3px;
 }
 
-.swatch-name {
+.swatch[aria-pressed="true"]:focus-visible {
+  outline-width: 3px;
+}
+
+.appearance-now {
+  width: 132px;
+}
+
+.appearance-now .mini {
+  height: 92px;
+}
+
+.appearance-now .appearance-label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.appearance-mix {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.appearance-mix-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-5);
+}
+
+.recent-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.appearance-label--inline {
+  margin: 0;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+.appearance-mixer {
+  width: 100%;
+  max-width: 264px;
+}
+
+.appearance-mixer[hidden] {
+  display: none;
+}
+
+.appearance-chevron {
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.appearance-chevron--open {
+  transform: rotate(180deg);
 }
 
 .swatch-chip {
@@ -281,14 +354,19 @@
 
 /* ---------------- light or dark ---------------- */
 
+/* Four across when there is room, two by two in a narrow window so the labels never clip. */
+#appearance-base {
+  container-type: inline-size;
+}
+
 .mode-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin-top: var(--space-3);
 }
 
-@media (max-width: 1100px) {
+@container (max-width: 560px) {
   .mode-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -298,7 +376,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-2) var(--space-3);
+  min-width: 0;
+  padding: var(--space-2);
   background: var(--color-surface-sunken);
   border: var(--border-width) solid transparent;
   border-radius: var(--radius-cut);
@@ -312,6 +391,37 @@
     background-color var(--duration-fast) var(--ease-out);
 }
 
+.mode-card .mini {
+  height: 64px;
+}
+
+.mode-card:hover {
+  border-color: var(--color-accent-line);
+}
+
+.mode-card:focus-visible {
+  outline: var(--focus-width, 2px) solid var(--color-focus, var(--color-accent-line));
+  outline-offset: 2px;
+}
+
+.mode-card[aria-checked="true"] {
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent-line);
+  box-shadow: inset 0 0 0 1px var(--color-accent-line);
+}
+
+.mode-note-line {
+  margin-top: var(--space-2);
+}
+
+.mode-label {
+  grid-area: label;
+}
+
+.mode-card .mode-note {
+  grid-area: note;
+}
+
 .mode-card:hover {
   border-color: var(--color-accent-line);
 }
@@ -323,6 +433,8 @@
 }
 
 .mode-label {
+  min-width: 0;
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -426,6 +538,147 @@
   line-height: 1.2;
 }
 
+/* ---------------- colour vision and reading: pick-one cards ---------------- */
+
+/* Four across when there is room, two by two in a narrow pane. */
+#appearance-vision,
+#appearance-reading {
+  container-type: inline-size;
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* A labelled grid (Reading > Font): the label takes the gap from the help above it. */
+.appearance-headrow + .appearance-label {
+  margin-top: var(--space-4);
+}
+
+.appearance-label + .choice-grid {
+  margin-top: 0;
+}
+
+.choice-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+@container (max-width: 560px) {
+  .choice-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .choice-grid--three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.choice-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius-cut);
+  corner-shape: var(--corner-cut);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+
+.choice-card:hover {
+  border-color: var(--color-accent-line);
+}
+
+.choice-card:focus-visible {
+  outline: var(--focus-width, 2px) solid var(--color-focus, var(--color-accent-line));
+  outline-offset: 2px;
+}
+
+.choice-card[aria-checked="true"] {
+  background: var(--color-accent-subtle);
+  border-color: var(--color-accent-line);
+  box-shadow: inset 0 0 0 1px var(--color-accent-line);
+}
+
+.choice-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.choice-note {
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-tight);
+  color: var(--color-text-muted);
+}
+
+/* Each card previews the four status colours it would give, with their icons. */
+.vision-chips {
+  display: flex;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1-5);
+}
+
+.vision-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* The badges as the rest of the launcher draws them, in the colours chosen now. */
+.vision-sample {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.vision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border: var(--border-width) solid;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+}
+
+.vision-badge--success { color: var(--color-success-text); background: var(--color-success-bg); border-color: var(--color-success-border); }
+.vision-badge--warning { color: var(--color-warning-text); background: var(--color-warning-bg); border-color: var(--color-warning-border); }
+.vision-badge--danger { color: var(--color-danger-text); background: var(--color-danger-bg); border-color: var(--color-danger-border); }
+.vision-badge--info { color: var(--color-info-text); background: var(--color-info-bg); border-color: var(--color-info-border); }
+
+/* The font cards show a few letters dyslexic readers often mirror, in that face. */
+.font-sample {
+  font-size: var(--font-size-xl);
+  line-height: var(--leading-tight);
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+#appearance-reading .readability {
+  margin-top: var(--space-4);
+}
+
 /* ---------------- readability ---------------- */
 
 .readability {
@@ -461,21 +714,111 @@
   gap: var(--space-4);
 }
 
-.set-back {
-  margin: 0 0 var(--space-4) calc(-1 * var(--space-3));
+/* The one slim header every settings page opens with: title, a one-line lead that truncates, a quiet status. */
+.set-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+  max-width: var(--content-max);
+  margin: 0 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-border);
 }
 
-.set-header {
+.set-topbar-title {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--color-text);
+}
+
+.set-topbar-lead {
+  order: 3;
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.set-topbar-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.set-topbar-status svg {
+  color: var(--color-success-text);
+}
+
+/* The header of one pane (Appearance, Game accounts, keys, games), above its cards. */
+.set-pane-head {
   display: flex;
-  align-items: flex-end;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  gap: var(--space-2) var(--space-4);
+}
+
+.set-pane-head--end {
+  justify-content: flex-end;
+}
+
+.set-pane-head-text {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.set-pane-heading,
+.set-pane .page-section-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--color-text);
+}
+
+.set-pane-lead,
+.set-pane .page-section > .page-lead {
+  margin: var(--space-1) 0 0;
+  max-width: var(--reading-max);
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-text-muted);
+}
+
+.set-pane .page-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.set-pane .page-section > .page-lead {
+  margin: calc(-1 * var(--space-2)) 0 0;
+}
+
+.set-pane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .set-panel {
   scroll-margin-top: var(--space-6);
-  padding: var(--space-5) var(--space-6) var(--space-6);
+  padding: var(--space-5);
 }
 
 .set-panel:focus {
@@ -570,7 +913,8 @@
   padding-bottom: 0;
 }
 
-@media (max-width: 1000px) {
+/* When the content column is narrow, each setting's label sits above its control. */
+@container setpane (max-width: 640px) {
   .set-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -708,26 +1052,43 @@
 
 .set-scale {
   position: relative;
-  height: var(--space-4);
+  display: flex;
+  justify-content: space-between;
   margin-top: var(--space-1);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
-.set-scale span {
+/* A tick under the slider where the safe range ends, and a caption saying so. */
+.set-scale-tick {
   position: absolute;
-  top: 0;
-  white-space: nowrap;
+  top: calc(-1 * var(--space-1));
+  width: 2px;
+  height: var(--space-2);
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--color-warning-text);
 }
 
-.set-scale .set-scale-safe {
-  transform: translateX(-50%);
-  color: var(--color-warning-text);
+.set-scale-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-0-5) var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-sunken);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
-.set-scale .set-scale-end {
-  right: 0;
+.set-scale-note::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning-text);
 }
 
 /* ---------------- lists: accounts, starter mods, search results ---------------- */
@@ -970,4 +1331,673 @@
 
 .set-results {
   margin-top: var(--space-3);
+}
+
+/* ================================================================ settings layout */
+
+/* Category list on the left, the chosen category's settings on the right. */
+.set-shell {
+  container: setshell / inline-size;
+  max-width: var(--content-max);
+}
+
+.set-grid {
+  display: grid;
+  grid-template-columns: 196px minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.set-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--ui-hairline);
+  border-radius: var(--ui-radius-card);
+  background: var(--ui-card-fill);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
+}
+
+.set-nav-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.set-nav-group {
+  margin: var(--space-3) var(--space-2) var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.set-nav-item:first-child .set-nav-group {
+  margin-top: var(--space-1);
+}
+
+.set-nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--control-md);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-medium);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.set-nav-link svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.set-nav-link:hover {
+  background: var(--color-hover);
+  color: var(--color-text);
+}
+
+.set-nav-link[aria-current="location"] {
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-accent-line);
+}
+
+.set-nav-link[aria-current="location"] svg {
+  color: var(--color-accent-text);
+}
+
+.set-nav-link:focus-visible {
+  outline: var(--focus-width, 2px) solid var(--color-focus, var(--color-accent-line));
+  outline-offset: -2px;
+}
+
+.set-panes {
+  container: setpane / inline-size;
+  min-width: 0;
+}
+
+/* Every category is a section of one scrolling page; the rail jumps between them. */
+.set-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  scroll-margin-top: var(--space-2);
+}
+
+.set-pane + .set-pane {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.set-sec-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  color: var(--color-text);
+}
+
+.set-sec-title svg {
+  flex-shrink: 0;
+  color: var(--color-accent-text);
+}
+
+/* The pane's own title block, above its panels. */
+.set-pane-title {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.set-pane .page-lead {
+  margin-top: calc(-1 * var(--space-2));
+}
+
+/* A short list of switches or facts inside a panel. */
+.set-switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.set-switch-row:first-of-type,
+.set-panel-head + .set-switch-row {
+  border-top: none;
+  padding-top: 0;
+}
+
+.set-switch-row > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.set-path {
+  overflow-wrap: anywhere;
+}
+
+/* A folder row: name and buttons on one line, the path as a one-line value beneath. */
+.set-switch-row.set-path-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.set-path-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.set-path-top > :first-child {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.set-switch-row.set-path-row > :first-child {
+  flex: none;
+}
+
+.set-pathvalue {
+  display: flex;
+  min-width: 0;
+  height: var(--control-md);
+  align-items: center;
+  padding: 0 var(--space-3);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  white-space: pre;
+  cursor: default;
+}
+
+.set-pathvalue:focus-visible {
+  outline: var(--focus-width, 2px) solid var(--color-focus, var(--color-accent-line));
+  outline-offset: 1px;
+}
+
+.set-pathvalue-head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.set-pathvalue-tail {
+  flex: none;
+}
+
+.set-pathvalue--empty {
+  font-family: var(--font-ui);
+  color: var(--color-text-muted);
+}
+
+.set-switch-row.set-fact-row {
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  padding: var(--space-3) 0;
+}
+
+.set-fact-row .set-row-name {
+  margin: 0;
+}
+
+.set-fact-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.set-quick .ui-segmented__option[aria-pressed="true"] {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--edge-highlight), inset 0 calc(-1 * var(--rail-width)) 0 var(--color-accent-line);
+}
+
+.set-quick .ui-segmented {
+  flex-wrap: nowrap;
+}
+
+.set-quick .ui-segmented__option {
+  padding: 0 var(--space-3);
+  white-space: nowrap;
+}
+
+.set-nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Under 700px of settings width the rail keeps its place and shows icons only (names stay for
+   screen readers and as tooltips). It never turns into a scrolling strip. */
+@container setshell (max-width: 700px) {
+  .set-grid {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: var(--space-3);
+  }
+
+  .set-nav {
+    padding: var(--space-1);
+    align-items: center;
+  }
+
+  .set-nav-group {
+    height: 1px;
+    margin: var(--space-1) var(--space-2);
+    padding: 0;
+    overflow: hidden;
+    background: var(--color-border);
+    font-size: 0;
+  }
+
+  .set-nav-item:first-child .set-nav-group {
+    display: none;
+  }
+
+  .set-nav-link {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .set-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+}
+
+.set-header .appearance-saved {
+  white-space: nowrap;
+}
+
+.set-pane > header {
+  margin-bottom: var(--space-2);
+}
+
+/* One card header style for every settings card: icon and title, a one-line lead, actions at the right. */
+.set-panel-head .set-panel-title,
+.set-panel-head h2 {
+  font-size: var(--font-size-lg);
+}
+
+.set-pane > .ui-panel + .ui-panel {
+  margin-top: 0;
+}
+
+.set-shell + * {
+  margin-top: var(--space-6);
+}
+
+.set-quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.set-quick .set-help {
+  margin-right: var(--space-1);
+}
+
+.set-page {
+  padding-top: 0;
+}
+
+.set-page-head {
+  margin-bottom: var(--space-6);
+}
+
+.set-page-head .page-title {
+  margin-top: 0;
+}
+
+.set-switch-row {
+  flex-wrap: wrap;
+}
+
+.set-switch-row > :first-child {
+  flex: 1 1 240px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swatch,
+  .set-nav-link {
+    transition: none;
+  }
+}
+
+.set-quick .ui-button[aria-pressed="true"] {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+}
+
+/* Game accounts rows follow the same row spacing as every other settings row. */
+.set-pane .platform-account-row {
+  padding: var(--space-4) 0;
+  gap: var(--space-3) var(--space-4);
+}
+
+.set-pane .platform-account-row:first-child {
+  padding-top: 0;
+}
+
+.set-pane .platform-account-row:last-child {
+  padding-bottom: 0;
+}
+
+.set-pane .platform-account-row p {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-normal);
+}
+
+.set-pane .platform-account-row h3 {
+  font-weight: var(--weight-semibold);
+}
+
+.set-account-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+.set-pane .platform-account-row > .set-account-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* Narrow settings column: the colour swatches share the row (two rows of eight) instead of wrapping into five. */
+@container (max-width: 420px) {
+  .swatch-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: var(--space-1);
+  }
+
+  .swatch {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+  }
+
+  .recent-group {
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .appearance-headrow .appearance-help {
+    display: none;
+  }
+}
+
+/* Preview tiles: the label sits centred under the miniature; the tile's border shows the choice. */
+.mode-card .mode-radio {
+  display: none;
+}
+
+.mode-card .mode-label {
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-xs);
+}
+
+/* One surface, several sections: a divider and room between them, no boxes inside the box. */
+.set-section--divided {
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: var(--border-width) solid color-mix(in srgb, var(--color-border-strong) 45%, transparent);
+}
+
+/* Contrast and the other pick-one controls here: the chosen option is filled, the rest are plain text. */
+.readability .ui-segmented__option[aria-checked="false"] {
+  color: var(--color-text-muted);
+}
+
+.readability .ui-segmented__option[aria-checked="true"] {
+  background: var(--color-accent);
+  color: var(--color-on-accent, #fff);
+  box-shadow: none;
+}
+
+/* ================================================================ settings: stat strip and stacked panels */
+
+/* A row of read-only facts above a pane's panels. */
+.set-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.set-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--ui-hairline);
+  border-radius: var(--ui-radius-card);
+  background: var(--ui-card-fill);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
+}
+
+.set-stat dt {
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.set-stat dd {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The backed-up instances list in the cloud panel. */
+.set-subhead {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+/* ================================================================ flat settings rows */
+
+/* CurseForge-style rows: name and one line of help on the left, the control right-aligned. */
+.set-flat {
+  display: flex;
+  flex-direction: column;
+}
+
+.set-flat > .set-subhead {
+  margin: var(--space-5) 0 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.set-flat > .set-subhead:first-child {
+  margin-top: 0;
+}
+
+.set-frow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.set-subhead + .set-frow,
+.set-flat > .set-frow:first-child {
+  border-top: none;
+}
+
+.set-frow-text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.set-frow-text .set-row-name {
+  margin: 0;
+}
+
+.set-frow-text .set-help {
+  margin-top: var(--space-0-5);
+}
+
+.set-frow-ctl {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  max-width: 100%;
+}
+
+/* A folder row: the path takes the middle, one line, cut with an ellipsis. */
+.set-frow--path .set-frow-text {
+  flex: 0 0 210px;
+}
+
+.set-frow--path .set-frow-ctl {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.set-frow--path .set-pathvalue {
+  flex: 1 1 0;
+}
+
+/* Saved copies of the saves: one compact line each. */
+.set-backups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.set-backup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+}
+
+.set-backup-when {
+  flex: 0 0 auto;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.set-backup-meta {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Game accounts: icon and name on the left, the Microsoft select or the sign-in button right-aligned. */
+.set-pane .platform-account-row > .ui-account__action,
+.set-pane .platform-account-row > .set-frow-ctl {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-left: auto;
+}
+
+.set-pane .platform-account-row {
+  flex-wrap: nowrap;
+}
+
+.set-pane .platform-account-row > .set-account-main {
+  flex: 1 1 0;
+}
+
+/* A link inside a sentence that acts as a button. */
+.set-textlink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.set-textlink:focus-visible {
+  outline: var(--focus-width, 2px) solid var(--color-focus, var(--color-accent-line));
+  outline-offset: 2px;
+}
+
+/* Each section's heading is the rail item's name, so a panel's own title only stays for screen readers. */
+.set-pane .set-panel-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* Reset sits at the end of the Colour heading row, not on a line of its own. */
+.appearance-headrow .appearance-reset {
+  margin-left: auto;
+  align-self: center;
 }

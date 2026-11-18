@@ -138,6 +138,10 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
   const [open, setOpen] = useState<string | null>(null);
   // The instance whose details are on the right (one click picks it).
   const [current, setCurrent] = useState<string | null>(null);
+  // Whether that instance's details drawer is showing (it floats over the grid, never pushes it).
+  const [drawer, setDrawer] = useState(false);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const drawerOpenedAt = useRef(0);
   // Ticked instances, for the bar at the bottom.
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // The instance whose Play was pressed, until Minecraft has started.
@@ -245,12 +249,33 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
     return () => clearTimeout(timer);
   }, [confirmDeleteOne]);
 
+  const trapTab = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab") return;
+    const panelEl = event.currentTarget;
+    const items = Array.from(panelEl.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')).filter((el) => el.offsetParent !== null);
+    if (items.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || active === panelEl)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   // The right-click menu closes on any click, scroll or Escape; Escape also clears the ticks.
   useEffect(() => {
     const close = () => setMenu(null);
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       setMenu(null);
+      setDrawer(false);
       if (!naming) setPicked(new Set());
     };
     window.addEventListener("click", close);
@@ -291,6 +316,32 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
     return [...instances].sort((a, b) => SORTS.lastPlayed(a, b) || SORTS.name(a, b))[0] ?? null;
   }, [current, instances]);
   const chosenName = chosen?.name ?? null;
+
+  // The details drawer is a modal dialog: focus moves in, the page behind is inert, and on close
+  // focus goes back to the card that was opened (not its "..." button).
+  useEffect(() => {
+    if (!drawer) return;
+    drawerOpenedAt.current = Date.now();
+    const panelEl = panelRef.current;
+    if (!panelEl) return;
+    const cardName = chosenName;
+    const behind: HTMLElement[] = [];
+    Array.from(panelEl.parentElement?.children ?? []).forEach((el) => {
+      if (el !== panelEl && !el.classList.contains("lx-scrim") && el instanceof HTMLElement) behind.push(el);
+    });
+    const side = panelEl.closest("main")?.previousElementSibling;
+    if (side instanceof HTMLElement) behind.push(side);
+    behind.forEach((el) => el.setAttribute("inert", ""));
+    panelEl.focus({ preventScroll: true });
+    return () => {
+      behind.forEach((el) => el.removeAttribute("inert"));
+      if (!cardName) return;
+      const card = Array.from(document.querySelectorAll<HTMLElement>("[data-instance-name]")).find((el) => el.dataset.instanceName === cardName);
+      card?.focus({ preventScroll: true });
+    };
+    // Only the open and close matter here, not which instance is shown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawer]);
 
   // Picking another instance resets the panel (done while rendering, as React suggests).
   const [panelFor, setPanelFor] = useState<string | null>(null);
@@ -596,7 +647,7 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
   const tile = (instance: Instance) => {
     const on = picked.has(instance.name);
     const isStarting = starting === instance.name;
-    const isCurrent = chosenName === instance.name;
+    const isCurrent = drawer && chosenName === instance.name;
     const stat = played[instance.name];
     const busyWith = progress[instance.name];
     const loaderText = `${loaderName(instance)}${loaderOf(instance) !== "vanilla" && instance.loaderVersion ? ` ${instance.loaderVersion}` : ""}`;
@@ -623,14 +674,19 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
         key={instance.name}
         className={`lx-tile${on ? " ticked" : ""}${instance.running ? " running" : ""}`}
         data-testid="instance-card"
+        data-instance-name={instance.name}
         role="button"
         tabIndex={0}
         aria-current={isCurrent || undefined}
-        aria-label={selecting ? `${on ? "Untick" : "Tick"} ${instance.name}` : `${instance.name}, Minecraft ${instance.version}, ${loaderText}. Press Enter to open`}
-        data-tip={selecting ? undefined : "Click to see it on the right, double-click to open"}
+        aria-label={selecting ? `${on ? "Untick" : "Tick"} ${instance.name}` : `${instance.name}, Minecraft ${instance.version}, ${loaderText}. Press Enter for details, double-click to open`}
+        data-tip={selecting ? undefined : "Click for details, double-click to open"}
         onClick={(event) => {
           if (selecting || event.metaKey || event.ctrlKey || event.shiftKey) toggle(instance.name);
-          else setCurrent(instance.name);
+          else if (event.detail > 1) setOpen(instance.name);
+          else {
+            setCurrent(instance.name);
+            setDrawer(true);
+          }
         }}
         onDoubleClick={(event) => {
           if (selecting || event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -649,10 +705,13 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
           if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
           event.preventDefault();
           if (selecting) toggle(instance.name);
-          else setOpen(instance.name);
+          else {
+            setCurrent(instance.name);
+            setDrawer(true);
+          }
         }}
       >
-        <InstanceArt name={instance.name} />
+        <InstanceArt name={instance.name} cols={view === "grid" ? 14 : 6} rows={view === "grid" ? 6 : 6} />
         <button
           type="button"
           className={`lx-tick${on ? " on" : ""}`}
@@ -725,12 +784,23 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
   };
 
   // The right-hand panel: everything about the chosen instance, Play first, Delete last.
-  const panel = chosen ? (
-    <aside className="lx-panel" aria-label={`${chosen.name} details`} data-testid="library-panel">
+  const panel = !drawer ? null : chosen ? (
+    <aside
+      ref={panelRef}
+      className="lx-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lx-panel-title"
+      tabIndex={-1}
+      data-testid="library-panel"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={trapTab}
+    >
+      <Button variant="ghost" size="sm" className="lx-panel-close" aria-label="Close details" data-tip="Close" icon={<X size={16} aria-hidden="true" />} onClick={() => setDrawer(false)} />
       <InstanceArt name={chosen.name} cols={14} rows={6} />
       <div className="lx-panel-inner">
         <div>
-          <h2 className="lx-panel-title">{chosen.name}</h2>
+          <h2 id="lx-panel-title" className="lx-panel-title">{chosen.name}</h2>
           <p className="lx-panel-sub">
             Minecraft {chosen.version}, {loaderName(chosen)}
             {loaderOf(chosen) !== "vanilla" && chosen.loaderVersion ? ` ${chosen.loaderVersion}` : ""}
@@ -921,7 +991,11 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
                   placeholder="Group name"
                   aria-label="New group's name"
                   onChange={(e) => setPanelGroupName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Escape" && setPanelForm(null)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Escape") return;
+                    e.nativeEvent.stopPropagation();
+                    setPanelForm(null);
+                  }}
                 />
                 <Button type="submit" disabled={!panelGroupName.trim()}>
                   Make group
@@ -944,7 +1018,8 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
       </div>
     </aside>
   ) : (
-    <aside className="lx-panel" aria-label="Instance details">
+    <aside ref={panelRef} className="lx-panel" role="dialog" aria-modal="true" aria-label="Instance details" tabIndex={-1} onKeyDown={trapTab}>
+      <Button variant="ghost" size="sm" className="lx-panel-close" aria-label="Close details" icon={<X size={16} aria-hidden="true" />} onClick={() => setDrawer(false)} />
       <p className="lx-panel-empty">{loaded ? "Your instances show up here once you make or import one." : "Loading..."}</p>
     </aside>
   );
@@ -1216,6 +1291,17 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
               )}
             </div>
 
+            {panel && <div
+                className="lx-scrim"
+                onClick={(event) => {
+                  // The second click of a double-click lands here, because the first one opened the drawer.
+                  if (event.detail > 1 && Date.now() - drawerOpenedAt.current < 700 && chosenName) {
+                    setDrawer(false);
+                    setOpen(chosenName);
+                  } else setDrawer(false);
+                }}
+                aria-hidden="true"
+              />}
             {panel}
           </div>
         )}
@@ -1253,6 +1339,16 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
             }}
           >
             <Box size={15} aria-hidden="true" /> Open
+          </button>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setMenu(null);
+              setCurrent(menu.name);
+              setDrawer(true);
+            }}
+          >
+            <SlidersHorizontal size={15} aria-hidden="true" /> Details
           </button>
           <button
             role="menuitem"

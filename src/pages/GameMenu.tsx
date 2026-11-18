@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import {
   CircleAlert,
+  CircleCheck,
+  Clock,
+  Info,
+  Play,
+  Plus,
   TriangleAlert,
-  ArrowUpRight,
 } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
 import LauncherSidebar from "../components/LauncherSidebar";
@@ -11,11 +15,11 @@ import { formatHours } from "../components/charts";
 import ActivityPanel from "./dashboard/ActivityPanel";
 import DealsPanel from "./dashboard/DealsPanel";
 import NewsPanel from "./dashboard/NewsPanel";
-import { MINECRAFT_ART } from "./dashboard/PlayHero";
 import PlayStats from "./dashboard/PlayStats";
 import { defaultRange, type Range } from "./dashboard/range";
 import { useDashboard } from "./dashboard/useDashboard";
 import { useInstances } from "./dashboard/useInstances";
+import { ART } from "./gameArt";
 import { initials, timeAgo } from "./playedAgo";
 import { useScrollMemory } from "./useScrollMemory";
 import "./dashboard/dashboard.css";
@@ -28,26 +32,7 @@ type Props = {
   onSettings: () => void;
 };
 
-/* Each game's own picture: its Steam library art, and Minecraft's from the Minecraft Launcher's
-   release notes. Greyed for games that aren't on this computer; offline, initials stand in. */
-const steamArt = (appId: string) =>
-  `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/capsule_231x87.jpg`;
-const ART: Record<string, string> = {
-  minecraft: MINECRAFT_ART,
-  sims4: steamArt("1222670"),
-  gtav: steamArt("271590"),
-  skyrimse: steamArt("489830"),
-  fallout4: steamArt("377160"),
-  cyberpunk2077: steamArt("1091500"),
-  stardew: steamArt("413150"),
-  terraria: steamArt("105600"),
-  palworld: steamArt("1623730"),
-  valheim: steamArt("892970"),
-  bg3: steamArt("1086940"),
-  rimworld: steamArt("294100"),
-};
-
-type Chip = { label: string; tone: Tone };
+type Chip = { label: string; tone: Tone; icon?: "clock" };
 
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`;
@@ -165,12 +150,11 @@ function Chips({
     <span className="db-game__chips" data-testid={testId}>
       {chips.map((chip) => (
         <Badge key={chip.label} tone={chip.tone} data-tip={chip.tip}>
-          {chip.tone === "danger" && (
-            <CircleAlert size={12} aria-hidden="true" />
-          )}
-          {chip.tone === "warning" && (
-            <TriangleAlert size={12} aria-hidden="true" />
-          )}
+          {chip.tone === "danger" && <CircleAlert size={12} aria-hidden="true" />}
+          {chip.tone === "warning" && <TriangleAlert size={12} aria-hidden="true" />}
+          {chip.tone === "success" && <CircleCheck size={12} aria-hidden="true" />}
+          {chip.tone === "accent" && <Play size={12} aria-hidden="true" />}
+          {chip.tone === "neutral" && (chip.icon === "clock" ? <Clock size={12} aria-hidden="true" /> : <Info size={12} aria-hidden="true" />)}
           {chip.label}
         </Badge>
       ))}
@@ -181,7 +165,7 @@ function Chips({
 // Keep navigation context for this launcher session, without saving searches to disk.
 const homeContext: {
   query: string;
-  filter: "all" | "installed" | "attention";
+  filter: "all" | "attention";
   view: "activity" | "news";
 } = { query: "", filter: "all", view: "activity" };
 
@@ -193,6 +177,8 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
     Object.assign(homeContext, { query, filter, view });
   }, [query, filter, view]);
   const [detected, setDetected] = useState<DetectedGame[]>([]);
+  // Every supported game, so Home can say how many more are in More Games.
+  const [catalog, setCatalog] = useState<CatalogGame[]>([]);
   const [games, setGames] = useState<GameSummary[]>([]);
   const [listed, setListed] = useState(false);
   const [detectedLoaded, setDetectedLoaded] = useState(false);
@@ -220,6 +206,9 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
       .then((items) => { if (active) setDetected(items); })
       .catch(() => { if (active) setScanFailed(true); })
       .finally(() => { if (active) setDetectedLoaded(true); });
+    Promise.resolve().then(() => window.modAPI.catalog())
+      .then((items) => { if (active) setCatalog(items); })
+      .catch(() => { /* Home still works; the More games card just has no count. */ });
     Promise.resolve().then(() => window.gamesAPI.list())
       .then(async (found) => {
         if (!active) return;
@@ -251,15 +240,27 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
   };
 
   const extraGames = listed ? detected.filter((game) => !game.managedByInstances && !games.some(({ id }) => id === game.id)) : [];
+  // Home only shows games on this computer; the rest wait in More Games.
   const found = games.filter((g) => g.found);
-  const missing = games.filter((g) => !g.found);
+  const onComputer = (id: string) => detected.some((d) => d.id === id) || games.some((g) => g.id === id && g.found);
+  const notHere = [
+    ...games.filter((g) => !g.found).map(({ id }) => id as string),
+    ...catalog.filter((g) => !onComputer(g.id) && !games.some((s) => s.id === g.id)).map(({ id }) => id),
+  ];
+  // A few covers of games that aren't here, for the More games card.
+  const FEATURED = ["rdr2", "eldenring", "witcher3", "hogwartslegacy", "gtav", "starfield", "bg3", "palworld"];
+  const covers = [...FEATURED.filter((id) => notHere.includes(id)), ...notHere.filter((id) => !FEATURED.includes(id))]
+    .filter((id) => ART[id])
+    .slice(0, 4);
+  const nameOf = (id: string) => catalog.find((g) => g.id === id)?.name ?? games.find((g) => g.id === id)?.name ?? id;
+  const previewNames = ["hytale", ...FEATURED, ...notHere].filter((id, i, all) => notHere.includes(id) && all.indexOf(id) === i).slice(0, 2).map(nameOf);
   const chips = (game: GameSummary) => chipsFor(game, statuses[game.id]);
   const attention = found.filter((g) => needsLook(chips(g))).map((g) => g.name);
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
-  const visibleGames = [...found, ...missing].filter((game) =>
-    matches(game.name) && (filter === "all" || (filter === "installed" ? game.found : needsLook(chips(game)))));
+  const visibleGames = found.filter((game) => matches(game.name) && (filter === "all" || needsLook(chips(game))));
   const visibleExtra = extraGames.filter((game) => matches(game.name) && filter !== "attention");
-  const showMinecraft = matches("Minecraft") && filter !== "attention" && (filter === "all" || instances.length > 0);
+  const showMinecraft = matches("Minecraft") && filter !== "attention";
+  const showMore = filter === "all" && !query.trim();
   const visibleCount = visibleGames.length + visibleExtra.length + Number(showMinecraft);
   const isMac = navigator.platform.includes("Mac");
 
@@ -270,12 +271,14 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
     const looking = all.filter(
       (c) => c.tone === "danger" || c.tone === "warning",
     );
-    const shown = game.found ? summarise(all) : all;
+    // "All good" would read oddly next to "Can't run on this Mac".
+    const shown = (game.found ? summarise(all) : all).filter((c) => !(game.cantRun && c.tone === "success"));
+    const checked = !game.found || statuses[game.id] || looking.length > 0;
     const meta = game.found
-      ? `${plural(game.modCount, "enabled mod", "enabled mods")}`
+      ? plural(game.modCount, "enabled mod", "enabled mods")
       : game.windowsOnly && isMac
         ? "Windows game: CrossOver or Whisky"
-        : "Choose its folder";
+        : "Choose its folder to set it up";
     return (
       <li key={game.id}>
         <button
@@ -283,22 +286,22 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
           className={`db-game${game.found ? "" : " db-game--missing"}`}
           data-testid="home-game"
           onClick={() => onGame(game.id)}
-          aria-label={`${game.name}. ${game.found ? all.map((c) => c.label).join(", ") : "Not found on this computer"}. ${meta}.`}
+          aria-label={`${game.name}. ${game.found ? all.map((c) => c.label).join(", ") : "Not found on this computer"}. ${meta}.${game.cantRun ? ` ${game.cantRun}` : ""}`}
           style={{ "--game-colour": game.colour } as React.CSSProperties}
         >
           <GameArt id={game.id} name={game.name} />
           <span className="db-game__text">
             <span className="db-game__name">{game.name}</span>
-            <span className="db-game__meta">{meta}</span>
-            {/* What needs a look gets a line of its own. */}
-            {looking.length > 0 && (
-              <Chips chips={shown} testId="home-game-status" />
-            )}
-            {game.lastPlayed && <span className="db-game__meta">Launched {timeAgo(game.lastPlayed)}</span>}
-          </span>
-          <span className="db-game__footer">
-            <span>{game.found ? "Open game" : "Set up game"}</span>
-            <ArrowUpRight size={15} aria-hidden="true" />
+            <span className="db-game__meta">
+              {meta}
+              {game.lastPlayed && ` · played ${timeAgo(game.lastPlayed)}`}
+            </span>
+            <span className="db-game__status" data-testid="home-game-status">
+              {checked ? <Chips chips={shown} /> : (
+                <span className="db-game__quiet">{checkingStatus ? "Checking mods…" : "Not checked"}</span>
+              )}
+              {game.cantRun && <Chips chips={[{ label: "Can't run on this Mac", tone: "neutral", tip: game.cantRun }]} />}
+            </span>
           </span>
         </button>
       </li>
@@ -323,44 +326,28 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
           <header className="db-header">
             <div>
               <h1 className="db-header__title">Launcher home</h1>
-              <p className="db-header__lead">Choose a game to open its workspace.</p>
+              <p className="db-header__lead">
+                Choose a game to open its workspace.
+                <span className="db-header__count" aria-live="polite">
+                  {listed && detectedLoaded
+                    ? ` ${plural(found.length + extraGames.length + 1, "game", "games")} on this computer${notHere.length ? `, ${notHere.length} more in More Games` : ""}.`
+                    : " Looking..."}
+                </span>
+              </p>
+            </div>
+            <div className="db-library-tools">
+              <SearchField wrapperClassName="db-game-search" label="Search games" placeholder="Search your games…" value={query} onChange={(event) => setQuery(event.target.value)} />
+              <Segmented label="Games to show" value={filter} onChange={setFilter} options={[
+                { value: "all", label: "All games" },
+                { value: "attention", label: "Needs attention" },
+              ]} />
             </div>
           </header>
 
           <div className="db-col">
-              <section
-                className="db-card db-games"
-                aria-labelledby="db-games-title"
-              >
-                <header className="db-card__head">
-                  <h2 className="db-card__title" id="db-games-title">
-                    Your games
-                  </h2>
-                  <span className="db-card__meta" aria-live="polite">
-                    {listed && detectedLoaded
-                      ? `${games.length + extraGames.length + 1} supported games`
-                      : "Looking..."}
-                  </span>
-                </header>
-                {(scanFailed || statusFailed || instanceLoadError) && <Notice tone="warning" actions={<Button size="sm" variant="ghost" onClick={retryScan}>Retry</Button>}>
-                  {instanceLoadError ?? (scanFailed ? "Some games could not be loaded." : "Some game checks could not be completed.")}
-                </Notice>}
-                {attention.length > 0 && (
-                  <p className="db-games__alert">
-                    <CircleAlert size={14} aria-hidden="true" />
-                    {listNames(attention)}{" "}
-                    {attention.length === 1 ? "needs" : "need"} a look.
-                  </p>
-                )}
-                <div className="db-library-tools">
-                  <SearchField wrapperClassName="db-game-search" label="Search games" placeholder="Search your games…" value={query} onChange={(event) => setQuery(event.target.value)} />
-                  <Segmented label="Games to show" value={filter} onChange={setFilter} options={[
-                    { value: "all", label: "All games" },
-                    { value: "installed", label: "On this computer" },
-                    { value: "attention", label: "Needs attention" },
-                  ]} />
-                </div>
-                {visibleCount === 0 && <p className="db-empty" role="status">{!listed || !detectedLoaded || !instancesLoaded || (filter === "attention" && checkingStatus) ? "Checking your games…" : scanFailed || (filter === "attention" && statusFailed) ? "Results are incomplete. Retry the checks above." : filter === "attention" && !query.trim() ? "No checked games need attention." : "No games match these filters."}</p>}
+              <section className="db-games" aria-labelledby="db-games-title">
+                <h2 className="db-card__title db-sr" id="db-games-title">Your games</h2>
+                {visibleCount === 0 && !showMore && <p className="db-empty" role="status">{!listed || !detectedLoaded || !instancesLoaded || (filter === "attention" && checkingStatus) ? "Checking your games…" : scanFailed || (filter === "attention" && statusFailed) ? "Results are incomplete. Retry the checks below." : filter === "attention" && !query.trim() ? "No checked games need attention." : "No games match these filters."}</p>}
                 {(query || filter !== "all") && (
                   <div className="db-filter-summary">
                     <span>{query.trim() ? `Searching for “${query.trim()}”` : "Filtered games"}</span>
@@ -388,18 +375,14 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                             ? `${latest.name}, ${timeAgo(latest.lastPlayed)}`
                             : instanceLoadError ? "Library check unavailable" : `${plural(instances.length, "instance", "instances")}`}
                         </span>
-                        {stats.data?.totals.playSeconds != null && (
-                          <span className="db-game__meta">
-                            {formatHours(stats.data.totals.playSeconds)} played
-                          </span>
-                        )}
+                        <span className="db-game__status">
+                          {running ? <Chips chips={[{ label: "Playing now", tone: "accent" }]} /> : stats.data?.totals.playSeconds ? (
+                            <Chips chips={[{ label: `${formatHours(stats.data.totals.playSeconds)} played`, tone: "neutral", icon: "clock" }]} />
+                          ) : (
+                            <span className="db-game__quiet">{stats.loading ? "Checking play time…" : "No play time yet"}</span>
+                          )}
+                        </span>
                       </span>
-                      <span className="db-game__footer"><span>Open Minecraft</span><ArrowUpRight size={15} aria-hidden="true" /></span>
-                      {running && (
-                        <Chips
-                          chips={[{ label: "Playing now", tone: "accent" }]}
-                        />
-                      )}
                     </button>
                   </li>}
                   {visibleGames.map(gameRow)}
@@ -409,14 +392,42 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                         <GameArt id={game.id} name={game.name} />
                         <span className="db-game__text">
                           <span className="db-game__name">{game.name}</span>
-                          <span className="db-game__meta">Installed · Mod management</span>
+                          <span className="db-game__meta">Mod management</span>
+                          <span className="db-game__status"><Chips chips={[{ label: "Installed", tone: "neutral" }]} /></span>
                         </span>
-                        <span className="db-game__footer"><span>Open game</span><ArrowUpRight size={15} aria-hidden="true" /></span>
                       </button>
                     </li>
                   ))}
+                  {showMore && (
+                    <li>
+                      <button type="button" className="db-game db-more" data-testid="home-more-games" onClick={onModManager}>
+                        <span className="db-game__art db-more__art" aria-hidden="true">
+                          {covers.map((id) => <img key={id} src={ART[id]} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" draggable={false} />)}
+                          <span className="db-more__plus"><Plus size={22} /></span>
+                        </span>
+                        <span className="db-game__text">
+                          <span className="db-game__name">More games</span>
+                          <span className="db-game__meta">
+                            {notHere.length ? `${plural(notHere.length, "supported game", "supported games")} not on this computer` : "Every supported game, found or not"}
+                          </span>
+                          <span className="db-game__status"><span className="db-game__quiet">{previewNames.length ? `${previewNames.join(", ")} and more` : "Browse and rescan"}</span></span>
+                        </span>
+                      </button>
+                    </li>
+                  )}
                 </ul>
               </section>
+
+              {(scanFailed || statusFailed || instanceLoadError) && <Notice tone="warning" actions={<Button size="sm" variant="ghost" onClick={retryScan}>Retry</Button>}>
+                {instanceLoadError ?? (scanFailed ? "Some games could not be loaded." : "Some game checks could not be completed.")}
+              </Notice>}
+              {attention.length > 0 && (
+                <p className="db-games__alert">
+                  <CircleAlert size={14} aria-hidden="true" />
+                  {listNames(attention)}{" "}
+                  {attention.length === 1 ? "needs" : "need"} a look.
+                </p>
+              )}
 
               <Tabs label="Launcher dashboard" value={view} onChange={setView} idBase="home-dashboard" tabs={[
                 { value: "activity", label: "Your activity" },

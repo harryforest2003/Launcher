@@ -1,8 +1,9 @@
 const { BrowserWindow, dialog, ipcMain, shell } = require("electron");
-const { assertGranted, grantPaths, openExternalSafely } = require("../security.cjs");
+const { assertGranted, grantPaths, openExternalChecked, openExternalSafely } = require("../security.cjs");
 const { GAMES, getGame } = require("./registry.cjs");
 const { readSettings, writeSettings } = require("./storage.cjs");
 const detect = require("./detect.cjs");
+const mac = require("./mac.cjs");
 const gameAccount = require("./account.cjs");
 const store = require("./store.cjs");
 const protect = require("./protect.cjs");
@@ -62,7 +63,7 @@ function summary(game) {
         id: game.id,
         lastPlayed: played?.at ? new Date(played.at).toISOString() : null,
         name: game.name,
-        tagline: game.tagline,
+        tagline: game.taglines?.[process.platform] ?? game.tagline,
         colour: game.colour,
         found: loc.found,
         gameDir: loc.gameDir,
@@ -70,6 +71,7 @@ function summary(game) {
         source: loc.source,
         chosen: loc.chosen,
         windowsOnly: Boolean(game.windowsOnly),
+        cantRun: loc.found ? mac.runProblem(game, loc) : null,
         nexus: game.nexus ?? null,
         curseforge: game.curseforge ?? null,
         modCount: mods,
@@ -420,34 +422,34 @@ function registerGamesIpc() {
             if (!_e.sender.isDestroyed()) _e.sender.send("games:launchProgress", { gameId: game.id, stage });
         };
         try {
-        progress("checking");
-        const loc = detect.locate(id);
-        const played = protect.lastPlayed(id);
-        const changedAt = Date.parse(store.readState(id).changedAt ?? "") || 0;
-        const reason = !played?.at
-            ? "Before the first play from the launcher"
-            : protect.updatedSince(game, loc)
-              ? "Before the first play after a game update"
-              : changedAt > played.at
-                ? "Before playing with changed mods"
-                : null;
-        let backedUp = null;
-        let backupError = null;
-        if (reason && !finder.read(id)) {
-            progress("backup");
-            try {
-                backedUp = await saves.backup(game, loc, reason);
-            } catch (err) {
-                backupError = err.message;
+            progress("checking");
+            const loc = detect.locate(id);
+            const played = protect.lastPlayed(id);
+            const changedAt = Date.parse(store.readState(id).changedAt ?? "") || 0;
+            const reason = !played?.at
+                ? "Before the first play from the launcher"
+                : protect.updatedSince(game, loc)
+                  ? "Before the first play after a game update"
+                  : changedAt > played.at
+                    ? "Before playing with changed mods"
+                    : null;
+            let backedUp = null;
+            let backupError = null;
+            if (reason && !finder.read(id)) {
+                progress("backup");
+                try {
+                    backedUp = await saves.backup(game, loc, reason);
+                } catch (err) {
+                    backupError = err.message;
+                }
             }
-        }
-        progress("starting");
-        const started = await launch(game, loc, { safe: options?.safe === true, open: async (url) => {
-            // Only Steam's "start this game" link (steam://rungameid/<number>).
-            if (!/^steam:\/\/rungameid\/\d+$/.test(String(url))) throw new Error("Invalid Steam game link.");
-            await shell.openExternal(url);
-        } });
-        return { ...started, backedUp, backupError };
+            progress("starting");
+            const started = await launch(game, loc, { safe: options?.safe === true, open: async (url) => {
+                // Only Steam's "start this game" link (steam://rungameid/<number>).
+                if (!/^steam:\/\/rungameid\/\d+$/.test(String(url))) throw new Error("Invalid Steam game link.");
+                await openExternalChecked(url, { steam: true });
+            } });
+            return { ...started, backedUp, backupError };
         } finally {
             pendingLaunches.delete(game.id);
         }
@@ -762,7 +764,7 @@ function registerGamesIpc() {
     ipcMain.handle("games:account", (_e, id) => gameAccount.storeAccount(need(id).id));
     // Fixed destinations only; never accept a renderer-supplied URL or command.
     ipcMain.handle("games:openAccount", async (_e, provider) => {
-        await shell.openExternal(gameAccount.accountTarget(provider));
+        await openExternalChecked(gameAccount.accountTarget(provider), { steam: provider === "steam" });
     });
 
     ipcMain.handle("games:nexusAccount", async () => {

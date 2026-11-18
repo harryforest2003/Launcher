@@ -265,30 +265,48 @@ function limitEveryPage() {
 /* ---------------- links to the outside ---------------- */
 
 const WEB_PROTOCOLS = ["https:", "http:", "mailto:"];
+// Steam's own links the launcher opens: start a game, and Steam's main window.
+const STEAM_LINKS = [/^steam:\/\/rungameid\/\d+$/, /^steam:\/\/open\/main$/];
 
 /*
- * The one place a link leaves the app for the system: an ordinary web or mail link
- * (or, for starting a game, Steam's own steam://rungameid/<id>), parsed, with no user
- * name or password in it. Anything else (file:, javascript:, smb:, another app's
- * scheme) is refused. -> whether it was opened.
+ * What may leave the app for the system: an ordinary web or mail link (or, with steam,
+ * Steam's own steam://rungameid/<id> or steam://open/main), parsed, with no user name or password in it.
+ * Anything else (file:, javascript:, smb:, another app's scheme) is refused. -> the link
+ * to open, or null.
  */
-function openExternalSafely(target, { steam = false } = {}) {
+function externalLink(target, { steam = false } = {}) {
     let url;
     try {
         url = new URL(String(target));
     } catch {
-        return false;
+        return null;
     }
 
-    const isSteamGame = steam && url.protocol === "steam:" && /^steam:\/\/rungameid\/\d+$/.test(url.href);
-    if (!WEB_PROTOCOLS.includes(url.protocol) && !isSteamGame) return false;
-    if (url.username || url.password) return false;
-    if ((url.protocol === "https:" || url.protocol === "http:") && !url.hostname) return false;
+    const isSteamLink = steam && url.protocol === "steam:" && STEAM_LINKS.some((link) => link.test(url.href));
+    if (!WEB_PROTOCOLS.includes(url.protocol) && !isSteamLink) return null;
+    if (url.username || url.password) return null;
+    if ((url.protocol === "https:" || url.protocol === "http:") && !url.hostname) return null;
+    return url.href;
+}
 
+/*
+ * The one place a link leaves the app, and waits for the system to take it: rejects when
+ * the link is refused or nothing opens it (so Play can say Steam didn't start).
+ */
+async function openExternalChecked(target, options) {
+    const href = externalLink(target, options);
+    if (!href) throw new Error("Refusing to open that link.");
     // The app's only call that opens anything outside it, reached only after the checks
     // above. Electronegativity reports it (it reports every openExternal whose argument
     // isn't a fixed string); security.md lists it as the one reviewed finding.
-    shell.openExternal(url.href).catch((err) => console.warn("Couldn't open a link:", err.message));
+    await shell.openExternal(href);
+}
+
+/* Opens a link without waiting. -> whether it was allowed. */
+function openExternalSafely(target, options) {
+    const href = externalLink(target, options);
+    if (!href) return false;
+    openExternalChecked(href, options).catch((err) => console.warn("Couldn't open a link:", err.message));
     return true;
 }
 
@@ -400,6 +418,7 @@ module.exports = {
     protectApp,
     protectBlockbenchSession,
     openExternalSafely,
+    openExternalChecked,
     trustedSender,
     grantPaths,
     isGranted,

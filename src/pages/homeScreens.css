@@ -263,35 +263,128 @@
   max-width: var(--content-max);
 }
 
+.mg-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.mg-head__lead {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.mg-foot {
+  margin: var(--space-6) 0 0;
+  max-width: var(--reading-max);
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-normal);
+  color: var(--color-text-muted);
+}
+.mg-foot__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.mg-foot__link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+.mg-skel { display: flex; flex-direction: column; gap: var(--space-2); }
+.mg-skel__art { display: block; width: 100%; aspect-ratio: 2 / 3; border-radius: var(--radius-lg); }
+.mg-empty__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
 .mg-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, 170px);
+  justify-content: start;
+  gap: var(--space-5) var(--space-4);
   max-width: var(--content-max);
 }
 
 .mg-game {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: 0;
   min-width: 0;
   margin: 0;
-  padding: var(--space-4) var(--space-5);
+  padding: 0;
+  overflow: hidden;
   border: 0;
   font: inherit;
   text-align: start;
   color: var(--color-text);
-  background: var(--color-surface);
-  border-radius: var(--radius-cut-lg);
-  corner-shape: var(--corner-cut);
-  box-shadow: var(--edge-highlight);
+  background: transparent;
+  border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: background-color var(--duration-fast) var(--ease-out);
+  transition: transform var(--duration-fast) var(--ease-out);
 }
 
 .mg-game:hover {
-  background: var(--color-surface-raised);
-  box-shadow: var(--edge-highlight), inset var(--rail-width) 0 0 var(--color-accent-line);
+  transform: translateY(-2px);
+}
+
+.mg-game:hover .mg-game__art {
+  box-shadow: var(--edge-highlight), var(--shadow-lg, var(--shadow-md));
+}
+
+.mg-game:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+.mg-game__art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+  background: linear-gradient(135deg, var(--color-accent-subtle), var(--color-surface-sunken));
+}
+
+.mg-game__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--duration-slow, 300ms) var(--ease-out);
+}
+
+.mg-game:hover .mg-game__art img {
+  transform: scale(1.04);
+}
+
+.mg-game__mark {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+}
+
+.mg-game__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1) 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mg-game, .mg-game__art img { transition: none; }
+  .mg-game:hover, .mg-game:hover .mg-game__art img { transform: none; }
 }
 
 .mg-game__head {
@@ -306,7 +399,7 @@
 }
 
 .mg-game__source {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
 }
 
@@ -314,8 +407,9 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  overflow-wrap: anywhere;
-  user-select: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mg-tags {
@@ -825,10 +919,16 @@
 /* Signed out: the same slot holds the way to sign in. */
 .mh-signin--card {
   flex-direction: column;
+  flex-wrap: nowrap;
   align-items: flex-start;
   justify-content: center;
   height: 100%;
   border-radius: var(--radius-lg);
+}
+
+/* In a column the text's 320px basis would become its height and push the button down. */
+.mh-signin--card .mh-signin__text {
+  flex: 0 0 auto;
 }
 
 .mh-offers__links {
@@ -836,7 +936,6 @@
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
   gap: var(--space-3);
 }
-.mh-offers__link { text-decoration: none; }
 .mh-offers__copy { min-width: 0; flex: 1; }
 .mh-offers__link > svg { flex-shrink: 0; color: var(--color-text-muted); }
 .mh-offers__link:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
@@ -846,3 +945,331 @@
   line-height: var(--leading-relaxed);
 }
 .mh-offers__note { margin: var(--space-3) 0 0; max-width: var(--reading-max); }
+
+/* ---- Minecraft home: the last-played card as the big, art-led launch panel ---- */
+.mh-page .db-hero {
+  min-height: 320px;
+  background:
+    linear-gradient(90deg, var(--color-surface) 0%, color-mix(in oklab, var(--color-surface) 70%, transparent) 38%, transparent 70%),
+    var(--color-surface);
+}
+
+.mh-page .db-hero__art {
+  inset: 0;
+  width: 100%;
+}
+
+.mh-page .db-hero__art img {
+  mask-image: linear-gradient(to right, transparent 12%, var(--color-text) 62%);
+}
+
+.mh-page .db-hero__body {
+  justify-content: flex-end;
+  gap: var(--space-3);
+  max-width: 62%;
+  padding: var(--space-8) var(--space-8) var(--space-6);
+}
+
+.mh-page .db-hero__name {
+  font-size: var(--font-size-3xl);
+  letter-spacing: -0.01em;
+}
+
+.mh-page .db-hero__actions {
+  margin-top: var(--space-3);
+}
+
+.mh-page .db-play {
+  min-width: 240px;
+  min-height: 56px;
+  padding-inline: var(--space-8);
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  box-shadow: var(--shadow-md), 0 0 28px color-mix(in oklab, var(--color-accent) 40%, transparent);
+}
+
+@container mh (max-width: 700px) {
+  .mh-page .db-hero { min-height: 280px; }
+  .mh-page .db-hero__body { max-width: none; padding: var(--space-6); }
+  .mh-page .db-hero__art { opacity: 0.75; }
+  .mh-page .db-play { min-width: 0; width: 100%; }
+}
+
+/* ---- Minecraft home: full-bleed art banner hero ---- */
+.mh-page .db-hero--banner {
+  min-height: clamp(300px, 44vh, 400px);
+  justify-content: flex-end;
+  background: var(--color-surface-sunken);
+}
+
+.mh-page .db-hero--banner .db-hero__art {
+  inset: 0;
+  width: auto;
+}
+
+.mh-page .db-hero--banner .db-hero__art img {
+  mask-image: none;
+  object-position: center 35%;
+  transform: scale(1.02);
+  filter: saturate(1.2) brightness(1.15);
+}
+
+.mh-page .db-hero--banner .db-hero__actions {
+  align-self: flex-start;
+}
+
+/* The scrim: clear at the top so the picture reads, solid behind the words. */
+.mh-page .db-hero--banner .db-hero__art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to top, color-mix(in oklab, var(--color-surface-sunken) 96%, transparent) 0%, color-mix(in oklab, var(--color-surface-sunken) 82%, transparent) 30%, color-mix(in oklab, var(--color-surface-sunken) 40%, transparent) 55%, transparent 78%),
+    linear-gradient(to right, color-mix(in oklab, var(--color-surface-sunken) 55%, transparent), transparent 65%);
+}
+
+.mh-page .db-hero--banner .db-hero__body {
+  flex: 0 0 auto;
+  max-width: none;
+  justify-content: flex-end;
+  padding: var(--space-8) var(--space-6) var(--space-6);
+}
+
+.mh-page .db-hero--banner .db-hero__name {
+  font-size: var(--font-size-3xl, var(--font-size-2xl));
+  text-shadow: 0 2px 12px color-mix(in oklab, black 55%, transparent);
+}
+
+.mh-page .db-hero--banner .db-hero__when {
+  color: var(--color-text);
+  opacity: 0.85;
+}
+
+.mh-page .db-hero--banner .db-play {
+  min-width: 200px;
+  box-shadow: var(--shadow-md);
+}
+
+/* Signed out: one slim line under the banner. */
+.mh-top--solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mh-signin--bar {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  height: auto;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-lg);
+}
+
+.mh-signin--bar .mh-signin__icon {
+  width: var(--control-sm);
+  height: var(--control-sm);
+}
+
+.mh-signin--bar .mh-signin__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mh-signin--bar .mh-signin__error {
+  flex-basis: 100%;
+}
+
+.mh-signin--bar:has(.mh-signin__error) {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .mh-signin--bar { flex-wrap: wrap; }
+}
+
+/* ---- Minecraft home, below the hero: three bands (instances, play time beside activity and
+   offers, links). ---- */
+.mh-section-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.mh-section-head { flex-wrap: wrap; }
+
+.mh-page .mh-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container mh (min-width: 900px) {
+  .mh-page .mh-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+.mh-page .mh-card .mh-card__art { height: 48px; }
+.mh-page .mh-card--new { min-height: 0; height: 100%; justify-content: center; }
+
+.mh-duo {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+.mh-duo__side { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+@container mh (max-width: 860px) {
+  .mh-duo { grid-template-columns: minmax(0, 1fr); }
+}
+.mh-duo .db-feed { max-height: 220px; }
+.db-card__note--line {
+  margin-top: var(--space-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Links: an even row, four across or two by two. */
+.mh-page .mh-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container mh (min-width: 900px) {
+  .mh-page .mh-links { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Offers: a compact list inside the card. */
+.mh-offers__links { display: flex; flex-direction: column; gap: var(--space-1); }
+.mh-offers__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  text-decoration: none;
+  background: none;
+}
+.mh-offers__link:hover { background: var(--color-surface-raised); }
+.mh-offers__icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: var(--control-md);
+  height: var(--control-md);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+.mh-offers__title, .mh-offers__lead { display: block; }
+.mh-offers__title { font-size: var(--font-size-sm); font-weight: var(--weight-semibold); }
+.mh-offers__lead { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.mh-offers__note { margin: var(--space-2) 0 0; }
+
+/* ---- Minecraft home, image-led lower page ---- */
+.mh-news__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.mh-news__row > li { display: flex; min-width: 0; }
+.mh-news__empty { color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.mh-news__card {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  min-width: 0;
+  min-height: 168px;
+  overflow: hidden;
+  color: #fff;
+  text-decoration: none;
+  background: var(--color-surface);
+  border-radius: var(--radius-cut-lg);
+  corner-shape: var(--corner-cut);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
+  transition: box-shadow var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+.mh-news__card:hover { box-shadow: var(--edge-highlight), var(--shadow-md); transform: translateY(-1px); }
+.mh-news__card:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.mh-news__img { position: absolute; inset: 0; }
+.mh-news__img img { transition: transform var(--duration-slow, 300ms) var(--ease-out); }
+.mh-news__card:hover .mh-news__img img { transform: scale(1.04); }
+.mh-news__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.45) 45%, transparent 75%);
+}
+.mh-news__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+}
+.mh-news__tag {
+  align-self: flex-start;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+  background: color-mix(in oklab, var(--color-bg) 70%, transparent);
+}
+.mh-news__title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mh-news__by {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: rgb(255 255 255 / 0.75);
+}
+@container mh (max-width: 480px) {
+  .mh-news__row { grid-template-columns: minmax(0, 1fr); }
+  .mh-news__card { min-height: 120px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mh-news__card, .mh-news__img img { transition: none; }
+  .mh-news__card:hover, .mh-news__card:hover .mh-news__img img { transform: none; }
+}
+
+/* Instance tiles: a taller picture. */
+.mh-page .mh-card .mh-card__art { height: 80px; }
+
+/* Play-time legend: readable chips, not dim grey text. */
+.mh-duo .db-series { gap: var(--space-1) var(--space-2); }
+.mh-duo .db-series > * {
+  padding: 2px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-full, 999px);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+}
+.mh-duo .db-series button { cursor: pointer; }
+.mh-duo .db-series button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.mh-duo .db-series button[aria-pressed="false"] { opacity: 0.6; }
+.mh-duo .db-series button[aria-pressed="false"] i { background: var(--color-text-muted) !important; }
+
+/* Offers: real art beside each. */
+.mh-offers__art {
+  position: relative;
+  flex-shrink: 0;
+  width: 72px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle);
+}
+.mh-offers__art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mh-offers__art .mh-offers__icon {
+  position: absolute;
+  inset: auto var(--space-1) var(--space-1) auto;
+  width: 22px;
+  height: 22px;
+  background: color-mix(in oklab, var(--color-bg) 75%, transparent);
+}
+
+/* Link tiles: an accent band on top so they read as cards. */
+.mh-page .mh-link {
+  flex-direction: column;
+  gap: var(--space-2);
+  background-image: linear-gradient(to bottom, var(--color-accent-subtle), transparent 55%);
+}
+.mh-page .mh-link__icon { width: var(--control-lg, 40px); height: var(--control-lg, 40px); background: var(--color-accent-subtle); }

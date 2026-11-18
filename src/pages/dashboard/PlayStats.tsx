@@ -42,6 +42,8 @@ type Props = {
   show: StatsPart[];
   /** Opens an instance's page (or the Library) when a bar is chosen. */
   onInstance?: (name: string) => void;
+  /** Opt-in: a tighter card with a one-line caption, for pages that pair it with another card. */
+  compact?: boolean;
 };
 
 /* Which real sources fed the play time, in words. (World statistics never do: see worldNote.) */
@@ -69,6 +71,7 @@ export default function PlayStats({
   onRange,
   show,
   onInstance,
+  compact = false,
 }: Props) {
   const colors = useSeriesColors();
 
@@ -182,7 +185,7 @@ export default function PlayStats({
   return (
     <>
       {show.includes("trend") && (
-        <section className="db-card db-trend" aria-labelledby="db-trend-title">
+        <section className={`db-card db-trend${compact ? " db-trend--compact" : ""}`} aria-labelledby="db-trend-title">
           <header className="db-card__head">
             <h2 className="db-card__title" id="db-trend-title">
               {games ? "Launcher play time" : "Minecraft play time"}
@@ -227,7 +230,7 @@ export default function PlayStats({
               </dd>
             </div>
             <div>
-              <dt>Daily average</dt>
+              <dt>{compact ? "Average a day" : "Daily average"}</dt>
               <dd>
                 {hasDaily ? (
                   formatDuration(average)
@@ -247,17 +250,15 @@ export default function PlayStats({
                   setHidden((current) => current.includes(line.id) ? current.filter((id) => id !== line.id) : [...current, line.id])
                 }><i style={{ background: line.color }} />{line.id}</button>
               ))}
-
             </div>
           )}
 
           {games && games.length > 0 && (
             <details className="db-coverage">
-              <summary>Playtime coverage · Minecraft</summary>
-              <p>Session durations are unavailable for {games.map((game) => game.name).join(", ")}. Recorded totals include Minecraft instances.</p>
+              <summary>Why only Minecraft has play time</summary>
+              <p>The launcher times Minecraft sessions itself. {games.map((game) => game.name).join(", ")} start through their own stores, so their session lengths aren't recorded here.</p>
             </details>
           )}
-
           {loading ? (
             loadingNote
           ) : failed ? (
@@ -273,7 +274,7 @@ export default function PlayStats({
                 formatTick={formatTick}
                 formatX={(x) => formatDay(x)}
                 label={`Play time per day, ${range === "all" ? "last 90 days" : rangeWords}`}
-                height={132}
+                height={compact ? 112 : 132}
                 animationKey={range}
                 describe={(p, i) => ({
                   title: formatDay(p.x, true),
@@ -293,17 +294,25 @@ export default function PlayStats({
             )
           )}
 
+          {compact ? (
+            <p className="db-card__note db-card__note--line" title={sources ? `Play time from ${sources}${stats?.since ? `, since ${formatDay(stats.since)} ${stats.since.slice(0, 4)}` : ""}.` : undefined}>
+              {sources
+                ? `From ${sources}${stats?.since ? `, since ${formatDay(stats.since)} ${stats.since.slice(0, 4)}` : ""}.`
+                : "Counted from the next game you start here."}
+            </p>
+          ) : (
           <p className="db-card__note">
-            {range === "all" && hasDaily
-              ? "The chart shows the last 90 days. "
-              : ""}
-            {sources
-              ? `Play time from ${sources}${stats?.since ? `, since ${formatDay(stats.since)} ${stats.since.slice(0, 4)}` : ""}.`
-              : "Counted from the next game you start here."}
-            {stats?.totals.worldPlaySeconds
-              ? ` Separately, your worlds' own statistics record ${formatHours(stats.totals.worldPlaySeconds)}, which can include play from before they came into this launcher.`
-              : ""}
-          </p>
+              {range === "all" && hasDaily
+                ? "The chart shows the last 90 days. "
+                : ""}
+              {sources
+                ? `Play time from ${sources}${stats?.since ? `, since ${formatDay(stats.since)} ${stats.since.slice(0, 4)}` : ""}.`
+                : "Counted from the next game you start here."}
+              {stats?.totals.worldPlaySeconds
+                ? ` Separately, your worlds' own statistics record ${formatHours(stats.totals.worldPlaySeconds)}, which can include play from before they came into this launcher.`
+                : ""}
+            </p>
+          )}
         </section>
       )}
 

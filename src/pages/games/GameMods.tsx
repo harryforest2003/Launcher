@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Bug, Folder, Play } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Bug, ChevronDown, Folder, ListFilter, MoreHorizontal, Play, Power, Trash2, TriangleAlert, Undo2, Download, Plus, RefreshCw, FileUp, Ellipsis, X } from "lucide-react";
 import SearchDropdown from "../../components/SearchDropdown";
 import FinderPanel from "./FinderPanel";
 import LoadOrderNotice from "./LoadOrderNotice";
@@ -8,10 +8,12 @@ import ConflictsPanel from "./ConflictsPanel";
 import ClashesPanel from "./ClashesPanel";
 import RequirementsPanel from "./RequirementsPanel";
 import SetMenu from "./SetMenu";
-import IconButton from "../../components/IconButton";
-import { BinIcon, DownloadIcon, PlusIcon, RefreshIcon, ResetIcon } from "../../components/Icons";
+import ModNameCell from "./ModNameCell";
+import { Badge, Button, Menu, Notice, SearchField } from "../../components/ui";
+import type { Tone } from "../../components/ui";
 import Toggle from "../../components/Toggle";
-import { errorText, installSummary, note, panel, shortDate, sizeText, smallButton } from "./shared";
+import { errorText, installSummary, shortDate, sizeText, type IssueTone } from "./shared";
+import "./gameMods.css";
 
 type Props = {
   detail: GameDetail;
@@ -61,8 +63,6 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "newer", label: "Update available" },
   { id: "update", label: "May need updating" },
 ];
-
-const PROVIDERS: Record<string, string> = { nexus: "Nexus Mods", curseforge: "CurseForge", file: "From a file", hand: "Added by hand" };
 
 /*
  * A game's mods: each one on or off, what it is and where its files went, the ones that
@@ -231,244 +231,368 @@ export default function GameMods({
   };
 
   const sims = detail.id === "sims4" ? detail.simsOptions : null;
+  const simsOff = Boolean(sims && (!sims.scripts || !sims.mods));
+
+  // What the panels below found, for the issues strip.
+  const [found, setFound] = useState<Record<string, { count: number; tone: IssueTone }>>({});
+  const [issuesOpen, setIssuesOpen] = useState(false);
+  const strip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!issuesOpen) return;
+    const away = (event: PointerEvent) => {
+      if (!strip.current?.contains(event.target as Node)) setIssuesOpen(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIssuesOpen(false);
+    };
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", key);
+    };
+  }, [issuesOpen]);
+  const report = useCallback((kind: string, count: number, tone: IssueTone) => {
+    setFound((now) => {
+      const had = now[kind];
+      if (!count) {
+        if (!had) return now;
+        const next = { ...now };
+        delete next[kind];
+        return next;
+      }
+      return had && had.count === count && had.tone === tone ? now : { ...now, [kind]: { count, tone } };
+    });
+  }, []);
+  const say = useCallback((next: { tone: "good" | "bad" | "warn"; text: string; notes?: string[] }) => setMessage(next), []);
+
+  const gameCount = (detail.found ? 0 : 1) + (detail.cantRun ? 1 : 0) + (detail.updated ? 1 : 0) + (simsOff ? 1 : 0);
+  const problemsTone: IssueTone = detail.problems.some((p) => p.kind === "outdated") ? "warning" : "danger";
+  const chips: { kind: string; count: number; tone: IssueTone }[] = [
+    ...(detail.problems.length ? [{ kind: "Crashes", count: detail.problems.length, tone: problemsTone }] : []),
+    ...(gameCount ? [{ kind: "Game", count: gameCount, tone: "warning" as IssueTone }] : []),
+    ...["Load order", "Health", "Same files", "Clashes", "Missing"].filter((kind) => found[kind]).map((kind) => ({ kind, count: found[kind].count, tone: found[kind].tone })),
+  ];
+  const issueTotal = chips.reduce((sum, chip) => sum + chip.count, 0);
+  const worst: IssueTone = chips.some((c) => c.tone === "danger") ? "danger" : chips.some((c) => c.tone === "warning") ? "warning" : "info";
+  const badgeTone: Record<IssueTone, Tone> = { danger: "danger", warning: "warning", info: "info" };
+
+  const folderUnavailable = detail.id === "sims4" ? !detail.docsDir : !detail.gameDir;
+  const folderLabel = detail.id === "sims4" ? "Open The Sims 4's Documents folder" : "Open the game's folder";
+
+  const updateText =
+    !updates || (checking && !newer.size)
+      ? "Checking for updates..."
+      : updates.error
+        ? `Couldn't check for updates: ${updates.error}`
+        : newer.size
+          ? `${newer.size} mod${newer.size === 1 ? " has a newer version" : "s have newer versions"}.`
+          : updates.checked
+            ? `All ${updates.checked} mod${updates.checked === 1 ? "" : "s"} from Nexus Mods and CurseForge ${updates.checked === 1 ? "is" : "are"} up to date.`
+            : "No mods from Nexus Mods or CurseForge to check for updates yet.";
+
+  const headerTip = [
+    detail.found ? `Found via ${detail.source}` : "Not found on this computer",
+    detail.version ? (/^\d/.test(detail.version) ? `Version ${detail.version}` : detail.version) : "",
+    detail.lastPlayed ? `Last played from here ${shortDate(detail.lastPlayed)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" • ");
+  const filterLabel = FILTERS.find((option) => option.id === activeFilter)?.label ?? "All";
+  const confirmUse = currentSet ? confirming === `use:${currentSet.id}` : false;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="gm-page">
       {/* FINDING A BROKEN MOD */}
       {finder.active && (
         <FinderPanel detail={detail} finder={finder} busy={finderBusy} playing={playing} onPlay={onPlay} onAnswer={finderApi.answer} onStop={finderApi.stop} />
       )}
       {!finder.active && finderIntro && (
-        <div style={{ padding: 16, borderRadius: 12, background: "var(--color-surface)", border: "1px solid var(--color-accent-line)" }} data-testid="finder-intro">
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <Bug size={20} color="var(--color-accent-text)" />
-            <span style={{ fontSize: 16, fontWeight: 600, color: "var(--color-accent-text)" }}>Find the mod that's breaking {detail.name}</span>
+        <div className="gm-finder" data-testid="finder-intro">
+          <div className="gm-finder__head">
+            <Bug size={18} aria-hidden="true" />
+            <span className="gm-finder__title">Find the mod that's breaking {detail.name}</span>
           </div>
-          <div style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+          <div className="gm-finder__text">
             First every mod is turned off, to check it's a mod at all. Then half of them are turned off at a time: each round, play, try whatever went
-            wrong, and say whether it happened. With {mods.filter((m) => m.enabled).length} mods on that's about{" "}
-            {Math.ceil(Math.log2(Math.max(mods.filter((m) => m.enabled).length, 2))) + 1} plays. Your saves are backed up first, and stopping at any point
-            puts every mod back as it was.
+            wrong, and say whether it happened. With {onCount} mods on that's about {Math.ceil(Math.log2(Math.max(onCount, 2))) + 1} plays. Your saves are backed up
+            first, and stopping at any point puts every mod back as it was.
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-            <button className="sidebar-button" data-testid="finder-start" style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }} onClick={() => !finderBusy && finderApi.start()}>
+          <div className="gm-finder__buttons">
+            <Button variant="primary" data-testid="finder-start" onClick={() => !finderBusy && finderApi.start()}>
               {finderBusy ? "Starting..." : "Start"}
-            </button>
-            <button className="sidebar-button" style={smallButton} onClick={finderApi.cancelIntro}>
-              Cancel
-            </button>
+            </Button>
+            <Button onClick={finderApi.cancelIntro}>Cancel</Button>
           </div>
         </div>
       )}
 
-      {/* HEADER */}
-      <div style={{ ...panel, display: "flex", alignItems: "center", gap: 18 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h1 style={{ margin: 0 }}>{detail.name}</h1>
-          <div style={{ color: "var(--color-text-muted)", fontSize: 13, marginTop: 6 }}>
-            {detail.found ? `Found via ${detail.source}` : "Not found on this computer"}
-            {detail.version ? ` • ${/^\d/.test(detail.version) ? `Version ${detail.version}` : detail.version}` : ""}
-            {detail.lastPlayed ? ` • Last played from here ${shortDate(detail.lastPlayed)}` : ""}
-          </div>
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 4 }}>
+      {/* HEADER: title and count, the issues chip, Play, the one primary action and a menu for the rest */}
+      <header className="gm-header">
+        <div className="gm-header__main" title={headerTip}>
+          <h1 className="gm-header__title">{detail.name}</h1>
+          <div className="gm-header__meta">
             {onCount} of {mods.length} mod{mods.length === 1 ? "" : "s"} on
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          {/* The Sims 4's mods are in Documents, so that's the folder it opens; the game's own is in Settings. */}
-          {detail.id === "sims4" ? (
-            <IconButton
-              tip={detail.docsDir ? "Open The Sims 4's folder in Documents: Mods, Tray and saves" : "The Sims 4's Documents folder hasn't been found: choose it in Settings"}
-              label="Open The Sims 4's Documents folder"
-              disabled={!detail.docsDir}
-              onUnavailable={goSettings}
-              onClick={() => window.gamesAPI.openFolder(detail.id, "docs").catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
-            >
-              <Folder size={20} />
-            </IconButton>
-          ) : (
-            <IconButton
-              tip={detail.found ? "Open the game's folder" : "The game's folder hasn't been found: choose it in Settings"}
-              label="Open the game's folder"
-              disabled={!detail.gameDir}
-              onUnavailable={goSettings}
-              onClick={() => window.gamesAPI.openFolder(detail.id, "game").catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
-            >
-              <Folder size={20} />
-            </IconButton>
-          )}
-          <button
-            className="sidebar-button"
-            data-testid="game-play"
-            onClick={onPlay}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", fontSize: 15, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
-          >
-            <Play size={18} fill="currentColor" />
-            {playing ?? "Play"}
+        {/* ISSUES: a small chip; the details open over the list */}
+        <div ref={strip} className={`gm-strip gm-strip--${worst}`} data-testid="issues-strip" hidden={issueTotal === 0}>
+          <button type="button" className="gm-strip__bar" aria-expanded={issuesOpen} aria-controls="gm-strip-body" onClick={() => setIssuesOpen((now) => !now)}>
+            <TriangleAlert size={14} className="gm-strip__icon" aria-hidden="true" />
+            <strong className="gm-strip__count">
+              {issueTotal} issue{issueTotal === 1 ? "" : "s"}
+            </strong>
+            <ChevronDown size={14} className={`gm-strip__chev${issuesOpen ? " gm-strip__chev--open" : ""}`} aria-hidden="true" />
           </button>
-        </div>
-      </div>
-
-      {/* WHAT NEEDS SAYING */}
-      {!detail.found && (
-        <div style={{ ...note("warn"), display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ flex: 1 }}>
-            {detail.name} wasn't found on this computer.
-            {detail.windowsOnly && detail.platform === "darwin"
-              ? " It only runs on Windows: on a Mac, install it in CrossOver or Whisky and the launcher finds it in their bottles."
-              : " If it's somewhere unusual, choose its folder."}
-          </span>
-          <button className="sidebar-button" style={smallButton} onClick={goSettings}>
-            Choose folder
-          </button>
-        </div>
-      )}
-
-      {detail.updated && (
-        <div style={note("warn")} data-testid="game-updated">
-          {detail.name} has updated since you last played it from here
-          {detail.updated.from && detail.updated.to ? ` (${detail.updated.from} → ${detail.updated.to})` : ""}.{" "}
-          {mayNeedUpdate.length
-            ? mayNeedUpdate.length === 1
-              ? "1 mod that changes the game's code may need updating before it works again. Play asks whether to start without it."
-              : `${mayNeedUpdate.length} mods that change the game's code may need updating before they work again. Play asks whether to start without them.`
-            : mods.some((mod) => mod.hooks && mod.enabled)
-              ? "The mods that change the game's code are newer than the update, so they should carry on working."
-              : mods.some((mod) => mod.hooks)
-                ? "The mods that change the game's code are turned off, so the rest should carry on working."
-                : "None of your mods change the game's code, so they should carry on working."}
-        </div>
-      )}
-
-      {sims && (!sims.scripts || !sims.mods) && (
-        <div style={{ ...note("info"), display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ flex: 1 }}>
-            {!sims.mods
-              ? "Custom content and mods are off in The Sims 4's own options, so none of these load."
-              : "Script mods are off in The Sims 4's own options, so .ts4script mods don't load."}
-          </span>
-          <button
-            className="sidebar-button"
-            style={smallButton}
-            onClick={() => act("options", () => window.gamesAPI.setSimsOptions({ mods: true, scripts: true }))}
-          >
-            Turn them on
-          </button>
-        </div>
-      )}
-
-      {detail.problems.length > 0 && (
-        <div style={note(detail.problems.some((p) => p.kind === "outdated") ? "warn" : "bad")} data-testid="game-problems">
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
-            <span style={{ flex: 1 }}>
-              {detail.problems.some((p) => p.kind === "crash")
-                ? `${detail.name} crashed${detail.problems.length > 1 ? ` (${detail.problems.length} reports)` : ""} since you last played from here.`
-                : `${detail.name} reported ${detail.problems.length === 1 ? "a problem" : `${detail.problems.length} problems`} since you last played from here.`}{" "}
-              {detail.problems.some((p) => p.mods.length) ? "A mod it names is the likeliest cause." : ""}
-            </span>
-            {!finder.active && (
-              <button className="sidebar-button" style={{ ...smallButton, padding: "6px 12px", fontSize: 12, flexShrink: 0 }} onClick={finderApi.intro}>
-                Find the broken mod
-              </button>
-            )}
-          </div>
-          {detail.problems.slice(0, 4).map((problem) => {
-            const matches = namedMods(problem.mods);
-            return (
-              <div key={problem.file + problem.time} style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid var(--color-border)" }}>
-                <div style={{ fontSize: 12, opacity: 0.9 }}>
-                  {problem.file} • {shortDate(problem.time)}
-                  {problem.mods.length ? ` • names ${problem.mods.join(", ")}` : " • no mod named"}
+          <div id="gm-strip-body" className="gm-strip__body" hidden={!issuesOpen}>
+            <div className="gm-strip__chips">
+              {chips.map((chip) => (
+                <Badge key={chip.kind} tone={badgeTone[chip.tone]}>
+                  {chip.kind} {chip.count}
+                </Badge>
+              ))}
+            </div>
+          {!detail.found && (
+            <section className="gm-issue gm-issue--warning">
+              <div className="gm-issue__head">
+                <TriangleAlert size={16} className="gm-issue__icon" aria-hidden="true" />
+                <span className="gm-issue__text">
+                  {detail.name} wasn't found on this computer.
+                  {detail.windowsOnly && detail.platform === "darwin"
+                    ? " It only runs on Windows: on a Mac, install it in CrossOver or Whisky and the launcher finds it in their bottles."
+                    : " If it's somewhere unusual, choose its folder."}
+                </span>
+                <div className="gm-issue__actions">
+                  <Button size="sm" onClick={goSettings}>
+                    Choose folder
+                  </Button>
                 </div>
-                {problem.line && <div style={{ fontSize: 12, marginTop: 2, fontFamily: "monospace", wordBreak: "break-word", opacity: 0.85 }}>{problem.line}</div>}
-                {matches.length > 0 && (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
-                    {matches.slice(0, 4).map((mod) => (
-                      <button key={mod.key} className="sidebar-button" style={{ ...smallButton, padding: "6px 10px", fontSize: 12 }} onClick={() => act(mod.key, () => window.gamesAPI.setEnabled(detail.id, mod.key, false))}>
-                        Turn off {mod.name}
-                      </button>
-                    ))}
+              </div>
+            </section>
+          )}
+
+          {detail.cantRun && (
+            <section className="gm-issue gm-issue--warning" data-testid="game-cant-run">
+              <div className="gm-issue__head">
+                <TriangleAlert size={16} className="gm-issue__icon" aria-hidden="true" />
+                <span className="gm-issue__text">{detail.cantRun} You can still install and manage its mods here.</span>
+              </div>
+            </section>
+          )}
+
+          {detail.updated && (
+            <section className="gm-issue gm-issue--warning" data-testid="game-updated">
+              <div className="gm-issue__head">
+                <TriangleAlert size={16} className="gm-issue__icon" aria-hidden="true" />
+                <span className="gm-issue__text">
+                  {detail.name} has updated since you last played it from here
+                  {detail.updated.from && detail.updated.to ? ` (${detail.updated.from} → ${detail.updated.to})` : ""}.{" "}
+                  {mayNeedUpdate.length
+                    ? mayNeedUpdate.length === 1
+                      ? "1 mod that changes the game's code may need updating before it works again. Play asks whether to start without it."
+                      : `${mayNeedUpdate.length} mods that change the game's code may need updating before they work again. Play asks whether to start without them.`
+                    : mods.some((mod) => mod.hooks && mod.enabled)
+                      ? "The mods that change the game's code are newer than the update, so they should carry on working."
+                      : mods.some((mod) => mod.hooks)
+                        ? "The mods that change the game's code are turned off, so the rest should carry on working."
+                        : "None of your mods change the game's code, so they should carry on working."}
+                </span>
+              </div>
+            </section>
+          )}
+
+          {sims && simsOff && (
+            <section className="gm-issue gm-issue--info">
+              <div className="gm-issue__head">
+                <TriangleAlert size={16} className="gm-issue__icon" aria-hidden="true" />
+                <span className="gm-issue__text">
+                  {!sims.mods
+                    ? "Custom content and mods are off in The Sims 4's own options, so none of these load."
+                    : "Script mods are off in The Sims 4's own options, so .ts4script mods don't load."}
+                </span>
+                <div className="gm-issue__actions">
+                  <Button size="sm" onClick={() => act("options", () => window.gamesAPI.setSimsOptions({ mods: true, scripts: true }))}>
+                    Turn them on
+                  </Button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {detail.problems.length > 0 && (
+            <section className={`gm-issue gm-issue--${problemsTone}`} data-testid="game-problems">
+              <div className="gm-issue__head">
+                <TriangleAlert size={16} className="gm-issue__icon" aria-hidden="true" />
+                <span className="gm-issue__text">
+                  {detail.problems.some((p) => p.kind === "crash")
+                    ? `${detail.name} crashed${detail.problems.length > 1 ? ` (${detail.problems.length} reports)` : ""} since you last played from here.`
+                    : `${detail.name} reported ${detail.problems.length === 1 ? "a problem" : `${detail.problems.length} problems`} since you last played from here.`}{" "}
+                  {detail.problems.some((p) => p.mods.length) ? "A mod it names is the likeliest cause." : ""}
+                </span>
+                {!finder.active && (
+                  <div className="gm-issue__actions">
+                    <Button size="sm" onClick={finderApi.intro}>
+                      Find the broken mod
+                    </Button>
                   </div>
                 )}
               </div>
-            );
-          })}
-        </div>
-      )}
+              <div className="gm-issue__list">
+                {detail.problems.slice(0, 4).map((problem) => {
+                  const matches = namedMods(problem.mods);
+                  return (
+                    <div key={problem.file + problem.time} className="gm-issue__item">
+                      <div className="gm-issue__item-text">
+                        {problem.file} • {shortDate(problem.time)}
+                        {problem.mods.length ? ` • names ${problem.mods.join(", ")}` : " • no mod named"}
+                      </div>
+                      {problem.line && <div className="gm-issue__files gm-issue__files--inline">{problem.line}</div>}
+                      {matches.length > 0 && (
+                        <div className="gm-issue__buttons">
+                          {matches.slice(0, 4).map((mod) => (
+                            <Button key={mod.key} size="sm" onClick={() => act(mod.key, () => window.gamesAPI.setEnabled(detail.id, mod.key, false))}>
+                              Turn off {mod.name}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
-      {message && (
-        <div style={note(message.tone)} data-testid="mods-message">
-          <div style={{ display: "flex", gap: 12 }}>
-            <span style={{ flex: 1 }}>{message.text}</span>
-            <button onClick={() => setMessage(null)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16 }}>
-              ×
-            </button>
+          <LoadOrderNotice detail={detail} mods={mods} goLoadOrder={goLoadOrder} onGetRequirements={onGetRequirements} report={report} say={say} />
+          <HealthPanel detail={detail} mods={mods} reload={reload} report={report} say={say} />
+          <ConflictsPanel detail={detail} mods={mods} report={report} />
+          <ClashesPanel detail={detail} mods={mods} reload={reload} report={report} say={say} />
+          <RequirementsPanel requirements={requirements} getting={getting} onGet={onGetRequirements} report={report} />
           </div>
+        </div>
+        {/* UPDATES: a compact chip, with Update all when there is something to update */}
+        <div className={`gm-updates${updates?.error ? " gm-updates--bad" : newer.size ? " gm-updates--good" : ""}`} data-testid="updates-line" title={updateText}>
+          <span className="gm-updates__text">
+            {!updates || (checking && !newer.size)
+              ? "Checking..."
+              : updates.error
+                ? "Update check failed"
+                : newer.size
+                  ? `${newer.size} update${newer.size === 1 ? "" : "s"}`
+                  : updates.checked
+                    ? "Up to date"
+                    : "No updates to check"}
+            {updates && updates.needsKey > 0 && (
+              <>
+                {" "}
+                <button type="button" className="gm-link" title={`${updates.needsKey} from Nexus Mods can be checked once your Nexus Mods key is in Settings → API keys`} onClick={goLauncherSettings}>
+                  Add key
+                </button>
+              </>
+            )}
+          </span>
+          {newer.size > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              data-testid="update-all"
+              onClick={() => {
+                if (!updating) onUpdateAll();
+              }}
+            >
+              {updating?.startsWith("all:") ? `Updating ${updating.slice(4)}...` : `Update all (${newer.size})`}
+            </Button>
+          )}
+        </div>
+        <span className="gm-spacer" />
+        <Button
+          variant="secondary"
+          size="sm"
+          data-testid="game-play"
+          onClick={onPlay}
+          disabled={Boolean(playing) || Boolean(detail.cantRun)}
+          title={detail.cantRun ?? undefined}
+          icon={<Play size={14} aria-hidden="true" />}
+        >
+          {playing ?? "Play"}
+        </Button>
+        <Button
+          size="sm"
+          variant={showDownloads ? "secondary" : "primary"}
+          data-testid="add-from-downloads"
+          aria-expanded={showDownloads}
+          aria-label="Add from Downloads"
+          icon={<Download size={14} aria-hidden="true" />}
+          onClick={() => setShowDownloads((open) => !open)}
+        >
+          <span className="gm-long">Add from Downloads</span>
+          <span className="gm-short">Add</span>
+        </Button>
+        <Menu
+          label="More actions"
+          triggerClassName="ui-button ui-button--ghost ui-button--sm gm-iconbtn"
+          trigger={<Ellipsis size={16} aria-hidden="true" />}
+          items={[
+            { label: "Install from a file...", icon: <FileUp size={14} aria-hidden="true" />, onSelect: () => install() },
+            {
+              label: checking ? "Checking for updates..." : "Check for updates",
+              icon: <RefreshCw size={14} aria-hidden="true" />,
+              disabled: checking,
+              onSelect: () =>
+                act("refresh", async () => {
+                  await reload();
+                  await onCheckUpdates();
+                }),
+            },
+            {
+              label: folderUnavailable ? `${folderLabel} (not found: choose it in Settings)` : folderLabel,
+              icon: <Folder size={14} aria-hidden="true" />,
+              onSelect: () => {
+                if (folderUnavailable) return goSettings();
+                window.gamesAPI.openFolder(detail.id, detail.id === "sims4" ? "docs" : "game").catch((err) => setMessage({ tone: "bad", text: errorText(err) }));
+              },
+            },
+          ]}
+        />
+      </header>
+
+      {/* TOAST-LIKE RESULT OF THE LAST ACTION */}
+      {message && (
+        <Notice
+          tone={message.tone === "good" ? "success" : message.tone === "bad" ? "danger" : "warning"}
+          data-testid="mods-message"
+          actions={
+            <Button variant="ghost" size="sm" className="gm-iconbtn" aria-label="Dismiss" icon={<X size={16} aria-hidden="true" />} onClick={() => setMessage(null)} />
+          }
+        >
+          {message.text}
           {message.notes?.map((line) => (
-            <div key={line} style={{ fontSize: 12, marginTop: 4, opacity: 0.9 }}>
+            <div key={line} className="gm-notice-note">
               • {line}
             </div>
           ))}
-        </div>
+        </Notice>
       )}
 
-      {/* TOOLBAR */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search your mods..."
-          style={{ flex: "1 1 220px", padding: 12, borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}
+      {/* TOOLBAR: search, filter, sets, and the add and refresh actions on one row */}
+      <div className="gm-toolbar" data-testid="sets-bar">
+        <SearchField label="Search your mods" wrapperClassName="gm-toolbar__search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />
+        <Menu
+          label="Filter mods"
+          triggerClassName="ui-button ui-button--secondary ui-button--sm gm-filter"
+          trigger={
+            <>
+              <ListFilter size={14} aria-hidden="true" />
+              {filterLabel}
+              <ChevronDown size={14} aria-hidden="true" />
+            </>
+          }
+          items={FILTERS.filter((option) => counts[option.id] !== 0).map((option) => ({
+            label: `${activeFilter === option.id ? "✓ " : ""}${option.label}${counts[option.id] ? ` (${counts[option.id]})` : ""}`,
+            onSelect: () => setFilter(option.id),
+          }))}
         />
-        {FILTERS.filter((option) => counts[option.id] !== 0).map((option) => (
-          <button
-            key={option.id}
-            className="sidebar-button"
-            onClick={() => setFilter(option.id)}
-            style={{ fontSize: 12, padding: "8px 12px", opacity: activeFilter === option.id ? 1 : 0.6, ...(activeFilter === option.id ? { background: "var(--color-accent-subtle)" } : {}) }}
-          >
-            {option.label}
-            {counts[option.id] ? ` (${counts[option.id]})` : ""}
-          </button>
-        ))}
-        <IconButton
-          tip={checking ? "Checking for updates..." : "Look again for mods in the game's folders, and check for updates"}
-          label="Refresh and check for updates"
-          variant={checking ? "ready" : ""}
-          onClick={() => act("refresh", async () => {
-            await reload();
-            await onCheckUpdates();
-          })}
-        >
-          <RefreshIcon size={18} />
-        </IconButton>
-        <IconButton
-          tip={finder.active ? "Already finding a broken mod: see the top of the page" : "Find the mod that's breaking the game, by turning half off at a time"}
-          label="Find a broken mod"
-          testId="finder-button"
-          variant={finder.active || finderIntro ? "ready" : ""}
-          onClick={() => !finder.active && finderApi.intro()}
-        >
-          <Bug size={18} />
-        </IconButton>
-        <IconButton tip="Install a mod from a file you choose" label="Install from a file" onClick={() => install()}>
-          <PlusIcon size={18} />
-        </IconButton>
-        <button
-          className="sidebar-button"
-          data-testid="add-from-downloads"
-          onClick={() => setShowDownloads((open) => !open)}
-          style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", ...(showDownloads ? { background: "var(--color-accent-subtle)" } : {}) }}
-        >
-          <DownloadIcon size={16} />
-          Add from Downloads
-        </button>
-      </div>
-
-      {/* SETS */}
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }} data-testid="sets-bar">
-        <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Showing</span>
-        <div style={{ width: 230 }}>
+        <div className="gm-toolbar__sets">
           <SearchDropdown
             compact
             label="Show a set"
@@ -482,161 +606,136 @@ export default function GameMods({
             }}
           />
         </div>
-        {naming ? (
-          <form
-            onSubmit={async (event) => {
-              event.preventDefault();
-              const name = naming.name.trim();
-              if (!name) return;
-              if (naming.id) await setsApi.rename(naming.id, name);
-              else if (!(await setsApi.create(name))) return;
-              setSetShown(name);
-              setNaming(null);
-            }}
-            style={{ display: "flex", gap: 8 }}
-          >
-            <input
-              autoFocus
-              value={naming.name}
-              onChange={(event) => setNaming({ ...naming, name: event.target.value })}
-              placeholder={naming.id ? "New name..." : "Name the set..."}
-              maxLength={40}
-              style={{ padding: "8px 10px", borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 13 }}
-            />
-            <button type="submit" className="sidebar-button" style={{ ...smallButton, padding: "8px 12px" }}>
-              {naming.id ? "Rename" : "Make set"}
-            </button>
-            <button type="button" className="sidebar-button" style={{ ...smallButton, padding: "8px 12px" }} onClick={() => setNaming(null)}>
-              Cancel
-            </button>
-          </form>
-        ) : currentSet ? (
-          <>
-            <button
-              className="sidebar-button"
-              data-testid="use-set"
-              style={{ ...smallButton, padding: "8px 12px", ...(confirming === `use:${currentSet.id}` ? { background: "var(--color-danger-solid)", borderColor: "var(--color-danger-border)" } : {}) }}
-              onClick={() => {
-                if (confirming !== `use:${currentSet.id}`) return setConfirming(`use:${currentSet.id}`);
-                setConfirming(null);
-                setsApi.use(currentSet);
-              }}
-            >
-              {confirming === `use:${currentSet.id}` ? "Click again: the rest go off" : "Turn on just this set"}
-            </button>
-            <button className="sidebar-button" style={{ ...smallButton, padding: "8px 12px" }} onClick={() => setNaming({ id: currentSet.id, name: currentSet.name })}>
-              Rename
-            </button>
-            <IconButton
-              tip={confirming === `set:${currentSet.id}` ? "Click again to delete the set (its mods stay)" : "Delete this set (its mods stay)"}
-              label={`Delete the ${currentSet.name} set`}
-              variant={confirming === `set:${currentSet.id}` ? "confirming" : ""}
-              style={{ width: 38, height: 38 }}
-              onClick={() => {
-                if (confirming !== `set:${currentSet.id}`) return setConfirming(`set:${currentSet.id}`);
-                setConfirming(null);
-                setsApi.remove(currentSet.id);
-                setSetShown(ALL);
-              }}
-            >
-              <BinIcon size={16} />
-            </IconButton>
-          </>
-        ) : (
-          <button className="sidebar-button" data-testid="new-set" style={{ ...smallButton, padding: "8px 12px" }} onClick={() => setNaming({ id: null, name: "" })}>
-            New set
-          </button>
+        {!currentSet && !naming && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gm-iconbtn"
+            data-testid="new-set"
+            data-tip="Make a new set of mods"
+            aria-label="New set"
+            icon={<Plus size={16} aria-hidden="true" />}
+            onClick={() => setNaming({ id: null, name: "" })}
+          />
         )}
-        {currentSet && !currentSet.keys.some((key) => mods.some((m) => m.key === key)) && (
-          <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Add mods to it with the tag button on each one.</span>
-        )}
+        <span className="gm-spacer" />
+        <Button
+          size="sm"
+          variant="ghost"
+          className={`gm-iconbtn${finder.active || finderIntro ? " gm-iconbtn--on" : ""}`}
+          data-testid="finder-button"
+          data-tip={finder.active ? "Already finding a broken mod: see the top of the page" : "Find the mod that's breaking the game, by turning half off at a time"}
+          aria-label="Find a broken mod"
+          icon={<Bug size={16} aria-hidden="true" />}
+          onClick={() => !finder.active && finderApi.intro()}
+        />
       </div>
 
-      <LoadOrderNotice detail={detail} mods={mods} goLoadOrder={goLoadOrder} onGetRequirements={onGetRequirements} />
-
-      <HealthPanel detail={detail} mods={mods} reload={reload} />
-
-      <ConflictsPanel detail={detail} mods={mods} />
-
-      <ClashesPanel detail={detail} mods={mods} reload={reload} />
-
-      <RequirementsPanel requirements={requirements} getting={getting} onGet={onGetRequirements} />
-
-      {/* UPDATES */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 36 }} data-testid="updates-line">
-        <span style={{ flex: 1, fontSize: 13, color: updates?.error ? "var(--color-danger-text)" : newer.size ? "var(--color-success-text)" : "var(--color-text-muted)" }}>
-          {!updates || (checking && !newer.size)
-            ? "Checking for updates..."
-            : updates.error
-              ? `Couldn't check for updates: ${updates.error}`
-              : newer.size
-                ? `${newer.size} mod${newer.size === 1 ? " has a newer version" : "s have newer versions"}.`
-                : updates.checked
-                  ? `All ${updates.checked} mod${updates.checked === 1 ? "" : "s"} from Nexus Mods and CurseForge ${updates.checked === 1 ? "is" : "are"} up to date.`
-                  : "No mods from Nexus Mods or CurseForge to check for updates yet."}
-          {updates && updates.needsKey > 0 && (
-            <>
-              {" "}
-              {updates.needsKey} from Nexus Mods can be checked once your Nexus Mods key is in{" "}
-              <button onClick={goLauncherSettings} style={{ background: "none", border: "none", padding: 0, color: "var(--color-accent-text)", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
-                Settings → API keys
-              </button>
-              .
-            </>
+      {/* A set's own actions, only while one is shown or being named */}
+      {(naming || currentSet) && (
+        <div className="gm-setbar">
+          {naming ? (
+            <form
+              className="gm-setbar__form"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const name = naming.name.trim();
+                if (!name) return;
+                if (naming.id) await setsApi.rename(naming.id, name);
+                else if (!(await setsApi.create(name))) return;
+                setSetShown(name);
+                setNaming(null);
+              }}
+            >
+              <input
+                autoFocus
+                className="ui-input"
+                value={naming.name}
+                onChange={(event) => setNaming({ ...naming, name: event.target.value })}
+                placeholder={naming.id ? "New name..." : "Name the set..."}
+                aria-label={naming.id ? "New name for the set" : "Name for the new set"}
+                maxLength={40}
+              />
+              <Button type="submit" size="sm" variant="primary">
+                {naming.id ? "Rename" : "Make set"}
+              </Button>
+              <Button size="sm" onClick={() => setNaming(null)}>
+                Cancel
+              </Button>
+            </form>
+          ) : (
+            currentSet && (
+              <>
+                <span className="gm-muted">Set: {currentSet.name}</span>
+                <Button
+                  size="sm"
+                  variant={confirmUse ? "danger" : "secondary"}
+                  data-testid="use-set"
+                  onClick={() => {
+                    if (!confirmUse) return setConfirming(`use:${currentSet.id}`);
+                    setConfirming(null);
+                    setsApi.use(currentSet);
+                  }}
+                >
+                  {confirmUse ? "Click again: the rest go off" : "Turn on just this set"}
+                </Button>
+                <Button size="sm" onClick={() => setNaming({ id: currentSet.id, name: currentSet.name })}>
+                  Rename
+                </Button>
+                <Button
+                  size="sm"
+                  variant={confirming === `set:${currentSet.id}` ? "danger" : "ghost"}
+                  className="gm-iconbtn"
+                  data-tip={confirming === `set:${currentSet.id}` ? "Click again to delete the set (its mods stay)" : "Delete this set (its mods stay)"}
+                  aria-label={`Delete the ${currentSet.name} set`}
+                  icon={<Trash2 size={16} aria-hidden="true" />}
+                  onClick={() => {
+                    if (confirming !== `set:${currentSet.id}`) return setConfirming(`set:${currentSet.id}`);
+                    setConfirming(null);
+                    setsApi.remove(currentSet.id);
+                    setSetShown(ALL);
+                  }}
+                />
+                {!currentSet.keys.some((key) => mods.some((m) => m.key === key)) && <span className="gm-muted">Add mods to it with the tag button on each one.</span>}
+              </>
+            )
           )}
-          {updates && updates.unknown > 0 && !updates.error && (
-            <span style={{ color: "var(--color-text-muted)" }}>
-              {" "}
-              {updates.unknown} couldn't be matched to a site.
-            </span>
-          )}
-        </span>
-        {newer.size > 0 && (
-          <button
-            className="sidebar-button"
-            data-testid="update-all"
-            style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
-            onClick={() => {
-              if (!updating) onUpdateAll();
-            }}
-          >
-            {updating?.startsWith("all:") ? `Updating ${updating.slice(4)}...` : `Update all (${newer.size})`}
-          </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* DOWNLOADS */}
       {showDownloads && (
-        <div style={panel} data-testid="downloads-panel">
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
-            <div style={{ color: "var(--color-accent-text)", fontWeight: 600, flex: 1 }}>From your Downloads folder</div>
+        <section className="gm-downloads" data-testid="downloads-panel">
+          <div className="gm-downloads__head">
+            <div className="gm-downloads__title">From your Downloads folder</div>
             {picked.size > 0 && (
-              <button
-                className="sidebar-button"
+              <Button
+                size="sm"
+                variant="primary"
                 data-testid="install-picked"
-                style={{ ...smallButton, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
                 onClick={() => {
                   if (!busy) installPicked();
                 }}
               >
                 {busy?.startsWith("all:") ? `Installing ${busy.slice(4)}...` : `Install ticked (${picked.size})`}
-              </button>
+              </Button>
             )}
           </div>
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginBottom: 10 }}>
+          <div className="gm-muted gm-downloads__hint">
             Zips, 7z and RAR archives are unpacked and each file goes where {detail.name} needs it. Newest first, from the last 90 days; new ones that
             look like {detail.name} mods are ticked.
           </div>
           {downloads === null ? (
-            <div style={{ color: "var(--color-text-muted)" }}>Looking...</div>
+            <div className="gm-muted">Looking...</div>
           ) : downloads.length === 0 ? (
-            <div style={{ color: "var(--color-text-muted)" }}>Nothing in Downloads looks like a mod for {detail.name}.</div>
+            <div className="gm-muted">Nothing in Downloads looks like a mod for {detail.name}.</div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 280, overflowY: "auto" }}>
+            <div className="gm-downloads__list">
               {downloads.map((file) => (
-                <div key={file.path} data-testid="download-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 10px", background: "var(--color-surface-sunken)", borderRadius: 8, opacity: file.fits === false ? 0.6 : 1 }}>
+                <div key={file.path} data-testid="download-row" className={`gm-download${file.fits === false ? " gm-download--dim" : ""}`}>
                   <input
                     type="checkbox"
+                    className="gm-check"
                     aria-label={`Tick ${file.name} to install`}
                     checked={picked.has(file.path)}
                     onChange={(event) =>
@@ -647,30 +746,42 @@ export default function GameMods({
                         return next;
                       })
                     }
-                    style={{ width: 16, height: 16, accentColor: "var(--color-accent)", flexShrink: 0, cursor: "pointer" }}
                   />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</div>
-                    <div style={{ color: "var(--color-text-muted)", fontSize: 11 }}>
+                  <div className="gm-download__main">
+                    <div className="gm-download__name">{file.name}</div>
+                    <div className="gm-muted gm-download__meta">
                       {sizeText(file.size)} • {shortDate(file.modified)}
                       {file.installed ? " • installed" : ""}
                       {file.fits === false ? ` • doesn't look like a ${detail.name} mod` : ""}
                     </div>
                   </div>
-                  <button className="sidebar-button" style={{ ...smallButton, ...(file.installed ? {} : { background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }) }} onClick={() => install(file.path)}>
+                  <Button size="sm" variant={file.installed ? "secondary" : "primary"} onClick={() => install(file.path)}>
                     {busy === file.path ? "Installing..." : file.installed ? "Reinstall" : "Install"}
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* LIST */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }} data-testid="mod-list">
+      {/* LIST: a table, one row per mod, columns that line up */}
+      <div className="gm-table" role="table" aria-label="Mods" data-testid="mod-list">
+        {shown.length > 0 && (
+          <div className="gm-row gm-row--head u-visually-hidden" role="row">
+            <div role="columnheader" className="gm-cell gm-cell--toggle">
+              <span className="u-visually-hidden">On or off</span>
+            </div>
+            <div role="columnheader" className="gm-cell">Name</div>
+            <div role="columnheader" className="gm-cell gm-cell--area">Where</div>
+            <div role="columnheader" className="gm-cell gm-cell--added">Added</div>
+            <div role="columnheader" className="gm-cell gm-cell--actions">
+              <span className="u-visually-hidden">Actions</span>
+            </div>
+          </div>
+        )}
         {shown.length === 0 ? (
-          <div style={{ color: "var(--color-text-muted)", padding: 20, textAlign: "center" }}>
+          <div className="gm-empty">
             {mods.length === 0
               ? detail.found
                 ? "No mods yet. Add one from Downloads, or find some in Discover Mods."
@@ -678,122 +789,136 @@ export default function GameMods({
               : "No mods match."}
           </div>
         ) : (
-          shown.map((mod) => (
-            <div
-              key={mod.key}
-              data-testid="game-mod"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 14,
-                padding: "12px 14px",
-                background: "var(--color-surface)",
-                border: `1px solid ${mod.mayNeedUpdate && mod.enabled ? "var(--color-warning-border)" : "var(--color-border)"}`,
-                borderRadius: 10,
-                opacity: mod.enabled ? 1 : 0.65,
-              }}
-            >
-              <Toggle
-                on={mod.enabled}
-                label={mod.enabled ? `Turn off ${mod.name}` : `Turn on ${mod.name}`}
-                disabled={busy === mod.key}
-                onChange={(on) => act(mod.key, () => window.gamesAPI.setEnabled(detail.id, mod.key, on))}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 600, color: mod.enabled ? "var(--color-accent-text)" : "var(--color-text-muted)" }}>{mod.name}</span>
-                  {mod.mayNeedUpdate && (
-                    <span data-tip="It changes the game's code and is older than the game's latest update" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-warning-bg)", color: "var(--color-warning-text)" }}>
-                      May need updating
-                    </span>
-                  )}
-                  {mod.hooks && !mod.mayNeedUpdate && (
-                    <span data-tip="It changes the game's code, so game updates can break it" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-accent-subtle)", color: "var(--color-accent-text)" }}>
-                      Script mod
-                    </span>
-                  )}
-                  {mod.kind === "plugin" && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-info-bg)", color: "var(--color-info-text)" }}>Plugin</span>}
-                  {sets
-                    .filter((set) => set.keys.includes(mod.key))
-                    .map((set) => (
-                      <span key={set.id} style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, border: "1px solid var(--color-border)", color: "var(--color-accent-text)" }}>
-                        {set.name}
-                      </span>
-                    ))}
-                  {newer.has(mod.key) && (
-                    <span data-testid="update-badge" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "var(--color-success-bg)", color: "var(--color-success-text)" }}>
-                      Update{newer.get(mod.key)!.fromVersion || newer.get(mod.key)!.toVersion ? `: ${newer.get(mod.key)!.fromVersion || "?"} → ${newer.get(mod.key)!.toVersion || "newer"}` : " available"}
-                    </span>
+          shown.map((mod) => {
+            const update = newer.get(mod.key);
+            const inSets = sets.filter((set) => set.keys.includes(mod.key));
+            const extra = inSets.length ? `Sets: ${inSets.map((set) => set.name).join(", ")}` : "";
+            return (
+              <div key={mod.key} role="row" data-testid="game-mod" className={`gm-row${mod.enabled ? "" : " gm-row--off"}${mod.mayNeedUpdate && mod.enabled ? " gm-row--warn" : ""}`}>
+                <div role="cell" className="gm-cell gm-cell--toggle">
+                  <Toggle
+                    on={mod.enabled}
+                    label={mod.enabled ? `Turn off ${mod.name}` : `Turn on ${mod.name}`}
+                    disabled={busy === mod.key}
+                    onChange={(on) => act(mod.key, () => window.gamesAPI.setEnabled(detail.id, mod.key, on))}
+                  />
+                </div>
+                <div role="cell" className="gm-cell gm-cell--name">
+                  <ModNameCell
+                    gameId={detail.id}
+                    mod={mod}
+                    extra={extra}
+                    badge={
+                      update ? (
+                        <Badge
+                          tone="success"
+                          data-testid="update-badge"
+                          data-tip={`${update.fromVersion || "?"} → ${update.toVersion || "newer"}${mod.mayNeedUpdate ? ". It changes the game's code and is older than the game's latest update" : ""}`}
+                        >
+                          Update available
+                        </Badge>
+                      ) : mod.mayNeedUpdate ? (
+                        <Badge tone="warning" data-tip="It changes the game's code and is older than the game's latest update">
+                          May need updating
+                        </Badge>
+                      ) : null
+                    }
+                  />
+                </div>
+                <div role="cell" className="gm-cell gm-cell--area">
+                  {mod.areas.length ? mod.areas.map((a) => a.area).join(", ") : (mod.where ?? "Game folder")}
+                </div>
+                <div role="cell" className="gm-cell gm-cell--added">
+                  {mod.installedAt ? shortDate(mod.installedAt) : "-"}
+                </div>
+                <div role="cell" className="gm-cell gm-cell--actions">
+                  {confirming === mod.key ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        aria-label={`Delete ${mod.name}`}
+                        data-tip={mod.managed ? "Click again to delete it: what it replaced comes back" : "Click again to delete it from the game's folders"}
+                        onClick={() => {
+                          setConfirming(null);
+                          act(mod.key, () => window.gamesAPI.remove(detail.id, mod.key));
+                        }}
+                      >
+                        Delete?
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {update && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className={`gm-iconbtn${updating === mod.key ? " gm-iconbtn--on" : ""}`}
+                          data-testid="update-mod"
+                          data-tip={
+                            updating === mod.key ? "Updating..." : update.website ? "Its author only allows downloads from CurseForge's website" : `Update to ${update.toVersion || update.toName}`
+                          }
+                          aria-label={`Update ${mod.name}`}
+                          icon={<Download size={16} aria-hidden="true" />}
+                          onClick={() => {
+                            if (!updating) onUpdate(update);
+                          }}
+                        />
+                      )}
+                      {mod.canUndo && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="gm-iconbtn"
+                          data-testid="undo-update"
+                          data-tip="Undo the update: put back the copy from before"
+                          aria-label={`Undo the update to ${mod.name}`}
+                          icon={<Undo2 size={16} aria-hidden="true" />}
+                          onClick={() => onUndo(mod)}
+                        />
+                      )}
+                      <SetMenu
+                        mod={mod}
+                        sets={sets}
+                        onMember={(setId, member) => setsApi.member(setId, mod.key, member)}
+                        onCreate={async (name) => {
+                          await setsApi.create(name, mod.key);
+                        }}
+                      />
+                      <Menu
+                        floating
+                        label={`More for ${mod.name}`}
+                        triggerClassName="ui-button ui-button--ghost ui-button--sm gm-iconbtn"
+                        trigger={<MoreHorizontal size={16} aria-hidden="true" />}
+                        items={[
+                          {
+                            label: mod.enabled ? "Turn off" : "Turn on",
+                            icon: <Power size={14} aria-hidden="true" />,
+                            disabled: busy === mod.key,
+                            onSelect: () => act(mod.key, () => window.gamesAPI.setEnabled(detail.id, mod.key, !mod.enabled)),
+                          },
+                          ...(update
+                            ? [{ label: `Update to ${update.toVersion || update.toName}`, icon: <Download size={14} aria-hidden="true" />, disabled: Boolean(updating), onSelect: () => onUpdate(update) }]
+                            : []),
+                          ...(mod.canUndo ? [{ label: "Undo the update", icon: <Undo2 size={14} aria-hidden="true" />, onSelect: () => onUndo(mod) }] : []),
+                          "separator" as const,
+                          {
+                            label: mod.managed ? "Delete this mod" : "Delete from the game's folders",
+                            icon: <Trash2 size={14} aria-hidden="true" />,
+                            danger: true,
+                            onSelect: () => setConfirming(mod.key),
+                          },
+                        ]}
+                      />
+                    </>
                   )}
                 </div>
-                <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 3 }}>
-                  {mod.managed
-                    ? [
-                        PROVIDERS[mod.source?.provider ?? "file"] ?? mod.source?.provider,
-                        mod.version ? `version ${mod.version}` : "",
-                        mod.areas.map((a) => `${a.count} in ${a.area}`).join(", "),
-                        mod.plugins.length ? `plugins: ${mod.plugins.join(", ")}` : "",
-                        mod.installedAt ? `installed ${shortDate(mod.installedAt)}` : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" • ")
-                    : [`In ${mod.where}`, PROVIDERS.hand, mod.since ? `changed ${shortDate(mod.since)}` : ""].filter(Boolean).join(" • ")}
-                </div>
-                {mod.notes.slice(0, 2).map((line) => (
-                  <div key={line} style={{ color: "var(--color-warning-text)", fontSize: 11, marginTop: 2 }}>
-                    {line}
-                  </div>
-                ))}
               </div>
-              <SetMenu
-                mod={mod}
-                sets={sets}
-                onMember={(setId, member) => setsApi.member(setId, mod.key, member)}
-                onCreate={async (name) => {
-                  await setsApi.create(name, mod.key);
-                }}
-              />
-              {newer.has(mod.key) && (
-                <IconButton
-                  tip={
-                    updating === mod.key
-                      ? "Updating..."
-                      : newer.get(mod.key)!.website
-                        ? "Its author only allows downloads from CurseForge's website"
-                        : `Update to ${newer.get(mod.key)!.toVersion || newer.get(mod.key)!.toName}`
-                  }
-                  label={`Update ${mod.name}`}
-                  testId="update-mod"
-                  variant={updating === mod.key ? "ready" : ""}
-                  onClick={() => {
-                    if (!updating) onUpdate(newer.get(mod.key)!);
-                  }}
-                >
-                  <DownloadIcon size={18} />
-                </IconButton>
-              )}
-              {mod.canUndo && (
-                <IconButton tip="Undo the update: put back the copy from before" label={`Undo the update to ${mod.name}`} testId="undo-update" onClick={() => onUndo(mod)}>
-                  <ResetIcon size={18} />
-                </IconButton>
-              )}
-              <IconButton
-                tip={confirming === mod.key ? "Click again to delete it" : mod.managed ? "Delete this mod (what it replaced comes back)" : "Delete this from the game's folders"}
-                label={`Delete ${mod.name}`}
-                variant={confirming === mod.key ? "confirming" : ""}
-                onClick={() => {
-                  if (confirming !== mod.key) {
-                    setConfirming(mod.key);
-                    return;
-                  }
-                  setConfirming(null);
-                  act(mod.key, () => window.gamesAPI.remove(detail.id, mod.key));
-                }}
-              >
-                <BinIcon size={18} />
-              </IconButton>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

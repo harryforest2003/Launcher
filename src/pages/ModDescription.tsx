@@ -1,5 +1,8 @@
 import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useMemo, useState } from "react";
+import { Clock, Download, ExternalLink, Heart } from "lucide-react";
+import { Badge, Button, EmptyState, Monogram, Notice, Skeleton, Tabs } from "../components/ui";
+import "./discover.css";
 import InstallToInstance from "../components/InstallToInstance";
 import Sidebar from "../components/MCSidebar";
 import { descriptionHtml } from "../utils/projectDescription";
@@ -17,6 +20,17 @@ type Props = {
   goLibrary: () => void;
   goSkinSelector: () => void;
   goSettings: () => void;
+};
+
+type Version = {
+  id: string; name?: string; version_number?: string; version_type?: string;
+  game_versions?: string[]; loaders?: string[]; downloads?: number; date_published?: string;
+};
+type Project = {
+  id?: string | number; title?: string; description?: string; body?: string; icon?: string | null;
+  authors?: string[]; type: string; downloads?: number; followers?: number; created?: string; updated?: string;
+  minecraftVersions?: string[]; loaders?: string[]; installable?: boolean; url?: string; website?: string;
+  gallery?: (string | { url?: string; thumbnailUrl?: string })[]; versions?: Version[];
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -39,11 +53,11 @@ function ModDescription({
   goSkinSelector,
   goSettings,
 }: Props) {
-  const [mod, setMod] = useState<any>(null);
+  const [mod, setMod] = useState<Project | null>(null);
   const [tab, setTab] = useState<"desc" | "versions" | "gallery">("desc");
 
   
-  const [versions, setVersions] = useState<any[]>([]);
+  const [versions, setVersions] = useState<Version[]>([]);
   const [failed, setFailed] = useState(false);
   // Why it failed, when the launcher knows (CurseForge busy, say).
   const [failReason, setFailReason] = useState<string | null>(null);
@@ -105,25 +119,8 @@ function ModDescription({
     [source, mod]
   );
 
-  if (failed) {
-    return (
-      <div style={{ color: "var(--color-text)", padding: 40 }}>
-        <p style={{ color: "var(--color-danger-text)", marginBottom: 16 }}>
-          {failReason ?? "This project could not be loaded. Check your connection."}
-        </p>
-        <button className="sidebar-button" onClick={onBack}>← Back</button>
-      </div>
-    );
-  }
-
-  if (!mod) {
-    return (
-      <div style={{ color: "var(--color-text)", padding: 40 }}>Loading...</div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", height: "100vh", background: "var(--color-bg)", color: "var(--color-text)" }}>
+  const shell = (children: React.ReactNode) => (
+    <div className="app-screen">
       <Sidebar
         currentPage="discover"
         goHome={goHome}
@@ -135,275 +132,183 @@ function ModDescription({
         showBack
         onBack={onBack}
       />
-
-      {/* MAIN CONTENT */}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", padding: 25, gap: 20, boxSizing: "border-box" }}>
-        {/* LEFT CONTENT, with the logo centred behind it */}
-        <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex" }}>
+      <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
         <BackgroundLogo />
-        <div style={{ flex: 1, minWidth: 0, overflowY: "auto", overflowX: "hidden", position: "relative" }}>
-
-	  {/* SUMMARY */}
-	  <div
-	    style={{
-	      display: "flex",
-	      gap: 20,
-	      background: "var(--color-surface)",
-	      padding: 20,
-	      borderRadius: 12,
-	      border: "1px solid var(--color-border)",
-	      alignItems: "center",
-	    }}
-	  >
-	    {mod.icon ? (
-	      <img
-	        src={mod.icon}
-	        alt=""
-	        style={{
-	          width: 110,
-	          height: 110,
-	          borderRadius: 16,
-	          flexShrink: 0,
-	        }}
-	      />
-	    ) : null}
-
-	    <div style={{ minWidth: 0 }}>
-	      <h1
-	        style={{
-	          margin: 0 }}
-	      >
-	        {mod.title}
-	      </h1>
-
-	      <p style={{ color: "var(--color-text-muted)", marginTop: 6 }}>
-	        {mod.authors?.join(", ") || ""}
-	      </p>
-
- 	     <span
-	        style={{
-	          display: "inline-block",
-	          marginTop: 10,
-	          padding: "4px 10px",
-	          borderRadius: 8,
-	          background:
-	            source === "curseforge"
-	              ? "var(--color-warning-solid)"
-	              : "var(--color-success-solid)",
-	          fontSize: 12,
-	          fontWeight: 700,
-	        }}
-	      >
-	        {source === "curseforge"
-	          ? "CURSEFORGE"
-	          : "MODRINTH"}
-	      </span>
-
-	      <p
-	        style={{
-	          marginTop: 14,
-	          color: "var(--color-text-secondary)",
-	        }}
-	      >
-	        {mod.description}
-	      </p>
-	    </div>
-	  </div>
-
-          {/* TABS */}
-          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-            <button onClick={() => setTab("desc")} className="sidebar-button">
-              Description
-            </button>
-            <button onClick={() => setTab("versions")} className="sidebar-button">
-              Versions
-            </button>
-            <button onClick={() => setTab("gallery")} className="sidebar-button">
-              Gallery
-            </button>
-          </div>
-
-          {/* TAB CONTENT */}
-          <div style={{ marginTop: 20 }}>
-
-            {/* DESCRIPTION */}
-            {tab === "desc" && (
-              <div style={{ color: "var(--color-text-secondary)", lineHeight: 1.7, overflowX: "hidden", wordBreak: "break-word"}}>
-                <div
-                  className="mod-description"
-                  onClick={followLink}
-                  dangerouslySetInnerHTML={{ __html: body }}
-                />
-              </div>
-            )}
-
-            {/* VERSIONS */}
-            {tab === "versions" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {versions.map((v: any) => (
-                  <div
-                    key={v.id}
-                    style={{
-                      background: "var(--color-surface-sunken)",
-                      padding: 12,
-                      borderRadius: 10,
-                      border: "1px solid var(--color-border)",
-                    }}
-                  >
-                    <h4 style={{ color: "var(--color-accent-text)" }}>
-                      {v.name || v.version_number}
-                    </h4>
-
-                    <p>Type: {v.version_type}</p>
-                    <p>Game Version: {v.game_versions?.join(", ")}</p>
-                    <p>Loaders: {v.loaders?.join(", ")}</p>
-                    <p>Downloads: {v.downloads ?? "N/A"}</p>
-                    <p>Published: {new Date(v.date_published).toLocaleDateString()}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* GALLERY */}
-            {tab === "gallery" && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-                {(mod.gallery || []).map((img: any, i: number) => (
-                  <img
-                    key={i}
-                    src={img.thumbnailUrl || img.url || img}
-                    style={{
-                      width: "100%",
-                      borderRadius: 10,
-                      border: "1px solid var(--color-border)",
-                    }}
-                  />
-                ))}
-              </div>
-            )}
-
-          </div>
-        </div>
-        </div>
-
-        {/* RIGHT SIDEBAR */}
-
-	<div
-	  style={{
-	    position: "relative",
-	    width: 320,
-	    flexShrink: 0,
-	    background: "var(--color-surface)",
-	    borderRadius: 12,
-	    padding: 20,
-	    border: "1px solid var(--color-border)",
-	    height: "fit-content",
-	  }}
-	>
-
-	{mod.type !== "modpack" && (
-	  <div style={{ marginBottom: 16 }}>
-	    <InstallToInstance
-	      source={source}
-	      projectId={projectId}
-	      name={mod.title}
-	      icon={mod.icon}
-	      type={mod.type}
-	      installable={mod.installable !== false}
-	      url={mod.url}
-	    />
-	  </div>
-	)}
-
-	<h3>
-	Compatibility
-	</h3>
-
-	<p style={{ color: "var(--color-text-muted)" }}>
-	Minecraft Versions
-	</p>
-
-	<p>
-	{mod.minecraftVersions?.join(", ") || "Unknown"}
-	</p>
-
-	<p
-	style={{
-	marginTop:16,
-	color:"var(--color-text-muted)"
-	}}
-	>
-	Loaders
-	</p>
-
-	<p>
-	{mod.type === "mod" || mod.type === "modpack"
-	  ? mod.loaders?.join(", ") || "Unknown"
-	  : "None needed"}
-	</p>
-
-	<hr
-	style={{
-	margin:"20px 0",
-	borderColor:"var(--color-border)"
-	}}
-	/>
-
-	<p><b>Downloads</b></p>
-	<p>{mod.downloads?.toLocaleString()}</p>
-
-	<p><b>Type</b></p>
-	<p>{TYPE_LABELS[mod.type] ?? mod.type}</p>
-
-	<p><b>Followers</b></p>
-	<p>{mod.followers ?? "Unknown"}</p>
-
-	<p><b>Created</b></p>
-	<p>
-        {mod.created
-    	  ? new Date(mod.created).toLocaleDateString()
-    	  : "Unknown"}
-	</p>
-
-	<p><b>Updated</b></p>
-
-	<p>
-	{mod.updated
-   	  ? new Date(mod.updated).toLocaleDateString()
-  	  : "Unknown"}
-	</p>
-
-	<p><b>Authors</b></p>
-
-	<p>
-	{mod.authors?.join(", ") || "Unknown"}
-	</p>
-
-	<p><b>Source</b></p>
-
-	<p>
-	{source === "curseforge"
-	? "CurseForge"
-	: "Modrinth"}
-	</p>
-
-	<p><b>Website</b></p>
-
-	<a
-	href={
-          mod.website || mod.url || "#"
-	}
-	target="_blank"
-	style={{
-	color:"var(--color-info-text)"
-	}}
-	>
-	Open Project
-	</a>
-
-	</div>
-
+        <div className="pd-page">{children}</div>
       </div>
     </div>
+  );
+
+  if (failed) {
+    return shell(
+      <Notice tone="danger" actions={<Button size="sm" onClick={onBack}>Back</Button>}>
+        {failReason ?? "This project could not be loaded. Check your connection."}
+      </Notice>
+    );
+  }
+
+  if (!mod) {
+    return shell(
+      <div className="pd-loading" aria-busy="true" aria-label="Loading project">
+        <Skeleton shape="block" height={132} />
+        <Skeleton lines={5} />
+      </div>
+    );
+  }
+
+  const siteName = source === "curseforge" ? "CurseForge" : "Modrinth";
+  const date = (value?: string) => (value ? new Date(value).toLocaleDateString() : "Unknown");
+  const gameVersions: string[] = mod.minecraftVersions ?? [];
+  const recent = gameVersions.slice(-8).reverse();
+  const loaders: string[] = mod.loaders ?? [];
+  const website = mod.website || mod.url;
+
+  return shell(
+    <>
+      {/* HERO */}
+      <header className="pd-hero">
+        <div className="pd-icon">
+          {mod.icon ? <img src={mod.icon} alt="" /> : <Monogram name={mod.title ?? "Project"} size={72} />}
+        </div>
+
+        <div className="pd-titles">
+          <div className="pd-titleline">
+            <h1 className="pd-title">{mod.title}</h1>
+            <Badge tone="accent">{siteName}</Badge>
+            <Badge>{TYPE_LABELS[mod.type] ?? mod.type}</Badge>
+          </div>
+          {!!mod.authors?.length && <div className="pd-by">by <strong>{mod.authors.join(", ")}</strong></div>}
+          <p className="pd-summary">{mod.description}</p>
+          <div className="pd-stats">
+            <span className="pd-stat"><Download size={14} aria-hidden="true" /><strong>{(mod.downloads ?? 0).toLocaleString()}</strong> downloads</span>
+            {mod.followers != null && <span className="pd-stat"><Heart size={14} aria-hidden="true" /><strong>{Number(mod.followers).toLocaleString()}</strong> followers</span>}
+            {mod.updated && <span className="pd-stat"><Clock size={14} aria-hidden="true" />Updated {date(mod.updated)}</span>}
+          </div>
+        </div>
+
+        <div className="pd-hero__action">
+          {mod.type !== "modpack" && (
+            <InstallToInstance
+              source={source}
+              projectId={projectId}
+              name={mod.title ?? ""}
+              icon={mod.icon}
+              type={mod.type}
+              installable={mod.installable !== false}
+              url={mod.url}
+              emphasis="solid"
+            />
+          )}
+        </div>
+      </header>
+
+      <div className="pd-body">
+        <section className="pd-main">
+          <Tabs
+            label="Project sections"
+            idBase="project"
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { value: "desc", label: "Description" },
+              { value: "versions", label: "Versions", count: versions.length || undefined },
+              { value: "gallery", label: "Gallery", count: mod.gallery?.length || undefined },
+            ]}
+          />
+
+          <div className="pd-panel" role="tabpanel" id={`project-panel-${tab}`}>
+            {tab === "desc" && (
+              <div className="pd-desc">
+                <div className="mod-description" onClick={followLink} dangerouslySetInnerHTML={{ __html: body }} />
+              </div>
+            )}
+
+            {tab === "versions" &&
+              (versions.length === 0 ? (
+                <EmptyState size="compact" title="No versions listed" body="Open the project's site to see its files." />
+              ) : (
+                <table className="pd-table">
+                  <thead>
+                    <tr>
+                      <th>Version</th>
+                      <th>Type</th>
+                      <th>Game version</th>
+                      <th>Loaders</th>
+                      <th className="pd-num">Downloads</th>
+                      <th className="pd-num">Published</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {versions.map((v) => (
+                      <tr key={v.id}>
+                        <td><span className="pd-vname">{v.name || v.version_number}</span></td>
+                        <td><Badge tone={v.version_type === "release" ? "success" : v.version_type === "beta" ? "warning" : "neutral"}>{v.version_type ?? "release"}</Badge></td>
+                        <td>{v.game_versions?.slice(-3).join(", ")}</td>
+                        <td>{v.loaders?.join(", ")}</td>
+                        <td className="pd-num">{v.downloads?.toLocaleString() ?? "N/A"}</td>
+                        <td className="pd-num">{date(v.date_published)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ))}
+
+            {tab === "gallery" &&
+              ((mod.gallery ?? []).length === 0 ? (
+                <EmptyState size="compact" title="No pictures yet" />
+              ) : (
+                <div className="pd-gallery">
+                  {(mod.gallery ?? []).map((img, i) => (
+                    <img key={i} className="pd-full" loading="lazy" alt="" src={typeof img === "string" ? img : img.thumbnailUrl || img.url} />
+                  ))}
+                </div>
+              ))}
+          </div>
+        </section>
+
+        {/* SIDE */}
+        <aside className="pd-side">
+          <div>
+            <h2>Compatibility</h2>
+            <p className="pd-label">Minecraft versions</p>
+            <div className="pd-chips">
+              {recent.length ? recent.map((v) => <Badge key={v}>{v}</Badge>) : <span className="pd-label">Unknown</span>}
+            </div>
+            {gameVersions.length > recent.length && (
+              <details>
+                <summary className="pd-label" style={{ cursor: "pointer", marginTop: "var(--space-2)" }}>
+                  Show all {gameVersions.length}
+                </summary>
+                <p className="pd-allversions">{gameVersions.join(", ")}</p>
+              </details>
+            )}
+            <p className="pd-label" style={{ marginTop: "var(--space-3)" }}>Loaders</p>
+            <div className="pd-chips">
+              {mod.type === "mod" || mod.type === "modpack"
+                ? loaders.length ? loaders.map((l) => <Badge key={l} tone="accent">{l}</Badge>) : <span className="pd-label">Unknown</span>
+                : <span className="pd-label">None needed</span>}
+            </div>
+          </div>
+
+          <div>
+            <h2>Details</h2>
+            <dl className="pd-facts">
+              <dt>Downloads</dt><dd>{mod.downloads?.toLocaleString() ?? "Unknown"}</dd>
+              <dt>Followers</dt><dd>{mod.followers?.toLocaleString?.() ?? "Unknown"}</dd>
+              <dt>Created</dt><dd>{date(mod.created)}</dd>
+              <dt>Updated</dt><dd>{date(mod.updated)}</dd>
+              <dt>Source</dt><dd>{siteName}</dd>
+              <dt>Website</dt>
+              <dd>
+                <a href={website || "#"} target="_blank" rel="noreferrer">
+                  Open project <ExternalLink size={13} aria-hidden="true" />
+                </a>
+              </dd>
+            </dl>
+          </div>
+        </aside>
+      </div>
+    </>
   );
 }
 

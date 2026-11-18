@@ -13,7 +13,7 @@ const { addonCheck, missingDependencies } = require("./modUpdates.cjs");
 const { mixinFormatProblems } = require("./mixinFormat.cjs");
 const { requiredJava } = require("./javaRuntime.cjs");
 const { downloadFile } = require("./net.cjs");
-const { choosesGc, parseJvmArgs } = require("./settings.cjs");
+const { choosesGc, parseJvmArgs, javaTuningOf } = require("./settings.cjs");
 
 const run = promisify(execFile);
 
@@ -348,15 +348,19 @@ function memoryFor(modCount, hw) {
     return { wanted: Math.min(wanted, most), most };
 }
 
-function javaChanges(instance, globalJvmArgs, modCount, hw) {
+function javaChanges(instance, globalJvmArgs, modCount, hw, globalJavaTuning) {
     const changes = [];
     const ram = Number(instance.ram) || 4;
     const { wanted, most } = memoryFor(modCount, hw);
     if (ram > most) changes.push({ key: "ram", label: "Memory", from: `${ram} GB`, to: `${most} GB`, value: most, reason: `more than half your computer's ${hw.memoryGb} GB leaves too little for everything else` });
     else if (ram < wanted) changes.push({ key: "ram", label: "Memory", from: `${ram} GB`, to: `${wanted} GB`, value: wanted, reason: `${modCount} mods need more room` });
 
-    // Garbage collection needs nothing: every launch uses the Minecraft Launcher's settings
-    // unless the instance chooses its own (settings.cjs withDefaultGc).
+    // Garbage collection: the Performance Java settings (settings.cjs launchJvmArgs), unless
+    // the instance picks its own garbage collector.
+    const tuning = javaTuningOf(instance.javaTuning || globalJavaTuning);
+    if (tuning !== "performance" && !choosesGc(parseJvmArgs(instance.jvmArgs || globalJvmArgs))) {
+        changes.push({ key: "javaTuning", label: "Java flags", from: "Standard", to: "Performance", value: "performance", reason: "tuned garbage collection and a bigger code cache, for fewer stutters" });
+    }
     return changes;
 }
 
@@ -398,7 +402,7 @@ const megabytes = (bytes) => `${Math.max(1, Math.round(bytes / 1024 / 1024))} MB
  * is { id, state: "fix" | "tip" | "ok", title, detail, list, action }: "fix" has a change
  * that should help, "tip" is advice (or an optional change), "ok" needs nothing.
  */
-async function check(instance, folder, { running = false, globalJvmArgs = "" } = {}) {
+async function check(instance, folder, { running = false, globalJvmArgs = "", globalJavaTuning } = {}) {
     const hw = await hardware();
     const mods = await modsIn(instanceMods.modsDir(folder));
     const enabledMods = mods.filter((mod) => mod.enabled);
@@ -459,14 +463,14 @@ async function check(instance, folder, { running = false, globalJvmArgs = "" } =
     );
 
     // Java.
-    const java = javaChanges(instance, globalJvmArgs, enabledMods.length, hw);
+    const java = javaChanges(instance, globalJvmArgs, enabledMods.length, hw, globalJavaTuning);
     items.push(
         java.length
             ? {
                   id: "java",
                   state: "fix",
                   title: "Java settings",
-                  detail: "How much memory Minecraft has: too little and it stutters, too much and the rest of your computer slows down.",
+                  detail: "How Java runs Minecraft: too little memory and it stutters, too much and the rest of your computer slows down. Picture quality doesn't change.",
                   list: java.map((change) => ({ label: change.label, text: `${change.from} → ${change.to}${change.reason ? ` (${change.reason})` : ""}` })),
                   action: "Use these",
               }
@@ -475,7 +479,7 @@ async function check(instance, folder, { running = false, globalJvmArgs = "" } =
                   state: "ok",
                   title: "Java settings",
                   detail: `${instance.ram} GB of memory, with ${
-                      choosesGc(parseJvmArgs(instance.jvmArgs || globalJvmArgs)) ? "your own garbage collection settings" : "the Minecraft Launcher's garbage collection, for fewer stutters"
+                      choosesGc(parseJvmArgs(instance.jvmArgs || globalJvmArgs)) ? "your own garbage collection settings" : "the Performance Java settings, for fewer stutters"
                   }.`,
               }
     );
@@ -561,7 +565,7 @@ function lastOptimise(folder) {
  * the backup, first value kept, so Undo puts back how things were before any of them.
  * -> { done: [text], skipped: [{ name, reason }] }
  */
-async function apply(instance, folder, ids, { globalJvmArgs = "", updateInstance, onProgress } = {}) {
+async function apply(instance, folder, ids, { globalJvmArgs = "", globalJavaTuning, updateInstance, onProgress } = {}) {
     const hw = await hardware();
     const backup = { options: {}, iris: null, java: {}, modsAdded: [], modsDisabled: [], smartFps: null, ...(readBackup(folder) ?? {}), time: null };
     const done = [];
@@ -637,7 +641,7 @@ async function apply(instance, folder, ids, { globalJvmArgs = "", updateInstance
 
     if (ids.includes("java")) {
         const mods = await modsIn(instanceMods.modsDir(folder));
-        const changes = javaChanges(instance, globalJvmArgs, mods.filter((mod) => mod.enabled).length, hw);
+        const changes = javaChanges(instance, globalJvmArgs, mods.filter((mod) => mod.enabled).length, hw, globalJavaTuning);
         if (changes.length) {
             const patch = Object.fromEntries(changes.map((change) => [change.key, change.value]));
             for (const key of Object.keys(patch)) if (!(key in backup.java)) backup.java[key] = instance[key] ?? null;

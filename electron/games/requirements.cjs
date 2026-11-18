@@ -67,6 +67,7 @@ const FRAMEWORKS = {
         { name: "redscript", nexus: "1511", aliases: /redscript/i, needs: (f) => /^r6\/scripts\/.+\.reds$/i.test(f), installed: (has) => has("engine/tools/scc.exe") || has("engine/tools/scc") },
         { name: "RED4ext", nexus: "2380", aliases: /red4ext/i, needs: (f) => /^red4ext\/plugins\/[^/]+\/$/i.test(f), installed: (has) => has("red4ext/RED4ext.dll") },
         { name: "ArchiveXL", nexus: "4198", aliases: /archivexl/i, needs: (f) => /^archive\/pc\/mod\/[^/]+\.xl$/i.test(f), installed: (has) => has("red4ext/plugins/ArchiveXL") },
+        { name: "archive-loader", nexus: "33616", aliases: /archive[- ]loader/i, needs: (f) => /^archive-loader\/mods\/enabled\/[^/]+\.archive$/i.test(f), installed: (has) => has("archive-loader/bin/archive-loader") },
         { name: "TweakXL", nexus: "4197", aliases: /tweakxl/i, needs: (f) => /^r6\/tweaks\/.+\.(yaml|yml|tweak)$/i.test(f), installed: (has) => has("red4ext/plugins/TweakXL") },
     ],
     gtav: [
@@ -197,7 +198,7 @@ async function missing(gameId) {
     if (root) {
         const owners = new Map();
         for (const mod of state.mods.filter((m) => m.enabled)) for (const file of mod.files) if (file.base === "game") owners.set(file.to, mod.name);
-        const gameFiles = ["", "scripts", "Data/SKSE/Plugins", "Data/F4SE/Plugins", "bin/x64/plugins/cyber_engine_tweaks/mods", "r6/scripts", "r6/tweaks", "red4ext/plugins", "archive/pc/mod", "Mods"].flatMap((rel) =>
+        const gameFiles = ["", "scripts", "Data/SKSE/Plugins", "Data/F4SE/Plugins", "bin/x64/plugins/cyber_engine_tweaks/mods", "r6/scripts", "r6/tweaks", "red4ext/plugins", "archive/pc/mod", "archive-loader/mods/enabled", "Mods"].flatMap((rel) =>
             rel ? filesUnder(root, rel, rel === "Mods" ? 1 : 3) : fs.existsSync(root) ? fs.readdirSync(root).filter((n) => fs.statSync(path.join(root, n)).isFile()) : []
         );
         for (const fw of frameworks) {

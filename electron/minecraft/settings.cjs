@@ -16,6 +16,7 @@ const DEFAULTS = {
     defaultRam: 4,
     javaPath: "",              // "" means automatic: the right Java for each version
     jvmArgs: "",
+    javaTuning: "performance", // "performance" (tuned Java flags) or "standard" (the Minecraft Launcher's)
     closeOnLaunch: false,
     showSnapshots: false,
     cloudFolder: "",           // a synced folder (OneDrive, Dropbox, iCloud...)
@@ -116,6 +117,7 @@ function settingsFromPage(patch) {
     if ("javaPath" in clean) clean.javaPath = checkJavaPath(clean.javaPath);
     if ("cloudFolder" in clean) clean.cloudFolder = checkFolder(clean.cloudFolder);
     if ("jvmArgs" in clean) clean.jvmArgs = checkJvmArgs(clean.jvmArgs);
+    if ("javaTuning" in clean) clean.javaTuning = javaTuningOf(clean.javaTuning);
     if ("downloadConcurrency" in clean) {
         clean.downloadConcurrency = Math.max(1, Math.min(64, Math.round(Number(clean.downloadConcurrency)) || DEFAULTS.downloadConcurrency));
     }
@@ -314,11 +316,67 @@ const DEFAULT_GC_ARGS = [
     "-XX:G1HeapRegionSize=32M",
 ];
 
+/*
+ * The "Performance" Java settings, after brucethemoose's Minecraft performance flags
+ * benchmarks: G1 tuned for short, frequent pauses (fewer stutters), Java free to compile
+ * the game's largest methods, and System.gc() calls from mods ignored. They change only how
+ * Java runs the game, never what it draws. Flags newer Java has removed are left out (an
+ * unknown flag stops Java from starting); all of these run on Java 8 to 25.
+ */
+const PERFORMANCE_GC_ARGS = [
+    "-XX:+UnlockExperimentalVMOptions",
+    "-XX:+UseG1GC",
+    "-XX:MaxGCPauseMillis=37",
+    "-XX:G1HeapRegionSize=16M",
+    "-XX:G1NewSizePercent=23",
+    "-XX:G1ReservePercent=20",
+    "-XX:SurvivorRatio=32",
+    "-XX:G1MixedGCCountTarget=3",
+    "-XX:G1HeapWastePercent=20",
+    "-XX:InitiatingHeapOccupancyPercent=10",
+    "-XX:G1RSetUpdatingPauseTimePercent=0",
+    "-XX:MaxTenuringThreshold=1",
+    "-XX:G1ConcMarkStepDurationMillis=5.0",
+    "-XX:GCTimeRatio=99",
+    "-XX:+PerfDisableSharedMem",
+    "-XX:+DisableExplicitGC",
+    "-XX:-DontCompileHugeMethods",
+];
+
+// Java 9 and later (Minecraft 1.17 on) also take these: a code cache big enough for large
+// modpacks (when it fills, Java stops compiling and the game crawls).
+const PERFORMANCE_JAVA9_ARGS = [
+    "-XX:G1SATBBufferEnqueueingThresholdPercent=30",
+    "-XX:ReservedCodeCacheSize=400M",
+    "-XX:NonNMethodCodeHeapSize=12M",
+    "-XX:ProfiledCodeHeapSize=194M",
+    "-XX:NonProfiledCodeHeapSize=194M",
+];
+
+const JAVA_TUNINGS = new Set(["standard", "performance"]);
+
+/* "standard" or "performance" from a saved value; anything else is the default. */
+const javaTuningOf = (value) => (JAVA_TUNINGS.has(value) ? value : DEFAULTS.javaTuning);
+
 /* Whether these Java arguments pick a garbage collector (-XX:+UseZGC and the like). */
 const choosesGc = (args) => args.some((arg) => /^-XX:[+-]Use\w*GC$/.test(arg));
 
 /* A launch's Java arguments: the default garbage collection first, so any of the person's own come after and win. */
 const withDefaultGc = (args) => (choosesGc(args) ? args : [...DEFAULT_GC_ARGS, ...args]);
+
+/*
+ * A launch's Java arguments for a tuning ("standard" or "performance"), on the Java the
+ * Minecraft version runs on (javaMajor), with ram GB of memory. The person's own arguments
+ * come last and win; if they pick a garbage collector, neither set is used. Performance also
+ * starts the heap at full size, so Java never pauses the game to grow it.
+ */
+function launchJvmArgs(own, { tuning, javaMajor = 8, ram } = {}) {
+    if (choosesGc(own)) return own;
+    if (javaTuningOf(tuning) !== "performance") return [...DEFAULT_GC_ARGS, ...own];
+    const gb = Number(ram) > 0 ? Math.floor(Number(ram)) : 4;
+    const fullHeap = own.some((arg) => arg.startsWith("-Xms")) ? [] : [`-Xms${gb}G`];
+    return [...fullHeap, ...PERFORMANCE_GC_ARGS, ...(Number(javaMajor) >= 9 ? PERFORMANCE_JAVA9_ARGS : []), ...own];
+}
 
 module.exports = {
     readSettings,
@@ -334,6 +392,10 @@ module.exports = {
     parseJvmArgs,
     choosesGc,
     withDefaultGc,
+    launchJvmArgs,
+    javaTuningOf,
     DEFAULT_GC_ARGS,
+    PERFORMANCE_GC_ARGS,
+    PERFORMANCE_JAVA9_ARGS,
     DEFAULTS,
 };

@@ -1,12 +1,12 @@
 import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useRef, useState } from "react";
-import { SlidersHorizontal } from "lucide-react";
-import { Button, SearchField, Select, Tabs } from "../components/ui";
+import { Clock, Download, ExternalLink, KeyRound, SlidersHorizontal } from "lucide-react";
+import { Badge, Button, EmptyState, Monogram, Notice, ProgressBar, SearchField, Select, Skeleton, Tabs } from "../components/ui";
 import "./discover.css";
 import InstallToInstance from "../components/InstallToInstance";
 import Sidebar from "../components/MCSidebar";
 import Pagination from "../components/Pagination";
-import SourceDownloads from "../components/SourceDownloads";
+import DiscoverRow from "./DiscoverRow";
 import { useScrollMemory } from "./useScrollMemory";
 
 type Props = {
@@ -56,6 +56,25 @@ const TYPE_LABELS: Record<string, string> = {
   datapack: "Data Pack",
   resourcepack: "Resource Pack",
 };
+
+const SITE_NAMES: Record<string, string> = { modrinth: "Modrinth", curseforge: "CurseForge" };
+
+const compact = (n: number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+
+// Loader, game versions and categories, where the listing carries them, else the filters the list is already narrowed by.
+function tags(item: CatalogItem & { loaders?: string[]; categories?: string[]; gameVersions?: string[] }, extra: string[] = []) {
+  const own = [...(item.loaders ?? []), ...(item.categories ?? []), ...(item.gameVersions ?? []).slice(-1)];
+  return [...new Set(own.length ? own : extra)].slice(0, 4);
+}
+
+function ago(iso: string) {
+  const days = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 86400000));
+  if (Number.isNaN(days)) return "";
+  if (days < 1) return "Today";
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (days < 365) return `${Math.round(days / 30)} mo ago`;
+  return `${Math.round(days / 365)} yr ago`;
+}
 
 // Preserve browsing context when opening a project or switching launcher pages.
 const discoverContext = {
@@ -236,6 +255,7 @@ function MCDiscover({
 
   const items = result?.items ?? [];
   const totals = result?.totals;
+  const narrowed = [loader, version].filter((v) => !v.startsWith("Any "));
   const goToPage = (next: number) => setChosenPage({ filterKey, page: next });
 
   // The banner above says why CurseForge is off, so it isn't repeated below.
@@ -265,79 +285,85 @@ function MCDiscover({
       <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
       <BackgroundLogo />
       <div ref={discoverScroll} className="app-page dc-workspace">
-        <header className="page-header"><h1 className="page-title">Discover Content</h1></header>
+        {/* One sticky toolbar: search, filters and the count, then the content types */}
+        <div className="dc-bar">
+          <div className="dc-bar__row">
+            <SearchField wrapperClassName="dc-searchfield" label="Search Minecraft mods and modpacks" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Minecraft mods" />
+            <div className="dc-filters" ref={filtersRef}>
+              <Button
+                variant={activeFilters ? "primary" : "secondary"}
+                icon={<SlidersHorizontal size={16} aria-hidden="true" />}
+                aria-expanded={filtersOpen}
+                aria-controls="discover-filters"
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                Filters
+                {activeFilters > 0 && <span className="dc-filters__count">{activeFilters}</span>}
+              </Button>
 
-        {/* SEARCH */}
-        <SearchField label="Search mods and modpacks" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Modrinth and CurseForge…" />
+              {filtersOpen && (
+                <div id="discover-filters" role="group" aria-label="Filters" className="dc-filters__panel" style={{ left: "auto", right: 0 }}>
+                  <label className="dc-field">
+                    <span>Loader</span>
+                    <Select value={loader} onChange={(e) => setLoader(e.target.value)}>
+                      <option>Any Loader</option>
+                      <option>Fabric</option>
+                      <option>Forge</option>
+                      <option>NeoForge</option>
+                      <option>Quilt</option>
+                    </Select>
+                  </label>
 
-        {/* FILTERS (one button) and the content TABS, which share the rest of the row equally */}
-        <div className="dc-toolbar">
-          <div className="dc-filters" ref={filtersRef}>
-            <Button
-              variant={activeFilters ? "primary" : "secondary"}
-              icon={<SlidersHorizontal size={16} aria-hidden="true" />}
-              aria-expanded={filtersOpen}
-              aria-controls="discover-filters"
-              onClick={() => setFiltersOpen((open) => !open)}
-            >
-              Filters
-              {activeFilters > 0 && <span className="dc-filters__count">{activeFilters}</span>}
-            </Button>
+                  <label className="dc-field">
+                    <span>Minecraft version</span>
+                    <Select value={version} onChange={(e) => setVersion(e.target.value)}>
+                      <option>Any Version</option>
+                      {versions.map((v, i) => {
+                        const val = typeof v === "string" ? v : v.version || v.id;
+                        return <option key={i}>{val}</option>;
+                      })}
+                    </Select>
+                  </label>
 
-            {filtersOpen && (
-              <div id="discover-filters" role="group" aria-label="Filters" className="dc-filters__panel">
-                <label className="dc-field">
-                  <span>Loader</span>
-                  <Select value={loader} onChange={(e) => setLoader(e.target.value)}>
-                    <option>Any Loader</option>
-                    <option>Fabric</option>
-                    <option>Forge</option>
-                    <option>NeoForge</option>
-                    <option>Quilt</option>
-                  </Select>
-                </label>
+                  <label className="dc-field">
+                    <span>Source</span>
+                    <Select value={source} onChange={(e) => setSource(e.target.value)}>
+                      <option>Any Source</option>
+                      <option>Modrinth</option>
+                      <option>CurseForge</option>
+                    </Select>
+                  </label>
 
-                <label className="dc-field">
-                  <span>Minecraft version</span>
-                  <Select value={version} onChange={(e) => setVersion(e.target.value)}>
-                    <option>Any Version</option>
-                    {versions.map((v, i) => {
-                      const val = typeof v === "string" ? v : v.version || v.id;
-                      return <option key={i}>{val}</option>;
-                    })}
-                  </Select>
-                </label>
+                  <label className="dc-field">
+                    <span>Sort by</span>
+                    <Select value={sort} onChange={(e) => setSort(e.target.value)}>
+                      <option>Relevance</option>
+                      <option>Downloads</option>
+                      <option>Newest</option>
+                    </Select>
+                  </label>
 
-                <label className="dc-field">
-                  <span>Source</span>
-                  <Select value={source} onChange={(e) => setSource(e.target.value)}>
-                    <option>Any Source</option>
-                    <option>Modrinth</option>
-                    <option>CurseForge</option>
-                  </Select>
-                </label>
-
-                <label className="dc-field">
-                  <span>Sort by</span>
-                  <Select value={sort} onChange={(e) => setSort(e.target.value)}>
-                    <option>Relevance</option>
-                    <option>Downloads</option>
-                    <option>Newest</option>
-                  </Select>
-                </label>
-
-                <div className="dc-filters__actions">
-                  <Button size="sm" variant="ghost" onClick={resetFilters} disabled={!activeFilters}>
-                    Reset
-                  </Button>
-                  <Button size="sm" onClick={() => setFiltersOpen(false)}>
-                    Done
-                  </Button>
+                  <div className="dc-filters__actions">
+                    <Button size="sm" variant="ghost" onClick={resetFilters} disabled={!activeFilters}>
+                      Reset
+                    </Button>
+                    <Button size="sm" onClick={() => setFiltersOpen(false)}>
+                      Done
+                    </Button>
+                  </div>
                 </div>
+              )}
+            </div>
+            {totals && (
+              <div data-testid="page-summary" className="dc-bar__count">
+                {source !== "CurseForge" && `${compact(totals.modrinth)} on Modrinth`}
+                {source === "Any Source" && curseForgeReady && " • "}
+                {source !== "Modrinth" && curseForgeReady &&
+                  `${compact(totals.curseforge)}${totals.curseforgeCapped ? "+" : ""} on CurseForge`}
+                {` • Page ${result?.page.toLocaleString()} of ${result?.pageCount.toLocaleString()}`}
               </div>
             )}
           </div>
-
           <div className="dc-tabs">
             <Tabs
               label="Content type"
@@ -349,259 +375,137 @@ function MCDiscover({
           </div>
         </div>
 
-        {!curseForgeReady && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: 14,
-              borderRadius: 10,
-              background: "var(--color-warning-bg)",
-              border: "1px solid var(--color-warning-border)",
-              color: "var(--color-warning-text)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
-            <span>{curseForgeOffReason}</span>
-            <button className="sidebar-button" style={{ padding: "6px 12px", fontSize: 12 }} onClick={goSettings}>
-              Open Settings
-            </button>
-          </div>
-        )}
-
-        {/* MODPACK INSTALL FEEDBACK */}
-        {packError && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: 14,
-              borderRadius: 10,
-              background: "var(--color-danger-bg)",
-              border: "1px solid var(--color-danger-border)",
-              color: "var(--color-danger-text)",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {packError}
-          </div>
-        )}
-
-        {packResult && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: 14,
-              borderRadius: 10,
-              background: "var(--color-success-bg)",
-              border: "1px solid var(--color-success-border)",
-              color: "var(--color-success-text)",
-            }}
-          >
-            {packResult}
-          </div>
-        )}
-
-        {installingPack && packProgress && (
-          <div
-            style={{
-              marginTop: 16,
-              padding: 14,
-              borderRadius: 10,
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-            }}
-          >
-            <div style={{ color: "var(--color-accent-text)", marginBottom: 8 }}>
-              {packProgress.detail ?? packProgress.stage} ({packProgress.percent}%)
-            </div>
-
-            <div style={{ height: 6, background: "var(--color-surface-raised)", borderRadius: 3 }}>
-              <div
-                style={{
-                  width: `${packProgress.percent}%`,
-                  height: "100%",
-                  background: "var(--color-accent)", color: "var(--color-on-accent)",
-                  borderRadius: 3,
-                  transition: "width .2s",
-                }}
-              />
-            </div>
-
-            <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8 }}>
-              Downloading Minecraft, the loader and every mod in the pack.
-            </div>
-          </div>
-        )}
-
-        {[...warnings, ...(loadError ? [loadError] : [])].map((warning) => (
-          <div
-            key={warning}
-            style={{
-              marginTop: 16,
-              padding: 14,
-              borderRadius: 10,
-              background: "var(--color-warning-bg)",
-              border: "1px solid var(--color-warning-border)",
-              color: "var(--color-warning-text)",
-              fontSize: 13,
-            }}
-          >
-            {warning}
-          </div>
-        ))}
-
-        {/* PAGES */}
-        <div ref={listTop} style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-          {totals && (
-            <div data-testid="page-summary" style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-              {source !== "CurseForge" && `${totals.modrinth.toLocaleString()} on Modrinth`}
-              {source === "Any Source" && " • "}
-              {source !== "Modrinth" &&
-                `${totals.curseforge.toLocaleString()}${totals.curseforgeCapped ? "+" : ""} on CurseForge`}
-              {` • Page ${result?.page.toLocaleString()} of ${result?.pageCount.toLocaleString()}`}
-            </div>
+        <div className="dc-notices">
+          {packError && <Notice tone="danger" style={{ whiteSpace: "pre-wrap" }}>{packError}</Notice>}
+          {packResult && <Notice tone="success">{packResult}</Notice>}
+          {installingPack && packProgress && (
+            <Notice tone="info">
+              <div>{packProgress.detail ?? packProgress.stage} ({packProgress.percent}%)</div>
+              <ProgressBar value={packProgress.percent / 100} label="Modpack install progress" />
+              <div className="dc-note">Downloading Minecraft, the loader and every mod in the pack.</div>
+            </Notice>
           )}
-
-          {result && (
-            <Pagination page={result.page} pageCount={result.pageCount} disabled={loading} onChange={goToPage} />
-          )}
-
-          {source !== "Modrinth" && totals?.curseforgeCapped && (
-            <div data-testid="curseforge-limit" style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-              CurseForge only lets apps reach the first 10,000 results of a search. Search or filter to get to the rest.
-            </div>
-          )}
+          {[...warnings, ...(loadError ? [loadError] : [])].map((warning) => (
+            <Notice key={warning} tone="warning">{warning}</Notice>
+          ))}
         </div>
 
+        <div ref={listTop} />
         {/* LIST */}
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-          {loading ? (
-            <div>Loading...</div>
-          ) : items.length === 0 ? (
-            <div style={{ color: "var(--color-text-muted)", padding: 20 }}>
-              No {tab === "all" ? "content" : TAB_LABELS[tab].toLowerCase()} found
-              {search.trim() ? ` for "${search.trim()}"` : ""}.
-              {activeFilters > 0 && " Try clearing the filters."}
-            </div>
-          ) : (
-            items.map((item) => (
-              // Clicking anywhere on the card, other than its buttons, opens the project's page.
-              <div
-                key={`${item.source}-${item.id}`}
-                className="game-card"
-                data-testid="discover-card"
-                role="button"
-                tabIndex={0}
-                aria-label={`Open ${item.name}`}
-                onClick={() => openMod(item.source, item.id)}
-                onKeyDown={(event) => {
-                  if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
-                    event.preventDefault();
-                    openMod(item.source, item.id);
-                  }
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  minHeight: 100,
-                  padding: 12,
-                  cursor: "pointer",
-                }}
-              >
-                {/* ICON */}
-                <div
-                  style={{
-                    width: 70,
-                    height: 70,
-                    borderRadius: 10,
-                    overflow: "hidden",
-                    border: "1px solid var(--color-border)",
-                    flexShrink: 0,
-                  }}
-                >
-                  {/* Modrinth returns "" for projects with no icon, which
-                      makes the browser re-request the whole page. */}
-                  {item.icon ? (
-                    <img
-                      src={item.icon}
-                      alt=""
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  ) : null}
-                </div>
-
-                {/* TEXT */}
-                <div style={{ flex: 1, textAlign: "left" }}>
-                  <div style={{ fontWeight: 600, color: "var(--color-accent-text)" }}>
-                    {item.name}
-                  </div>
-
-                  <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                    {item.summary?.slice(0, 120)}
-                  </div>
-
-                  <div style={{ fontSize: 11, marginTop: 4 }}>
-                    {TYPE_LABELS[item.type] ?? item.type}
-                    {" • "}
-                    <SourceDownloads sources={item.sources} />
-                  </div>
-                </div>
-
-                {/* BUTTONS: using these (or what they open) doesn't open the card */}
-                <div
-                  style={{ display: "flex", gap: 8, flexShrink: 0, alignItems: "flex-start", cursor: "default" }}
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                >
-                  {item.type !== "modpack" && (
-                    <InstallToInstance
-                      source={item.source}
-                      projectId={item.id}
-                      name={item.name}
-                      icon={item.icon}
-                      type={item.type}
-                      installable={item.installable}
-                      url={item.url}
-                      alternatives={item.sources}
-                    />
-                  )}
-
-                  {item.type === "modpack" && item.installable === false && (
-                    <button
-                      className="sidebar-button"
-                      style={{ padding: "8px 12px" }}
-                      title="This author disabled third-party downloads"
-                      onClick={() => item.url && window.modAPI.openUrl(item.url).catch(() => {})}
-                    >
-                      Open Site
-                    </button>
-                  )}
-
-                  {item.type === "modpack" && item.installable !== false && (
-                    <button
-                      className="sidebar-button"
-                      style={{ padding: "8px 12px", background: "var(--color-accent)", color: "var(--color-on-accent)" }}
-                      disabled={!!installingPack}
-                      onClick={() => installModpack(item)}
-                      title="Creates a new instance with this pack's Minecraft version, loader and mods"
-                    >
-                      {installingPack === item.id ? "Installing..." : "Install"}
-                    </button>
-                  )}
-
-                </div>
+        {loading ? (
+          <div className="dc-list" aria-busy="true" aria-label="Loading results">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className="dc-skeleton">
+                <Skeleton shape="block" width={48} height={48} />
+                <Skeleton lines={2} />
+                <Skeleton width={100} />
+                <Skeleton width={84} height={32} shape="block" />
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            title={`No ${tab === "all" ? "content" : TAB_LABELS[tab].toLowerCase()} found${search.trim() ? ` for "${search.trim()}"` : ""}`}
+            body={activeFilters > 0 ? "Try clearing the filters." : "Try a different search."}
+            actions={activeFilters > 0 ? <Button size="sm" onClick={resetFilters}>Clear filters</Button> : undefined}
+          />
+        ) : (
+          <div className="dc-list">
+            {items.map((item) => {
+              const downloads = item.sources.reduce((sum, s) => sum + s.downloads, 0) || item.downloads;
+              return (
+                <DiscoverRow
+                  key={`${item.source}-${item.id}`}
+                  testId="discover-card"
+                  name={item.name}
+                  author={item.author}
+                  summary={item.summary}
+                  onOpen={() => openMod(item.source, item.id)}
+                  art={/* Modrinth returns "" for projects with no icon, which makes the browser re-request the page. */
+                    item.icon ? <img src={item.icon} alt="" loading="lazy" /> : <Monogram name={item.name} size={48} />}
+                  meta={
+                    <>
+                      <span className="dc-stat" title={`${downloads.toLocaleString()} downloads`}>
+                        <Download size={12} aria-hidden="true" />
+                        <strong>{compact(downloads)}</strong>
+                      </span>
+                      {item.date && (
+                        <span className="dc-stat" title={new Date(item.date).toLocaleDateString()}>
+                          <Clock size={12} aria-hidden="true" />
+                          {ago(item.date)}
+                        </span>
+                      )}
+                      <Badge className="dc-chip">{TYPE_LABELS[item.type] ?? item.type}</Badge>
+                      {item.sources.map((s) => (
+                        <Badge key={s.source} className="dc-chip" tone={s.source === "modrinth" ? "accent" : "neutral"} data-testid="source-downloads">
+                          {SITE_NAMES[s.source]}
+                        </Badge>
+                      ))}
+                      {tags(item, narrowed).slice(0, 2).map((t) => (
+                        <span key={t} className="dc-tag">{t}</span>
+                      ))}
+                    </>
+                  }
+                  action={
+                    <>
+                      {item.type !== "modpack" && (
+                        <InstallToInstance
+                          source={item.source}
+                          projectId={item.id}
+                          name={item.name}
+                          icon={item.icon}
+                          type={item.type}
+                          installable={item.installable}
+                          url={item.url}
+                          alternatives={item.sources}
+                        />
+                      )}
+                      {item.type === "modpack" && item.installable === false && (
+                        <Button
+                          variant="secondary"
+                          icon={<ExternalLink size={14} aria-hidden="true" />}
+                          title="This author disabled third-party downloads"
+                          onClick={() => item.url && window.modAPI.openUrl(item.url).catch(() => {})}
+                        >
+                          Open site
+                        </Button>
+                      )}
+                      {item.type === "modpack" && item.installable !== false && (
+                        <Button
+                          className="iti__install"
+                          icon={<Download size={14} aria-hidden="true" />}
+                          disabled={!!installingPack}
+                          onClick={() => installModpack(item)}
+                          title="Creates a new instance with this pack's Minecraft version, loader and mods"
+                        >
+                          {installingPack === item.id ? "Installing..." : "Install"}
+                        </Button>
+                      )}
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
+        )}
 
         {result && !loading && items.length > 0 && (
-          <div style={{ marginTop: 16 }}>
+          <div className="dc-bottom">
             <Pagination page={result.page} pageCount={result.pageCount} onChange={goToPage} />
           </div>
+        )}
+
+        {!curseForgeReady && (
+          <p className="dc-foot dc-off" title={curseForgeOffReason} data-testid="curseforge-off">
+            <KeyRound size={13} aria-hidden="true" />
+            <span className="dc-off__text">CurseForge is off: add its key to include those results.</span>{" "}
+            <button type="button" className="dc-link" onClick={goSettings}>Open Settings</button>
+          </p>
+        )}
+        {source !== "Modrinth" && curseForgeReady && totals?.curseforgeCapped && (
+          <p data-testid="curseforge-limit" className="dc-foot">
+            CurseForge only lets apps reach the first 10,000 results of a search. Search or filter to get to the rest.
+          </p>
         )}
       </div>
       </div>

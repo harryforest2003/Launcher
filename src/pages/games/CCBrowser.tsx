@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileCode2, FolderOpen, Image as ImageIcon, Sofa, Shirt, Sparkles, Box } from "lucide-react";
+import { FileCode2, FolderOpen, RefreshCw, Sofa, Shirt, Sparkles, Box } from "lucide-react";
+import { Button, EmptyState, Notice, SearchField, Select, Skeleton } from "../../components/ui";
+import "./gameDiscover.css";
 import IconButton from "../../components/IconButton";
 import Toggle from "../../components/Toggle";
-import { BinIcon, RefreshIcon } from "../../components/Icons";
-import { errorText, note, sizeText } from "./shared";
+import { BinIcon } from "../../components/Icons";
+import { errorText, sizeText } from "./shared";
 
 type Props = {
   detail: GameDetail;
@@ -130,8 +132,8 @@ function Card({ item, want, busy, confirming, onToggle, onReveal, onDelete }: {
   }, [item.rel, item.picture, want]);
 
   return (
-    <div ref={ref} data-testid="cc-card" className="cc-card" title={item.rel} style={{ opacity: item.enabled ? 1 : 0.55 }}>
-      <div className="cc-picture" style={{ borderColor: item.broken ? "var(--color-danger-border)" : undefined }}>
+    <div ref={ref} data-testid="cc-card" className="cc-card" title={item.rel} data-off={item.enabled ? undefined : ""}>
+      <div className="cc-picture" style={{ boxShadow: item.broken ? "inset 0 0 0 1px var(--color-danger-border)" : undefined }}>
         {picture ? (
           <img src={picture} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} draggable={false} />
         ) : (
@@ -163,19 +165,6 @@ function Card({ item, want, busy, confirming, onToggle, onReveal, onDelete }: {
     </div>
   );
 }
-
-/* Tiles like the instance library's: a picture, its name and one line; the buttons show on hover. */
-const CARD_CSS = `
-.cc-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 18px; padding: 12px 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; transition: border-color 0.15s; }
-.cc-card:hover, .cc-card:focus-within { border-color: var(--color-border); }
-.cc-picture { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--color-surface-raised); border: 1px solid var(--color-border); display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
-.cc-name { font-weight: 700; font-size: 15px; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cc-sub { font-size: 13px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cc-badge { position: absolute; top: 8px; left: 8px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--color-scrim); color: var(--color-text-secondary); }
-.cc-actions { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 12px; background: var(--color-surface); opacity: 0; transform: translateY(4px); transition: opacity 0.15s, transform 0.15s; }
-.cc-actions > :first-child { margin-right: auto; }
-.cc-card:hover .cc-actions, .cc-card:focus-within .cc-actions { opacity: 1; transform: none; }
-`;
 
 /* The Sims 4's custom content and script mods as pictures: what each is, turning it on or off, and deleting it. */
 export default function CCBrowser({ detail, reload }: Props) {
@@ -243,71 +232,78 @@ export default function CCBrowser({ detail, reload }: Props) {
   const activeCategory = counts[category] ? category : "all";
 
   if (!detail.docsDir) {
-    return <div style={note("warn")}>The Sims 4's Documents folder hasn't been found, so its CC can't be shown. Choose it in Settings.</div>;
+    return <Notice tone="warning">The Sims 4's Documents folder hasn't been found, so its CC can't be shown. Choose it in Settings.</Notice>;
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }} data-testid="cc-browser">
-      <style>{CARD_CSS}</style>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ margin: 0 }}>CC</h2>
-          <div style={{ color: "var(--color-text-muted)", fontSize: 13, marginTop: 4 }}>
-            {items ? `${items.length} file${items.length === 1 ? "" : "s"} • ${sizeText(totalSize)}${offCount ? ` • ${offCount} off` : ""}` : "Looking through your Mods folder..."}
-          </div>
+    <div className="cc-page" data-testid="cc-browser">
+      <header className="page-header">
+        <h1 className="page-title">CC</h1>
+        <p className="page-subtitle">
+          {items ? `${items.length} file${items.length === 1 ? "" : "s"} • ${sizeText(totalSize)}${offCount ? ` • ${offCount} off` : ""}` : "Looking through your Mods folder..."}
+        </p>
+      </header>
+
+      {error && <Notice tone="danger">{error}</Notice>}
+
+      <div className="cc-toolbar">
+        <div className="cc-search">
+          <SearchField
+            label="Search your CC"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setLimit(PAGE);
+            }}
+            placeholder="Search your CC..."
+          />
         </div>
-        <IconButton tip="Look through the Mods folder again" label="Refresh" onClick={() => act("refresh", async () => {})}>
-          <RefreshIcon size={18} />
-        </IconButton>
+        {offCount > 0 && (
+          <Select value={showing} onChange={(event) => setShowing(event.target.value as "all" | "on" | "off")} aria-label="On or off">
+            <option value="all">On and off</option>
+            <option value="on">Only on</option>
+            <option value="off">Only off</option>
+          </Select>
+        )}
+        <Button
+          variant="secondary"
+          icon={<RefreshCw size={16} aria-hidden="true" />}
+          aria-label="Refresh"
+          title="Look through the Mods folder again"
+          disabled={busy === "refresh"}
+          onClick={() => act("refresh", async () => {})}
+        >
+          Refresh
+        </Button>
       </div>
 
-      {error && <div style={note("bad")}>{error}</div>}
-
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <input
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setLimit(PAGE);
-          }}
-          placeholder="Search your CC..."
-          style={{ flex: "1 1 220px", padding: 12, borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)" }}
-        />
+      <div className="cc-chips" role="group" aria-label="Kind of content">
         {CATEGORIES.filter((option) => option.id === "all" || counts[option.id]).map((option) => (
           <button
             key={option.id}
-            className="sidebar-button"
+            type="button"
+            className="cc-chip"
+            aria-pressed={activeCategory === option.id}
             onClick={() => {
               setCategory(option.id);
               setLimit(PAGE);
             }}
-            style={{ fontSize: 12, padding: "8px 12px", opacity: activeCategory === option.id ? 1 : 0.6, ...(activeCategory === option.id ? { background: "var(--color-accent-subtle)" } : {}) }}
           >
-            {option.label} ({counts[option.id] ?? 0})
+            {option.label} <span>{counts[option.id] ?? 0}</span>
           </button>
         ))}
-        {offCount > 0 && (
-          <select
-            value={showing}
-            onChange={(event) => setShowing(event.target.value as "all" | "on" | "off")}
-            aria-label="On or off"
-            style={{ padding: "8px 10px", borderRadius: 10, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 12 }}
-          >
-            <option value="all">On and off</option>
-            <option value="on">Only on</option>
-            <option value="off">Only off</option>
-          </select>
-        )}
       </div>
 
       {loading && !items ? (
-        <div style={{ color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: 8 }}>
-          <ImageIcon size={16} /> Reading your CC (the first time takes a little while)...
+        <div className="cc-grid" aria-busy="true" aria-label="Reading your CC (the first time takes a little while)">
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="cc-card"><Skeleton shape="block" height={150} /><Skeleton lines={2} /></div>
+          ))}
         </div>
       ) : !shown.length ? (
-        <div style={{ color: "var(--color-text-muted)", fontSize: 14 }}>{items?.length ? "Nothing matches." : "There's no CC or script mods in your Mods folder yet."}</div>
+        <EmptyState title={items?.length ? "Nothing matches" : "No CC yet"} body={items?.length ? "Try a different search or kind." : "There's no CC or script mods in your Mods folder yet."} />
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 18 }}>
+        <div className="cc-grid">
           {shown.slice(0, limit).map((item) => (
             <Card
               key={item.rel}
@@ -327,9 +323,9 @@ export default function CCBrowser({ detail, reload }: Props) {
         </div>
       )}
       {shown.length > limit && (
-        <button className="sidebar-button" style={{ alignSelf: "center", padding: "10px 18px" }} onClick={() => setLimit((now) => now + PAGE)}>
+        <Button style={{ alignSelf: "center" }} onClick={() => setLimit((now) => now + PAGE)}>
           Show more ({shown.length - limit} left)
-        </button>
+        </Button>
       )}
     </div>
   );

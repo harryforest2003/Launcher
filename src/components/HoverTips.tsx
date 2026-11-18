@@ -22,12 +22,23 @@ function tipFor(el: HTMLElement): string | null {
   return el.dataset.tipTitle || el.getAttribute("title") || el.getAttribute("aria-label") || null;
 }
 
-type Point = { x: number; y: number; below?: number };
+type Point = { x: number; y: number; below?: number; anchor?: HTMLElement };
+
+/* Opt-in: data-tip-side="right" on the element or an ancestor puts its tip beside it. */
+const anchorFor = (el: HTMLElement) => (el.closest("[data-tip-side='right']") ? el : undefined);
 
 /* Above the cursor (or the focused control), kept inside the window (below it, at the very top). */
-function place(el: HTMLElement | null, { x, y, below }: Point) {
+function place(el: HTMLElement | null, { x, y, below, anchor }: Point) {
   if (!el) return;
   const { width, height } = el.getBoundingClientRect();
+  if (anchor?.isConnected) {
+    // Measured now, so a rail that is still folding or unfolding doesn't leave the tip behind.
+    const target = anchor.getBoundingClientRect();
+    const left = Math.min(target.right + 10, window.innerWidth - width - 6);
+    const top = Math.min(Math.max(target.top + target.height / 2 - height / 2, 6), window.innerHeight - height - 6);
+    el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
+    return;
+  }
   const left = Math.min(Math.max(x - width / 2, 6), window.innerWidth - width - 6);
   const top = y - height - 14 >= 6 ? y - height - 14 : (below ?? y + 22);
   el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
@@ -75,7 +86,7 @@ export default function HoverTips() {
       const tip = tipFor(el);
       if (!tip) return;
       take(el);
-      cursor.current = { x: event.clientX, y: event.clientY };
+      cursor.current = { x: event.clientX, y: event.clientY, anchor: anchorFor(el) };
       const show = () => setText(tip);
       if (Date.now() - lastShown < FOLLOW_ON) show();
       else timer = window.setTimeout(show, DELAY);
@@ -90,7 +101,7 @@ export default function HoverTips() {
     };
 
     const move = (event: PointerEvent) => {
-      cursor.current = { x: event.clientX, y: event.clientY };
+      cursor.current = { x: event.clientX, y: event.clientY, anchor: current ? anchorFor(current) : undefined };
       if (!current) return;
       // What it says can change while hovered (Reset asks to be clicked again).
       const tip = tipFor(current);
@@ -108,7 +119,7 @@ export default function HoverTips() {
       hide();
       take(el);
       const box = el.getBoundingClientRect();
-      cursor.current = { x: box.left + box.width / 2, y: box.top + 4, below: box.bottom + 8 };
+      cursor.current = { x: box.left + box.width / 2, y: box.top + 4, below: box.bottom + 8, anchor: anchorFor(el) };
       setText(tip);
     };
 

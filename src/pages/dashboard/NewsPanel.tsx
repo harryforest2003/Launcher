@@ -49,6 +49,8 @@ type Props = {
   from?: string;
   /** How many smaller stories sit beside the featured one. */
   more?: number;
+  /** Opt-in: a row of equal image cards instead of one featured story and a list. */
+  cards?: boolean;
 };
 
 /*
@@ -56,7 +58,7 @@ type Props = {
  * process): one featured article beside smaller cards. Each opens the original article in the
  * browser. If a source can't be reached the rest still show, and it says which were missed.
  */
-export default function NewsPanel({ news, loading, failed, onRefresh, title = "News", from = "Minecraft, Fabric, Forge and NeoForge", more = 3 }: Props) {
+export default function NewsPanel({ news, loading, failed, onRefresh, title = "News", from = "Minecraft, Fabric, Forge and NeoForge", more = 3, cards = false }: Props) {
   const items = news?.items ?? [];
   // Lead with the newest article that has a picture.
   const featured = items.find((i) => i.image) ?? items[0];
@@ -64,6 +66,36 @@ export default function NewsPanel({ news, loading, failed, onRefresh, title = "N
   // A tag only helps when the stories are of different kinds.
   const tagged = new Set(items.map((i) => i.category)).size > 1;
   const missed = news?.failed ?? [];
+
+  if (cards) {
+    // Stories with a picture first, so the row is image-led.
+    const shown = [...items.filter((i) => i.image), ...items.filter((i) => !i.image)].slice(0, more);
+    if (!shown.length && !loading) return null;
+    return (
+      <section className="mh-news" aria-labelledby="db-news-title">
+        <div className="mh-section-head">
+          <h2 className="mh-section-title" id="db-news-title">{title}</h2>
+          <Button size="sm" variant="ghost" icon={<RefreshCw size={14} aria-hidden="true" />} onClick={onRefresh} disabled={loading} aria-label="Check for news again" data-tip="Check for news again" />
+        </div>
+        <ul className="mh-news__row">
+          {shown.length === 0 && <li className="mh-news__empty">Getting the latest news...</li>}
+          {shown.map((item) => (
+            <li key={item.id}>
+              <a className="mh-news__card" href={item.url} target="_blank" rel="noopener noreferrer">
+                <Thumb item={item} className="mh-news__img" />
+                <span className="mh-news__scrim" aria-hidden="true" />
+                <span className="mh-news__body">
+                  <span className="mh-news__tag">{CATEGORY[item.category] ?? item.category}</span>
+                  <span className="mh-news__title">{item.title}</span>
+                  <span className="mh-news__by">{item.source}, {when(item.date)}<ExternalLink size={12} aria-hidden="true" /></span>
+                </span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
 
   return (
     <section className="db-card db-news" aria-labelledby="db-news-title">

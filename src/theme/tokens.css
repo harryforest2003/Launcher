@@ -73,7 +73,9 @@
      buttons, labels, tile names. Its cut-cornered letters match the cut-cornered panels.
      Orbitron is the wordmark's face only. Long reading text (mod descriptions, changelogs)
      uses the system face, and versions, paths and keys use monospace. */
-  --font-ui: "Chakra Petch", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-ui-launcher: "Chakra Petch", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Settings > Reading can swap this (and --font-body) for a face that is easier to read: reading.css. */
+  --font-ui: var(--font-ui-launcher);
   --font-display: "Orbitron", "Chakra Petch", system-ui, sans-serif;
   --font-body: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Noto Sans", sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;

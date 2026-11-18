@@ -156,12 +156,16 @@ function scanEpic() {
             const name = (data.DisplayName || "").toLowerCase();
             const installPath = data.InstallLocation;
 
-            if (!installPath || !fs.existsSync(installPath)) continue;
+            if (!name || !installPath || !fs.existsSync(installPath)) continue;
 
-            const game = GAMES.find(g =>
-                name.includes(g.name.toLowerCase()) ||
-                g.name.toLowerCase().includes(name)
-            );
+            // The exact name first, then the longest name it contains, so
+            // "Red Dead Redemption 2" is never taken for "Red Dead Redemption".
+            const candidates = GAMES.filter(g => !g.notOnPC);
+            const game =
+                candidates.find(g => g.name.toLowerCase() === name) ||
+                candidates
+                    .filter(g => name.includes(g.name.toLowerCase()))
+                    .sort((a, b) => b.name.length - a.name.length)[0];
 
             if (game) found.push({ game, installPath, source: "Epic" });
 
@@ -251,6 +255,7 @@ function detectGames() {
             modExtensions: game.modExtensions ?? [],
             notes: game.notes ?? null,
             windowsOnlyModding: !!game.windowsOnlyModding,
+            windowsOnly: !!game.windowsOnly,
             managedByInstances: !!game.managedByInstances,
             detected: true,
         });
@@ -275,6 +280,7 @@ function detectGames() {
             modExtensions: game.modExtensions ?? [],
             notes: game.notes ?? null,
             windowsOnlyModding: !!game.windowsOnlyModding,
+            windowsOnly: !!game.windowsOnly,
             managedByInstances: false,
             detected: true,
         });

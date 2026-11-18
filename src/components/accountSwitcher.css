@@ -17,3 +17,75 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* One account pattern: card (picture, name, one line, chevron) or, folded, a round picture. */
+.ui-account--menu { position: relative; }
+.ui-account__trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-1);
+  border: none;
+  border-radius: var(--ui-radius-control);
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  box-shadow: var(--edge-highlight), inset 0 0 0 var(--border-width) var(--ui-hairline);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.ui-account__trigger:hover, .ui-account__trigger[aria-expanded="true"] { background: var(--color-surface-raised); }
+.ui-account__trigger:focus-visible { outline: var(--focus-width) solid var(--color-focus); outline-offset: var(--focus-offset); }
+.ui-account--menu .ui-account__text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; line-height: var(--leading-tight); }
+.ui-account--menu .ui-account__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ui-account__panel {
+  position: fixed;
+  z-index: 60;
+  width: 256px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-lg, var(--shadow-md)), inset 0 0 0 var(--border-width) var(--color-border);
+  color: var(--color-text-secondary);
+}
+.ui-account__panel .ui-account__name { white-space: normal; overflow-wrap: anywhere; }
+.ui-account__menu-head { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+
+/* Folded: a round 32px picture. */
+.ui-account--rail .ui-account__trigger {
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: none;
+  box-shadow: none;
+}
+.ui-account--rail .ui-monogram { border-radius: 50%; clip-path: none; }
+
+/* Signed out: a calm neutral card; folded, the neutral round avatar above. */
+.ui-account__quiet {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-1);
+  border-radius: var(--ui-radius-control);
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  box-shadow: var(--edge-highlight), inset 0 0 0 var(--border-width) var(--ui-hairline);
+}
+.ui-account__quiet .ui-account__text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; line-height: var(--leading-tight); }
+.ui-account__quiet .ui-account__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-account__quiet .ui-account__signin { flex-shrink: 0; padding-inline: var(--space-2); border-radius: var(--radius-md); }
+.ui-account__signin:disabled { cursor: default; }

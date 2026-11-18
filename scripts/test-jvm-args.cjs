@@ -10,6 +10,9 @@ const ALLOWED = [
     "-Xmx4G", "-Xms2G", "-Xmn512M", "-Xss2M",
     // The Minecraft Launcher's (and so this launcher's default) garbage collection flags.
     ...settings.DEFAULT_GC_ARGS,
+    // The Performance Java flags.
+    settings.PERFORMANCE_GC_ARGS.join(" "),
+    settings.PERFORMANCE_JAVA9_ARGS.join(" "),
     // Aikar's flags.
     "-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1",
     "-XX:+UseZGC -XX:+ZGenerational",
@@ -60,6 +63,20 @@ for (const arg of REFUSED) {
 // Experimental flags are unlocked by the launcher, once, first, and only when needed.
 assert.deepStrictEqual(settings.safeJvmArgs("-XX:G1NewSizePercent=20").args, ["-XX:+UnlockExperimentalVMOptions", "-XX:G1NewSizePercent=20"]);
 assert.deepStrictEqual(settings.safeJvmArgs("-XX:+UnlockExperimentalVMOptions -Xmx4G").args, ["-Xmx4G"]);
+
+// Java flags: Standard is the Minecraft Launcher's; Performance adds full-size memory and, on
+// Java 9 and later, the code cache sizes; a person's own garbage collector replaces both.
+const own = ["-Xmx6G"];
+assert.deepStrictEqual(settings.launchJvmArgs(own, { tuning: "standard" }), [...settings.DEFAULT_GC_ARGS, ...own]);
+assert.deepStrictEqual(settings.launchJvmArgs(own, { tuning: "performance", javaMajor: 8, ram: 6 }), ["-Xms6G", ...settings.PERFORMANCE_GC_ARGS, ...own]);
+assert.deepStrictEqual(settings.launchJvmArgs([], { tuning: "performance", javaMajor: 21, ram: 8 }), ["-Xms8G", ...settings.PERFORMANCE_GC_ARGS, ...settings.PERFORMANCE_JAVA9_ARGS]);
+assert.deepStrictEqual(settings.launchJvmArgs(["-Xms2G"], { tuning: "performance", javaMajor: 21, ram: 8 })[0], settings.PERFORMANCE_GC_ARGS[0]);
+assert.deepStrictEqual(settings.launchJvmArgs(["-XX:+UseZGC"], { tuning: "performance", javaMajor: 21 }), ["-XX:+UseZGC"]);
+assert.strictEqual(settings.javaTuningOf("turbo"), "performance");
+assert.strictEqual(settings.javaTuningOf("standard"), "standard");
+// The code cache sizes add up to the reserved size, or Java refuses to start.
+const size = (name) => Number(settings.PERFORMANCE_JAVA9_ARGS.find((arg) => arg.startsWith(`-XX:${name}=`)).match(/=(\d+)M/)[1]);
+assert.strictEqual(size("NonNMethodCodeHeapSize") + size("ProfiledCodeHeapSize") + size("NonProfiledCodeHeapSize"), size("ReservedCodeCacheSize"));
 
 console.log(failed ? `${failed} Java argument check(s) failed.` : `Java arguments: ${ALLOWED.length} allowed sets and ${REFUSED.length} refused examples all as expected.`);
 process.exit(failed ? 1 : 0);

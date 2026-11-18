@@ -5,8 +5,9 @@ import type { BuildParams, SkinGroup } from "../types";
 import type { Draft } from "../workingImage";
 import ItemPreview3D from "./ItemPreview3D";
 import { usePrompt } from "./prompt";
-import { Button, ErrorNote, PromptDialog } from "./shared";
-import { fieldStyle, panelStyle } from "./styles";
+import Button from "../../components/ui/Button";
+import { ErrorNote, PromptDialog } from "./shared";
+import { fieldStyle } from "./styles";
 
 type Props = {
   draft: Draft;
@@ -75,18 +76,30 @@ export default function PreviewStep({
   const canSave = draft.name.trim().length > 0 && !saving;
 
   return (
-    <div style={{ display: "flex", gap: 18, alignItems: "stretch", flexWrap: "wrap" }}>
-      <div style={{ ...panelStyle, flex: "1 1 460px", minWidth: 320, minHeight: 520 }}>
-        <ItemPreview3D built={built} display={built.display} />
+    <div className="sk-workspace sk-workspace--stretch">
+      <div className="sk-view">
+        <ItemPreview3D
+          built={built}
+          display={built.display}
+          footer={
+            <span data-testid="preview-stats" style={{ display: "contents" }}>
+              <span>Applies to <b>{appliesTo}</b></span>
+              <span>Texture <b>{built.raster.width} x {built.raster.height} px{built.glow ? ", plus glow" : ""}</b></span>
+              <span>Atlas <b>{built.atlasPixels.toLocaleString()} px</b></span>
+              <span>Model <b>{built.elements.length} elements</b></span>
+            </span>
+          }
+        />
       </div>
 
-      <div style={{ ...panelStyle, flex: "0 0 300px" }}>
-        <div style={{ color: "var(--color-accent-text)", fontSize: 16, marginBottom: 12 }}>Your skin</div>
+      <div className="sk-ctl">
+        <div className="sk-ctl__body">
+        <h2 className="sk-ctl__title">Your item model</h2>
 
         <label style={{ display: "block", fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
           Name
           <input
-            aria-label="Skin name"
+            aria-label="Model name"
             value={draft.name}
             maxLength={60}
             onChange={(event) => onDraftChange({ name: event.target.value })}
@@ -110,35 +123,40 @@ export default function PreviewStep({
           </select>
         </label>
 
-        <div data-testid="preview-stats" style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.7, marginBottom: 16 }}>
-          <div>Applies to: {appliesTo}</div>
-          <div>Texture: {built.raster.width} x {built.raster.height} px{built.glow ? ", plus glow" : ""}</div>
-          <div>Atlas space: {built.atlasPixels.toLocaleString()} px</div>
-          <div>Model: {built.elements.length} elements</div>
+        <div className="sk-sec">
+          <h3 className="sk-sec__title">Applies to</h3>
+          <div className="sk-appl">{appliesTo}</div>
+        </div>
+
+        <div className="sk-sec">
+          <h3 className="sk-sec__title">Not right yet?</h3>
+          <div className="sk-sec__pair">
+            <Button size="sm" onClick={onEditSelection}>Edit selection</Button>
+            <Button size="sm" onClick={onEditThickness}>Edit thickness</Button>
+          </div>
         </div>
 
         {(error || groupError) && (
           <div style={{ marginBottom: 12 }}><ErrorNote>{error ?? groupError}</ErrorNote></div>
         )}
 
-        <Button primary disabled={!canSave} onClick={onSave} style={{ width: "100%", marginBottom: 8 }}>
-          {saving ? "Saving..." : "Save"}
-        </Button>
-        {onOpenInBlockbench && (
-          <Button
-            disabled={!canSave}
-            onClick={onOpenInBlockbench}
-            title="Saves it, then opens it in Blockbench to change its shape or paint it"
-            style={{ width: "100%", marginBottom: 8 }}
-          >
-            Save and open in Blockbench
-          </Button>
-        )}
-        <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-          <Button onClick={onEditSelection} style={{ flex: 1 }}>Edit selection</Button>
-          <Button onClick={onEditThickness} style={{ flex: 1 }}>Edit thickness</Button>
         </div>
-        <Button danger onClick={onDiscard} style={{ width: "100%" }}>Discard</Button>
+
+        <div className="sk-ctl__foot">
+          <Button variant="primary" size="lg" disabled={!canSave} onClick={onSave}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+          {onOpenInBlockbench && (
+            <Button
+              disabled={!canSave}
+              onClick={onOpenInBlockbench}
+              title="Saves it, then opens it in Blockbench to change its shape or paint it"
+            >
+              Save and open in Blockbench
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="sk-ctl__discard" onClick={onDiscard}>Discard</Button>
+        </div>
       </div>
 
       <PromptDialog request={request} />

@@ -17,7 +17,8 @@
     "postinstall": "node node_modules/electron/install.js",
     "blockbench:build": "node scripts/build-blockbench.cjs",
     "app:install": "node scripts/install-app.cjs",
-    "security:check": "node scripts/security-check.cjs"
+    "security:check": "node scripts/security-check.cjs",
+    "test": "node --test scripts/test-launch-feedback.cjs scripts/test-cyberpunk-mac.cjs"
   },
   "dependencies": {
     "js-yaml": "^4.3.2",

@@ -158,7 +158,7 @@ export default function LineChart({ points, series, ticks, formatTick, formatX, 
           {points.map((p, i) => {
             const d = describe(p, i);
             return (
-              <tr key={p.x}>
+              <tr key={`${p.x}-${i}`}>
                 <th scope="row">{d.title}</th>
                 {d.rows.map((row) => <td key={row.key}>{row.label}: {row.value}</td>)}
               </tr>

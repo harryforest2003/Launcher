@@ -1,3 +1,6 @@
+import "./skins.css";
+import Notice from "../components/ui/Notice";
+import Button from "../components/ui/Button";
 import BackgroundLogo from "../components/BackgroundLogo";
 import { useCallback, useEffect, useRef, useState } from "react";
 import BlockbenchFrame from "../components/BlockbenchFrame";
@@ -54,6 +57,7 @@ export default function SkinBuilder({
   const [step, setStep] = useState<Step>("library");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [params, setParams] = useState<BuildParams | null>(null);
+  const [startItem, setStartItem] = useState(DEFAULT_ITEM);
   const [built, setBuilt] = useState<BuiltModel | null>(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,7 +116,7 @@ export default function SkinBuilder({
     if (!draft) return;
     // Standing the item upright depends on the selection, so a changed one is redone.
     setParams((current) => {
-      if (!current) return firstParams(draft, DEFAULT_ITEM);
+      if (!current) return firstParams(draft, startItem);
       const fresh = firstParams(draft, current.itemId);
       return { ...current, angle: fresh.angle, flip: fresh.flip };
     });
@@ -227,20 +231,22 @@ export default function SkinBuilder({
 
       {/* The library fits the window and only its models scroll; the wizard steps scroll as a page. */}
       <div
+        className="sk-builder"
         style={{
           flex: 1,
           minWidth: 0,
           overflow: "auto",
-          padding: 26,
+          padding: "var(--space-8) var(--page-padding)",
           boxSizing: "border-box",
           position: "relative",
           ...(inWizard ? {} : { display: "flex", flexDirection: "column" }),
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 18, flexShrink: 0 }}>
-          <h2 style={{ margin: 0 }}>
-            Model Builder
-          </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", marginBottom: 20, flexShrink: 0 }}>
+          <div className="sk-head__text">
+            <h1 className="sk-title">Model Builder</h1>
+            {!inWizard && <p className="sk-sub">Turn a picture into a 3D item model for your resource pack.</p>}
+          </div>
 
           {inWizard && (
             <ol
@@ -266,30 +272,31 @@ export default function SkinBuilder({
           )}
 
           {inWizard && (
-            <button
-              type="button"
-              className="sidebar-button"
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => {
                 if (draft && !window.confirm("Leave this skin? Anything since your last save will be lost.")) return;
                 reset();
                 setStep("library");
               }}
-              style={{ marginLeft: "auto", padding: "8px 12px", fontSize: 13 }}
+              style={{ marginLeft: "auto" }}
             >
-              Back to my skins
-            </button>
+              Back to models
+            </Button>
           )}
         </div>
 
         {step === "library" && (
           <>
-            {error && <div style={{ color: "var(--color-danger-text)", marginBottom: 12, flexShrink: 0 }}>{error}</div>}
+            {error && <Notice tone="danger" style={{ marginBottom: 12, flexShrink: 0 }}>{error}</Notice>}
             <LibraryView
               key={libraryVersion}
               notice={notice}
               onEditInBlockbench={editInBlockbench}
-              onNewSkin={() => {
+              onNewSkin={(itemId) => {
                 reset();
+                setStartItem(itemId ?? DEFAULT_ITEM);
                 setNotice(null);
                 setStep("import");
               }}
@@ -298,7 +305,7 @@ export default function SkinBuilder({
           </>
         )}
 
-        {step === "import" && <ImportStep busy={busy} error={error} onFile={importFile} />}
+        {step === "import" && <ImportStep busy={busy} error={error} itemId={startItem} onItemChange={setStartItem} onFile={importFile} />}
 
         {step === "selection" && draft && (
           <SelectionStep

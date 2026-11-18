@@ -10,7 +10,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { buildPalette, DEFAULT_THEME, normaliseTheme, paletteToCssVars, type Palette, type ThemeSettings } from "./engine.ts";
+import { ACCESS_KEYS, buildPalette, DEFAULT_THEME, normaliseTheme, paletteToCssVars, type Palette, type ThemeSettings } from "./engine.ts";
 
 const STORAGE_KEY = "unity-launcher-theme";
 const RECENT_KEY = "unity-launcher-theme-recent";
@@ -57,11 +57,15 @@ async function writeSaved(settings: ThemeSettings) {
   await window.instanceAPI?.setSettings?.({ theme: settings } as Partial<LauncherSettings> & WithTheme);
 }
 
-function paint(palette: Palette) {
+function paint(palette: Palette, settings: ThemeSettings) {
   const root = document.documentElement;
   for (const [name, value] of Object.entries(paletteToCssVars(palette))) root.style.setProperty(name, value);
   root.style.setProperty("color-scheme", palette.scheme);
   root.dataset.theme = palette.scheme;
+  // Reading settings are plain attributes the stylesheets key off (see reading.css).
+  root.dataset.font = settings.font;
+  root.dataset.spacing = settings.spacing;
+  root.dataset.vision = settings.vision;
 }
 
 function emit() {
@@ -73,12 +77,12 @@ function set(settings: ThemeSettings, saved: boolean) {
   state = { settings, palette, saved };
   // Setting the properties is cheap and the browser restyles once per frame anyway, so this
   // paints straight away (also in a window that is hidden, where frames don't run).
-  paint(palette);
+  paint(palette, settings);
   emit();
 }
 
 function same(a: ThemeSettings, b: ThemeSettings) {
-  return a.seed === b.seed && a.mode === b.mode && a.contrast === b.contrast && a.tint === b.tint;
+  return (Object.keys(DEFAULT_THEME) as (keyof ThemeSettings)[]).every((key) => a[key] === b[key]);
 }
 
 /** Applies the saved theme straight away. Call once, before the first render. */
@@ -86,7 +90,7 @@ export function startTheme() {
   if (state) return;
   const local = readLocal() ?? DEFAULT_THEME;
   state = { settings: local, palette: buildPalette(local, darkQuery()?.matches ?? true), saved: true };
-  paint(state.palette);
+  paint(state.palette, local);
 
   // "Same as system" follows the OS while the launcher is open.
   darkQuery()?.addEventListener?.("change", () => {
@@ -129,8 +133,10 @@ export function updateTheme(patch: Partial<ThemeSettings>) {
   }, SAVE_DELAY);
 }
 
+/** Back to the launcher's own look. How someone sees and reads (colour vision, font, spacing) stays. */
 export function resetTheme() {
-  updateTheme(DEFAULT_THEME);
+  const keep = Object.fromEntries(ACCESS_KEYS.map((key) => [key, state?.settings[key] ?? DEFAULT_THEME[key]]));
+  updateTheme({ ...DEFAULT_THEME, ...keep });
 }
 
 function subscribe(listener: () => void) {

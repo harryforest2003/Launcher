@@ -1,12 +1,18 @@
 /*
  * The app frame: one sidebar beside every page, and the stage the pages fade through.
- * Tokens only (src/theme/tokens.css); purple is only the accent.
+ * Tokens only (src/theme/tokens.css); the accent is whatever colour the user picked.
+ *
+ * The sidebar sits on the window's chrome. The page sits in a framed panel inset beside it
+ * (a hairline edge, rounded corners, a soft shadow), so every screen reads as one app.
  */
 
 .ui-frame {
   display: flex;
   height: 100vh;
-  background: var(--color-bg);
+  /* A breath of the accent at the top, fading into the frame colour. */
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-chrome) 93%, var(--color-accent)) 0, var(--color-chrome) 240px),
+    var(--color-chrome);
   color: var(--color-text);
 }
 
@@ -17,6 +23,11 @@
   min-width: 0;
   position: relative;
   overflow: hidden;
+  margin: var(--space-2) var(--space-2) var(--space-2) 0;
+  background: var(--color-bg);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md), var(--edge-highlight);
 }
 
 /* A new page slides in a little from the right as it fades in; the old one fades out a
@@ -28,6 +39,13 @@
     opacity var(--duration-fast) var(--ease-out),
     transform var(--duration-fast) var(--ease-out);
   animation: ui-page-in var(--duration-slow) var(--ease-out);
+}
+
+/* Pages written to fill the window (height: 100vh) fill the panel instead, so nothing at
+   their bottom edge is cut off by the frame. */
+.ui-stage__page > :is(.app-screen, .sk-page, [style*="100vh"]),
+.ui-stage__page > [style*="contents"] > :is(.app-screen, .sk-page, [style*="100vh"]) {
+  max-height: 100%;
 }
 
 .ui-stage__page.is-leaving {
@@ -48,9 +66,11 @@
 
 /* ---------------- Sidebar ---------------- */
 
+/* Everything in the sidebar lines up on one axis: 28px in, the middle of the folded rail. */
 .ui-shell {
   --shell-width: 224px;
   --shell-folded: 56px;
+  --shell-pad: 10px;
   position: relative;
   z-index: 3;
   width: var(--shell-width);
@@ -60,11 +80,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* A breath of the accent at the top, fading into the frame colour. */
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-chrome) 93%, var(--color-accent)) 0, var(--color-chrome) 240px),
-    var(--color-chrome);
-  border-right: var(--border-width) solid var(--color-border);
+  /* The frame behind it shows through, so the sidebar and the gaps round the page match. */
+  background: transparent;
   font-family: var(--font-ui);
   color: var(--color-text-secondary);
   text-align: start;
@@ -82,8 +99,9 @@
   align-items: center;
   gap: var(--space-2);
   flex-shrink: 0;
-  height: 52px;
+  height: 56px;
   padding: 0 var(--space-2) 0 17px;
+  overflow: hidden;
 }
 
 .ui-shell__mark {
@@ -105,26 +123,33 @@
   font-weight: var(--weight-bold);
   letter-spacing: 0.03em;
   color: var(--color-text);
-  transition: opacity var(--duration-fast) var(--ease-out);
+  /* Fades in only once the rail has opened wide enough to hold it. */
+  transition: opacity var(--duration-fast) var(--ease-out) var(--duration-base);
 }
 
+/* Fold control: a labelled row at the foot of the sidebar; folded, an icon with a tooltip. */
 .ui-shell__fold {
-  display: inline-flex;
+  position: relative;
+  z-index: 1;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: var(--control-sm);
-  height: var(--control-sm);
-  padding: 0;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  box-sizing: border-box;
+  padding: 0 9px;
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-medium);
+  text-align: start;
+  white-space: nowrap;
+  overflow: hidden;
   cursor: pointer;
-  transition:
-    background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out),
-    opacity var(--duration-fast) var(--ease-out);
+  transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
 .ui-shell__fold:hover {
@@ -132,27 +157,38 @@
   color: var(--color-text);
 }
 
-/* Folded: the mark sits in the middle; hovering the top (or tabbing to it) swaps it for the
-   expand button. */
+.ui-shell__fold:focus-visible,
+.ui-shell__item:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.ui-shell__fold .ui-shell__icon,
+.ui-shell__fold .ui-shell__icon > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ui-shell.is-collapsed .ui-shell__fold .ui-shell__label {
+  display: none;
+}
+
+.ui-shell.is-collapsed .ui-shell__fold .ui-shell__icon,
+.ui-shell.is-collapsed .ui-shell__fold .ui-shell__icon > svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Folded: just the mark, centred. */
+.ui-shell.is-collapsed .ui-shell__brand {
+  justify-content: center;
+  padding: 0;
+}
+
 .ui-shell.is-collapsed .ui-shell__wordmark {
+  display: none;
   opacity: 0;
-}
-
-.ui-shell.is-collapsed .ui-shell__fold {
-  position: absolute;
-  left: 14px;
-  top: 12px;
-  opacity: 0;
-}
-
-.ui-shell.is-collapsed .ui-shell__brand:hover .ui-shell__fold,
-.ui-shell.is-collapsed .ui-shell__fold:focus-visible {
-  opacity: 1;
-}
-
-.ui-shell.is-collapsed .ui-shell__brand:hover .ui-shell__mark,
-.ui-shell.is-collapsed .ui-shell__brand:focus-within .ui-shell__mark {
-  opacity: 0;
+  visibility: hidden;
 }
 
 /* The list of pages scrolls on its own; the footer stays put. */
@@ -162,26 +198,31 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: var(--space-1) 10px var(--space-3);
-  scrollbar-width: thin;
+  padding: var(--space-1) var(--shell-pad) var(--space-3);
+  scrollbar-width: none;
+}
+
+.ui-shell__scroll::-webkit-scrollbar {
+  display: none;
 }
 
 .ui-shell__nav {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
-/* The one highlight, sliding to the current page. */
+/* The one highlight, sliding to the current page: a tinted plate with the accent rail on its
+   leading edge. Folded, the rail moves out to the window's edge as a short pill. */
 .ui-shell__mark-bar {
   position: absolute;
   top: 0;
-  left: 10px;
-  right: 10px;
+  left: var(--shell-pad);
+  right: var(--shell-pad);
   z-index: 0;
   border-radius: var(--radius-md);
   background: var(--color-accent-subtle);
-  box-shadow: inset var(--rail-width) 0 0 var(--color-accent-line);
+  box-shadow: inset var(--rail-width) 0 0 var(--color-accent-line), var(--edge-highlight);
   pointer-events: none;
   transition:
     transform var(--duration-base) var(--ease-out),
@@ -189,20 +230,43 @@
     opacity var(--duration-fast) var(--ease-out);
 }
 
+.ui-shell__mark-bar::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(-1 * var(--shell-pad));
+  width: var(--rail-width);
+  height: 0;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--color-accent-line);
+  transform: translateY(-50%);
+  transition: height var(--duration-base) var(--ease-out);
+}
+
+.ui-shell.is-collapsed .ui-shell__mark-bar {
+  box-shadow: var(--edge-highlight);
+}
+
+.ui-shell.is-collapsed .ui-shell__mark-bar::before {
+  height: 20px;
+}
+
 .ui-shell__group {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
+/* A group's name in small muted type; folded, a short rule instead. */
 .ui-shell__heading {
   display: flex;
   align-items: center;
-  height: 28px;
+  height: 24px;
   margin-top: var(--space-3);
   padding: 0 10px;
   font-size: var(--font-size-xs);
   font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
   color: var(--color-text-muted);
   overflow: hidden;
   white-space: nowrap;
@@ -219,6 +283,27 @@
   display: none;
 }
 
+/* The game being worked on: its picture and name, so you always know where you are. */
+.ui-shell__heading--game {
+  gap: 10px;
+  height: auto;
+  min-height: 44px;
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-1-5) 2px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0;
+  color: var(--color-text);
+}
+
+.ui-shell.is-collapsed .ui-shell__heading--game {
+  height: auto;
+  margin: var(--space-2) 0;
+  padding: var(--space-1-5) 2px;
+  background: none;
+}
+
 /* A page in the sidebar. */
 .ui-shell__item {
   position: relative;
@@ -227,7 +312,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 32px;
+  min-height: 34px;
   box-sizing: border-box;
   padding: 0 10px;
   border: none;
@@ -244,7 +329,9 @@
   cursor: pointer;
   transition:
     background-color var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out);
+    color var(--duration-fast) var(--ease-out),
+    min-height var(--duration-slow) var(--ease-in-out),
+    padding var(--duration-slow) var(--ease-in-out);
 }
 
 .ui-shell__item:hover {
@@ -261,6 +348,10 @@
   font-weight: var(--weight-semibold);
 }
 
+.ui-shell__item[aria-current="page"]:hover {
+  background: transparent;
+}
+
 .ui-shell__item[aria-current="page"] .ui-shell__icon {
   color: var(--color-accent-text);
 }
@@ -269,6 +360,10 @@
 .ui-shell__item[aria-expanded="true"] {
   background: var(--color-hover);
   color: var(--color-text);
+}
+
+.ui-shell__item[aria-expanded="true"] .ui-shell__icon {
+  color: var(--color-accent-text);
 }
 
 .ui-shell__item--sub {
@@ -288,6 +383,36 @@
   flex-shrink: 0;
   width: 16px;
   color: inherit;
+  transition: width var(--duration-slow) var(--ease-in-out);
+}
+
+/* One icon size, whatever size the icon was drawn at. */
+.ui-shell__icon > svg {
+  width: 16px;
+  height: 16px;
+  transition:
+    width var(--duration-slow) var(--ease-in-out),
+    height var(--duration-slow) var(--ease-in-out);
+}
+
+/* Items at the foot keep one height in both states, so the fold toggle above them never moves. */
+.ui-shell__foot .ui-shell__item {
+  min-height: 40px;
+}
+
+/* Folded: bigger targets and icons, still on the same middle line. */
+.ui-shell.is-collapsed .ui-shell__item {
+  min-height: 40px;
+  padding: 0 9px;
+}
+
+.ui-shell.is-collapsed .ui-shell__icon {
+  width: 18px;
+}
+
+.ui-shell.is-collapsed .ui-shell__icon > svg {
+  width: 18px;
+  height: 18px;
 }
 
 .ui-shell__label {
@@ -301,6 +426,128 @@
 
 .ui-shell.is-collapsed .ui-shell__label {
   opacity: 0;
+}
+
+/* A game in the launcher's list: its picture stands where the icon would, with a quiet line under the name. */
+.ui-shell__item--game {
+  min-height: 48px;
+  padding: 0 6px;
+  gap: 12px;
+}
+
+.ui-shell__item--game .ui-shell__icon {
+  width: 32px;
+}
+
+.ui-shell__item--game .ui-shell__label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.ui-shell__name,
+.ui-shell__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-shell__meta {
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-regular, 400);
+  color: var(--color-text-muted);
+}
+
+.ui-shell__item--dim {
+  min-height: 40px;
+}
+
+.ui-shell__item--dim .ui-shell__icon {
+  width: 28px;
+}
+
+.ui-shell__item--dim:not(:hover):not(:focus-visible) .ui-shell__thumb {
+  opacity: 0.55;
+  filter: grayscale(0.6);
+}
+
+.ui-shell.is-collapsed .ui-shell__item--game {
+  min-height: 44px;
+  padding: 0 4px;
+}
+
+.ui-shell.is-collapsed .ui-shell__item--game .ui-shell__icon {
+  width: 34px;
+}
+
+.ui-shell.is-collapsed .ui-shell__item--game .ui-shell__thumb {
+  box-shadow: 0 0 0 var(--border-width) var(--color-border-strong);
+}
+
+.ui-shell.is-collapsed .ui-shell__item--game:hover .ui-shell__thumb {
+  box-shadow: 0 0 0 2px var(--color-text-muted);
+}
+
+.ui-shell.is-collapsed .ui-shell__item--game:not([aria-current="page"]) .ui-shell__thumb img {
+  opacity: 0.82;
+}
+
+.ui-shell.is-collapsed .ui-shell__item--game:hover .ui-shell__thumb img,
+.ui-shell.is-collapsed .ui-shell__item--game:focus-visible .ui-shell__thumb img {
+  opacity: 1;
+}
+
+/* A game's picture (cropped square), or its initials when the picture can't load. */
+.ui-shell__thumb {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
+.ui-shell__thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 50%;
+  image-rendering: auto;
+  user-select: none;
+}
+
+.ui-shell__thumb .ui-monogram {
+  border-radius: inherit;
+}
+
+/* A faint inner edge keeps light pictures from bleeding into the sidebar. */
+.ui-shell__thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 var(--border-width) color-mix(in srgb, var(--color-text) 12%, transparent);
+  pointer-events: none;
+}
+
+.ui-shell__thumb--lg {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.ui-shell__item:hover .ui-shell__thumb img {
+  filter: brightness(1.08);
+}
+
+.ui-shell__item[aria-current="page"] .ui-shell__thumb {
+  outline: 2px solid var(--color-accent-line);
+  outline-offset: 2px;
 }
 
 /* A game's initials, standing in for its picture. */
@@ -335,9 +582,9 @@
   min-width: 18px;
   padding: 0 var(--space-1-5);
   box-sizing: border-box;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-subtle);
-  color: var(--color-accent-text);
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
   font-size: var(--font-size-xs);
   font-weight: var(--weight-semibold);
   font-variant-numeric: tabular-nums;
@@ -397,31 +644,50 @@
 
 /* Footer: Downloads, account, Settings. Quiet, and always there. */
 .ui-shell__foot {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   flex-shrink: 0;
-  padding: var(--space-2) 10px 10px;
-  border-top: var(--border-width) solid var(--color-border);
+  padding: var(--space-2) var(--shell-pad) var(--space-3);
+}
+
+.ui-shell__foot::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: var(--shell-pad);
+  right: var(--shell-pad);
+  height: var(--border-width);
+  background: var(--color-border);
 }
 
 .ui-shell__foot .ui-shell__item[aria-current="page"] {
   background: var(--color-accent-subtle);
-  box-shadow: inset var(--rail-width) 0 0 var(--color-accent-line);
+  box-shadow: inset var(--rail-width) 0 0 var(--color-accent-line), var(--edge-highlight);
 }
 
+.ui-shell.is-collapsed .ui-shell__foot .ui-shell__item[aria-current="page"] {
+  box-shadow: var(--edge-highlight);
+}
+
+/* Same height folded or not, so the toggle below never moves. */
 .ui-shell__account {
-  padding: var(--space-1-5) 0 var(--space-1-5) 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 52px;
+  padding: var(--space-1) 0;
 }
 
 .ui-shell.is-collapsed .ui-shell__account {
-  padding-left: 4px;
+  padding-left: 2px;
 }
 
 .ui-account--rail {
   position: relative;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
 }
 
 .ui-account__overlay {
@@ -433,10 +699,36 @@
   cursor: pointer;
 }
 
+.ui-account__overlay:disabled {
+  cursor: default;
+}
+
 .ui-account--rail:has(.ui-account__overlay:focus-visible) {
   outline: var(--focus-width) solid var(--color-focus);
   outline-offset: var(--focus-offset);
   border-radius: var(--radius-sm);
+}
+
+/* The Downloads panel opens beside the sidebar's Downloads button rather than across the
+   window from it. */
+.ui-frame:has(> .ui-shell) ~ .ui-queue {
+  left: calc(224px + var(--space-3));
+  right: auto;
+  bottom: var(--space-4);
+}
+
+.ui-frame:has(> .ui-shell.is-collapsed) ~ .ui-queue {
+  left: calc(56px + var(--space-3));
+}
+
+/* Narrow windows: the framed page uses the space. */
+@media (max-width: 900px) {
+  .ui-stage {
+    margin: 0;
+    border-width: 0 0 0 var(--border-width);
+    border-radius: var(--radius-lg) 0 0 0;
+    box-shadow: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

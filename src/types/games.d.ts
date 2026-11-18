@@ -3,9 +3,10 @@ export {};
 declare global {
     type GameId = "sims4" | "gtav" | "skyrimse" | "fallout4" | "cyberpunk2077" | "stardew";
 
-    /** How a game signs in. name: the last-used local Steam profile, not a verified session. */
+    /** What a pending Play is doing, sent while it runs. */
     type GameLaunchProgress = { gameId: GameId; stage: "checking" | "backup" | "starting" };
 
+    /** How a game signs in. name: the last-used local Steam profile, not a verified session. */
     type GameStoreAccount = {
         store: "steam" | "ea" | "gog" | "epic" | "rockstar" | null;
         storeName: string | null;
@@ -26,6 +27,8 @@ declare global {
         source: string | null;
         chosen: boolean;
         windowsOnly: boolean;
+        /** Why this computer can't run the game found (an Apple-silicon-only app on an Intel Mac); its mods can still be managed. */
+        cantRun?: string | null;
         nexus: string | null;
         curseforge: number | null;
         modCount: number;

@@ -19,7 +19,7 @@ const GAMES: GameSummary[] = [
   { id: "gtav", name: "Grand Theft Auto V", tagline: "Script mods, trainers and add-on vehicles", colour: "#16a34a", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "gta5", curseforge: null, modCount: 0, updated: null },
   { id: "skyrimse", name: "Skyrim Special Edition", tagline: "Plugins, textures and SKSE mods", colour: "#94a3b8", found: true, gameDir: "C:/Steam/steamapps/common/Skyrim Special Edition", docsDir: null, source: "a CrossOver bottle (sample)", chosen: false, windowsOnly: true, nexus: "skyrimspecialedition", curseforge: null, modCount: 0, updated: null, loadOrder: true },
   { id: "fallout4", name: "Fallout 4", tagline: "Plugins, settlements and F4SE mods", colour: "#eab308", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "fallout4", curseforge: null, modCount: 0, updated: null, loadOrder: true },
-  { id: "cyberpunk2077", name: "Cyberpunk 2077", tagline: "Archive mods, Cyber Engine Tweaks, redscript and RED4ext", colour: "#facc15", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "cyberpunk2077", curseforge: null, modCount: 0, updated: null },
+  { id: "cyberpunk2077", name: "Cyberpunk 2077", tagline: "redscript mods, and archive mods through archive-loader", colour: "#facc15", found: true, gameDir: "~/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077", docsDir: null, source: "Steam (sample)", chosen: false, windowsOnly: false, cantRun: "Cyberpunk 2077's Mac version only runs on Apple silicon (M1 or later), and this Mac has an Intel processor.", nexus: "cyberpunk2077", curseforge: null, modCount: 0, updated: null },
   { id: "stardew", name: "Stardew Valley", tagline: "SMAPI mods", colour: "#4ade80", found: true, gameDir: "~/Library/Application Support/Steam/steamapps/common/Stardew Valley", docsDir: null, source: "Steam (sample)", chosen: false, windowsOnly: false, nexus: "stardewvalley", curseforge: 669, modCount: 0, updated: null },
 ];
 
@@ -47,6 +47,15 @@ const MODS: Partial<Record<GameId, GameMod[]>> = {
     mod("m:hair", "Wavy Hair Pack", { source: { provider: "file", fileName: "wavy_hair.zip" }, fileCount: 6, areas: [{ area: "Mods", count: 6 }] }),
     mod("m:house", "Seaside Cottage (Tray)", { source: { provider: "file" }, areas: [{ area: "Tray", count: 5 }], fileCount: 5 }),
     mod("h:docs:Mods/old_slider.package", "old_slider.package", { managed: false, source: { provider: "hand" }, where: "Mods", kind: "file", areas: [], enabled: false }),
+    mod("m:wicked", "WickedWhims", { hooks: true, source: { provider: "file", fileName: "WickedWhims_v179.zip" }, fileCount: 22, areas: [{ area: "Mods", count: 22 }], version: "179", installedAt: daysAgo(40) }),
+    mod("m:lot51", "Lot 51 Core Library", { hooks: true, source: { provider: "curseforge", modId: "551" }, fileCount: 2, areas: [{ area: "Mods", count: 2 }], version: "1.0.4", installedAt: daysAgo(18) }),
+    mod("m:slice", "Slice of Life", { hooks: true, source: { provider: "curseforge", modId: "552" }, fileCount: 9, areas: [{ area: "Mods", count: 9 }], version: "2.3.1", installedAt: daysAgo(60) }),
+    mod("m:basemental", "Basemental Drugs", { hooks: true, source: { provider: "file", fileName: "Basemental_Drugs_Tuning.zip" }, fileCount: 31, areas: [{ area: "Mods", count: 31 }], installedAt: daysAgo(85) }),
+    mod("m:lumpinou", "Lumpinou Better Build/Buy", { source: { provider: "file", fileName: "Lumpinou_BB.zip" }, fileCount: 4, areas: [{ area: "Mods", count: 4 }], installedAt: daysAgo(33) }),
+    mod("m:skin", "Default Skin Overlay Set", { source: { provider: "curseforge", modId: "553" }, fileCount: 12, areas: [{ area: "Mods", count: 12 }], version: "3.0", installedAt: daysAgo(150) }),
+    mod("m:eyes", "Default Replacement Eyes", { source: { provider: "file", fileName: "default_eyes.package" }, fileCount: 1, areas: [{ area: "Mods", count: 1 }], installedAt: daysAgo(200) }),
+    mod("m:poses", "Couple Poses Pack", { managed: false, source: { provider: "hand" }, where: "Mods", kind: "folder", areas: [], fileCount: 18, installedAt: daysAgo(70) }),
+    mod("m:tray2", "Modern Loft (Tray)", { source: { provider: "file", fileName: "ModernLoft.zip" }, areas: [{ area: "Tray", count: 6 }], fileCount: 6, installedAt: daysAgo(12) }),
   ],
   stardew: [mod("m:cjb", "CJB Cheats Menu", { hooks: true, areas: [{ area: "Mods", count: 3 }], fileCount: 3 })],
   skyrimse: [
@@ -210,23 +219,44 @@ const need = (id: GameId) => {
   return game;
 };
 
-const SAMPLE_NAMES = ["Better Build Buy", "More Columns", "Realistic Weather", "Quick Start Menu", "Expanded Careers", "Cosy Furniture Set", "Night Lighting", "Smarter NPCs"];
+/* [name, author, summary, downloads, endorsements, days since update, sites]. Invented, generic content. */
+type SampleRow = [string, string, string, number, number, number, "both" | "nexus" | "curseforge"];
+const SAMPLE_ROWS: SampleRow[] = [
+  ["Better Build Buy", "BuildCraftLab", "Sorts the catalogue by room and style, and adds a search box that remembers what you looked for.", 412000, 15800, 3, "both"],
+  ["Slice of Life Needs", "QuietHollow", "Adds moodlets for small daily joys and annoyances, with settings to tune how often they appear.", 388000, 14200, 8, "both"],
+  ["More Columns", "ArchWorks", "A set of pillars, arches and half walls in every wall style, for builders who run out of trim.", 301000, 9400, 12, "nexus"],
+  ["Realistic Weather", "SkyRoutine", "Rain, snow and fog change slowly through the day instead of switching all at once.", 276000, 8100, 5, "both"],
+  ["Quick Start Menu", "TinyTools", "Skips the intro screens and takes you straight to your save in a few seconds.", 254000, 7600, 21, "nexus"],
+  ["Expanded Careers", "NineToFive", "Adds six new careers with their own outfits, work days and promotions.", 233000, 7200, 16, "curseforge"],
+  ["Cosy Furniture Set", "WoolAndOak", "Forty soft chairs, rugs and lamps in warm colours, all with recolours.", 219000, 6900, 30, "both"],
+  ["Night Lighting", "DuskStudio", "Warmer street lamps and window glow after dark. Works with most lighting packs.", 187000, 5300, 9, "nexus"],
+  ["Smarter Neighbours", "TownPlanner", "Townies visit parks, shops and each other more often, and stay out of your way less.", 164000, 4800, 44, "curseforge"],
+  ["Relaxed Aging", "LongerDays", "Choose how long each life stage lasts, from a few days to a full season.", 152000, 4500, 14, "both"],
+  ["Hair Without Hats", "StrandCo", "Hat-friendly versions of popular hairstyles, so hair no longer clips through caps.", 141000, 4100, 27, "curseforge"],
+  ["Clutter Cleaner", "TidyTeam", "Removes leftover objects after parties and adds a one-click tidy to the pie menu.", 128000, 3900, 6, "nexus"],
+  ["Kitchen Overhaul", "PanAndPlate", "New cooking animations, more recipes and a cleaner kitchen interface.", 117000, 3400, 52, "both"],
+  ["Better Pets Behaviour", "PawPrint", "Pets sleep, play and beg for food in more natural ways.", 96000, 2900, 19, "curseforge"],
+  ["Faster Loading Screens", "QuickLoad", "Trims the wait between lots by cutting unused preloaded data.", 88000, 2600, 33, "nexus"],
+  ["Seasonal Outfits", "ThreadAndNeedle", "Coats, scarves and summer wear that match the weather outside.", 74000, 2100, 60, "both"],
+];
 
 const sampleMods = (game: GameSummary, provider: "nexus" | "curseforge", query: string, page: number): GameRemoteMod[] =>
-  SAMPLE_NAMES.filter((name) => !query || name.toLowerCase().includes(query.toLowerCase())).map((name, index) => ({
-    provider,
-    id: String(1000 + page * 24 + index),
-    name: `${name}${page ? ` ${page + 1}` : ""}`,
-    summary: `A sample ${game.name} mod for the web preview. The desktop app shows real ones from ${provider === "nexus" ? "Nexus Mods" : "CurseForge"}.`,
-    picture: null,
-    author: "SampleAuthor",
-    downloads: 250000 - index * 21000,
-    endorsements: provider === "nexus" ? 9000 - index * 700 : null,
-    version: "1.2",
-    updated: daysAgo(index * 9 + 2),
-    adult: false,
-    url: provider === "nexus" ? `https://www.nexusmods.com/${game.nexus}/mods/${1000 + index}` : "https://www.curseforge.com/",
-  }));
+  SAMPLE_ROWS.filter(([name, , summary, , , , sites]) => (sites === "both" || sites === provider) && (!query || `${name} ${summary}`.toLowerCase().includes(query.toLowerCase()))).map(
+    ([name, author, summary, downloads, endorsements, days], index) => ({
+      provider,
+      id: String(1000 + SAMPLE_ROWS.findIndex((row) => row[0] === name)),
+      name: page ? `${name} ${page + 1}` : name,
+      summary,
+      picture: null,
+      author,
+      downloads: Math.round((downloads * (provider === "nexus" ? 1 : 0.8)) / (page + 1)),
+      endorsements: provider === "nexus" ? endorsements : null,
+      version: `1.${(index % 5) + 1}`,
+      updated: daysAgo(days),
+      adult: false,
+      url: provider === "nexus" ? `https://www.nexusmods.com/${game.nexus}/mods/${1000 + index}` : "https://www.curseforge.com/",
+    }),
+  );
 
 export const gamesBridge = {
   list: async () => GAMES.map(summary),
@@ -354,7 +384,7 @@ export const gamesBridge = {
     const game = need(id);
     const sources: ("nexus" | "curseforge")[] =
       options.provider === "nexus" || options.provider === "curseforge" ? [options.provider] : game.curseforge ? ["nexus", "curseforge"] : ["nexus"];
-    const lists = sources.map((source) => sampleMods(game, source, options.query ?? "", options.page ?? 0).slice(0, sources.length > 1 ? 4 : 8));
+    const lists = sources.map((source) => sampleMods(game, source, options.query ?? "", options.page ?? 0).slice(0, sources.length > 1 ? 7 : 12));
     const mods = lists[0].flatMap((first, i) => [first, ...lists.slice(1).map((list) => list[i]).filter(Boolean)]);
     const totals = Object.fromEntries(sources.map((source) => [source, options.query ? 4 : 1200]));
     return { total: Object.values(totals).reduce((a, b) => a + b, 0), totals, pageCount: options.query ? 1 : 100, mods };

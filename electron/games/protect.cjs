@@ -28,7 +28,7 @@ const EXES = {
     gtav: ["GTA5.exe", "GTA5_Enhanced.exe"],
     skyrimse: ["SkyrimSE.exe"],
     fallout4: ["Fallout4.exe"],
-    cyberpunk2077: ["bin/x64/Cyberpunk2077.exe"],
+    cyberpunk2077: ["bin/x64/Cyberpunk2077.exe", "Cyberpunk2077.app/Contents/MacOS/Cyberpunk2077", "../MacOS/Cyberpunk2077"],
     stardew: ["Stardew Valley.dll", "StardewValley.dll", "Stardew Valley.exe"],
 };
 

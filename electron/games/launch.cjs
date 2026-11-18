@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const protect = require("./protect.cjs");
+const mac = require("./mac.cjs");
 
 /*
  * Starting a game: through Steam when that's where it is, else its own exe (or app on a
@@ -12,6 +13,10 @@ const protect = require("./protect.cjs");
  * The Sims 4 with script mods off, GTA V with Script Hook V's ASI loader set aside,
  * Cyberpunk without Cyber Engine Tweaks and RED4ext, Skyrim and Fallout without their
  * script extender, Stardew without SMAPI.
+ *
+ * Cyberpunk's Mac version: redscript compiles the script mods first (the game doesn't),
+ * then archive-loader starts it when it's installed with archive mods to load, else Steam
+ * or the app. "safe" compiles no script mods and leaves archive-loader out.
  */
 
 /*
@@ -62,10 +67,15 @@ async function launch(game, loc, { safe = false, open }) {
         return game.steamAppIds?.[0];
     };
     const viaSteam = loc.source?.startsWith("Steam") && !inBottle(loc.gameDir) && steamId();
+    const macApp = process.platform === "darwin" && !inBottle(loc.gameDir) ? mac.appFor(game, loc) : null;
+    const cyberpunkMac = game.id === "cyberpunk2077" && Boolean(macApp);
 
     // First, how it'll start, so nothing is changed for a game that can't be started.
+    const problem = macApp ? mac.runProblem(game, loc) : null;
+    if (problem) throw new Error(problem);
     let how;
     let start;
+    const archiveLoader = cyberpunkMac && !safe ? mac.archiveLoader(loc.gameDir) : null;
     const extenderExe = !safe && game.bethesda ? exeIn(loc, [game.bethesda.extender.loader]) : null;
     const smapiExe = !safe && game.id === "stardew" && process.platform === "win32" ? exeIn(loc, ["StardewModdingAPI.exe"]) : null;
 
@@ -78,6 +88,13 @@ async function launch(game, loc, { safe = false, open }) {
         if (!fs.existsSync(app)) throw new Error("The Sims 4 app wasn't found. Choose it in Settings.");
         how = "The Sims 4 app";
         start = () => startDetached("open", ["-a", app]);
+    } else if (archiveLoader) {
+        // It patches the archives, runs the game and puts them back when it quits; a mod it
+        // can't apply starts the game without archive mods rather than not at all.
+        const exe = mac.appExecutable(macApp);
+        if (!exe) throw new Error(`${path.basename(macApp)} has no program in it. Check the game's files in Steam or GOG.`);
+        how = "archive-loader";
+        start = () => startDetached(archiveLoader, ["run", "--vanilla-on-error", "--", exe], loc.gameDir);
     } else if (viaSteam) {
         how = "Steam";
         start = () => open(`steam://rungameid/${steamId()}`);
@@ -86,6 +103,9 @@ async function launch(game, loc, { safe = false, open }) {
         if (exe) {
             how = inBottle(loc.gameDir) ? `${path.basename(exe)} in CrossOver` : path.basename(exe);
             start = () => (inBottle(loc.gameDir) ? startInBottle(exe) : startDetached(exe, [], path.dirname(exe)));
+        } else if (macApp) {
+            how = path.basename(macApp);
+            start = () => startDetached("open", ["-a", macApp]);
         } else if (steamId() && process.platform !== "darwin") {
             how = "Steam";
             start = () => open(`steam://rungameid/${steamId()}`);
@@ -99,6 +119,7 @@ async function launch(game, loc, { safe = false, open }) {
 
     // Then, playing with or without the mods that hook into its code.
     if (game.id === "sims4" && safe) protect.setSimsOptions(loc, { scripts: false });
+    if (cyberpunkMac) await mac.compileScripts(loc.gameDir, { safe });
     for (const rel of (loc.gameDir && LOADERS[game.id]) || []) {
         const live = path.join(loc.gameDir, rel);
         const parked = `${live}${PARKED}`;

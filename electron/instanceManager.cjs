@@ -288,7 +288,7 @@ function deleteInstance(name) {
 /* ---------------- UPDATE SETTINGS ---------------- */
 
 // Fields the UI is allowed to change after creation.
-const EDITABLE = ["ram", "jvmArgs", "javaPath", "notes"];
+const EDITABLE = ["ram", "jvmArgs", "javaPath", "javaTuning", "notes"];
 
 function updateInstance(name, patch) {
     if (!patch || typeof patch !== "object") throw new Error("Those settings couldn't be read.");
@@ -323,6 +323,12 @@ function updateInstance(name, patch) {
         // anything else saved here keeps only the ones that are.
         if (key === "jvmArgs") {
             next.jvmArgs = launcherSettings.cleanJvmArgs(String(patch.jvmArgs ?? "").slice(0, 8000));
+            continue;
+        }
+
+        // "" follows Settings; otherwise "performance" or "standard".
+        if (key === "javaTuning") {
+            next.javaTuning = patch.javaTuning ? launcherSettings.javaTuningOf(patch.javaTuning) : "";
             continue;
         }
 
@@ -645,7 +651,10 @@ async function launchInstance(name, account, { onProgress } = {}) {
     // Only the arguments the launcher passes on: any saved before these checks that could
     // run a program or write a file are left out, and the log says so.
     const { args: ownJvmArgs, refused: refusedJvmArgs } = launcherSettings.safeJvmArgs(instance.jvmArgs || global.jvmArgs);
-    const extraJvmArgs = launcherSettings.withDefaultGc(ownJvmArgs);
+    // Performance (tuned) or Standard (the Minecraft Launcher's): the instance's own choice, else Settings'.
+    const javaNeed = requiredJava(folder, instance);
+    const tuning = launcherSettings.javaTuningOf(instance.javaTuning || global.javaTuning);
+    const extraJvmArgs = launcherSettings.launchJvmArgs(ownJvmArgs, { tuning, javaMajor: javaNeed.majorVersion, ram: instance.ram });
 
     // This run's own record, so a game stopped and started again keeps its two runs apart.
     const run = { id: crypto.randomUUID(), lines: [], partial: "", running: true, startedAt: Date.now(), endedAt: null, exitCode: null };
@@ -656,7 +665,9 @@ async function launchInstance(name, account, { onProgress } = {}) {
         note(`Left out Java arguments the launcher doesn't use (they could run a program or write a file): ${refusedJvmArgs.map((entry) => entry.arg).join(" ")}. Remove them in Settings.`);
     }
     if (restored) note(`Put back ${restored} of Minecraft's own libraries that an earlier install left out.`);
-    if (!launcherSettings.choosesGc(ownJvmArgs)) note("Using the Minecraft Launcher's garbage collection settings, for fewer stutters.");
+    if (launcherSettings.choosesGc(ownJvmArgs)) note("Using your own garbage collection settings.");
+    else if (tuning === "performance") note("Using the Performance Java settings: tuned garbage collection, a bigger code cache and full-size memory from the start, for fewer stutters.");
+    else note("Using the Minecraft Launcher's garbage collection settings, for fewer stutters.");
 
     // Held from here, so a second Play with the same account waits its turn.
     starting.add(name);
@@ -667,7 +678,7 @@ async function launchInstance(name, account, { onProgress } = {}) {
             instanceEvents.emit("progress", { name, ...update });
             onProgress?.(update);
         };
-        const javaPath = await chooseJava(instance, requiredJava(folder, instance), { onProgress: progress, note });
+        const javaPath = await chooseJava(instance, javaNeed, { onProgress: progress, note });
 
         proc = launch({
             versionJson,

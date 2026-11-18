@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BuiltModel } from "../build";
 import type { DisplayTable, DisplayTransform, ModelElement } from "../types";
-import { Button } from "./shared";
+import Segmented from "../../components/ui/Segmented";
 
 type Props = {
   built: BuiltModel;
   display: DisplayTable;
+  /** Shown over the foot of the view. */
+  footer?: ReactNode;
 };
 
 type ViewMode = "free" | "gui" | "firstperson";
 
 /** 4 game ticks, the time each glow frame shows for. */
 const GLOW_FRAME_MS = 200;
+// Half the inventory view's shorter side, in model units: a 16-unit item fills about two thirds of it,
+// so it sits inside the slot with a margin, as the game draws a 16 px item in an 18 px slot.
+const SLOT_HALF = 12.5;
 
 const CORNERS = {
   south: (a: number[], b: number[]) => [[a[0], b[1], b[2]], [b[0], b[1], b[2]], [a[0], a[1], b[2]], [b[0], a[1], b[2]]],
@@ -101,8 +106,10 @@ function poseMatrix(transform: DisplayTransform | undefined) {
     .multiply(new THREE.Matrix4().makeTranslation(-8, -8, -8));
 }
 
-export default function ItemPreview3D({ built, display }: Props) {
+export default function ItemPreview3D({ built, display, footer }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const footRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<ViewMode>("free");
 
   useEffect(() => {
@@ -110,7 +117,8 @@ export default function ItemPreview3D({ built, display }: Props) {
     if (!host) return;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
+    // Render at least twice over so edges stay crisp on 1x screens, but cap the cost on very dense ones.
+    renderer.setPixelRatio(Math.min(3, Math.max(2, window.devicePixelRatio)));
     host.appendChild(renderer.domElement);
     renderer.domElement.style.display = "block";
     renderer.domElement.dataset.testid = "preview-3d";
@@ -147,15 +155,19 @@ export default function ItemPreview3D({ built, display }: Props) {
       scene.add(glowMesh);
     }
 
-    scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.15));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.9);
     keyLight.position.set(6, 10, 14);
     scene.add(keyLight);
     const fillLight = new THREE.DirectionalLight(0xffffff, 0.7);
     fillLight.position.set(-8, -3, -12);
     scene.add(fillLight);
 
-    const camera = new THREE.PerspectiveCamera(mode === "firstperson" ? 70 : 32, 1, 0.05, 400);
+    // The inventory draws items flat (no perspective), so its view does too.
+    const camera =
+      mode === "gui"
+        ? new THREE.OrthographicCamera(-SLOT_HALF, SLOT_HALF, SLOT_HALF, -SLOT_HALF, 0.1, 400)
+        : new THREE.PerspectiveCamera(mode === "firstperson" ? 70 : 32, 1, 0.05, 400);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enabled = mode === "free";
     controls.enablePan = false;
@@ -164,7 +176,8 @@ export default function ItemPreview3D({ built, display }: Props) {
 
     if (mode === "free") {
       mesh.matrix.copy(poseMatrix(undefined));
-      camera.position.set(14, 8, 34);
+      // Nearly head-on, so the thin side walls of the model stay out of sight until the user turns it.
+      camera.position.set(6.5, 5.5, 41);
       controls.target.set(0, 0, 0);
       controls.autoRotate = true;
       controls.autoRotateSpeed = 1.6;
@@ -191,19 +204,52 @@ export default function ItemPreview3D({ built, display }: Props) {
       if (width === 0 || height === 0) return;
       renderer.setSize(width, height);
 
+      // The stats strip covers the bottom of the stage, so the model is framed in the space above it.
+      const foot = footRef.current;
+      const room = foot ? Math.max(height * 0.5, foot.offsetTop - 8) : height;
+      let x = 0;
+      let y = 0;
+      let w = width;
+      let h = room;
       if (mode === "firstperson") {
-        // The game's hand pose sits near the screen's edge, so it only fits at 16:9.
-        const viewHeight = Math.min(height, (width * 9) / 16);
-        const viewWidth = (viewHeight * 16) / 9;
-        renderer.setViewport((width - viewWidth) / 2, (height - viewHeight) / 2, viewWidth, viewHeight);
-        camera.aspect = 16 / 9;
+        // The game's hand pose sits at the screen's edge, so it is shown on a 16:9 game screen with a
+        // margin round it: the parts of the item the game would cut off are still drawn, dimmed.
+        const pad = Math.max(24, Math.min(width, room) * 0.08);
+        w = Math.max(16, Math.min(width - pad * 2, ((room - pad * 2) * 16) / 9));
+        h = (w * 9) / 16;
+        x = (width - w) / 2;
+        y = (room - h) / 2;
+      }
+      const aspect = w / h;
+      if (camera instanceof THREE.OrthographicCamera) {
+        renderer.setViewport(x, height - y - h, w, h);
+        camera.left = -SLOT_HALF * Math.max(1, aspect);
+        camera.right = SLOT_HALF * Math.max(1, aspect);
+        camera.top = SLOT_HALF / Math.min(1, aspect);
+        camera.bottom = -SLOT_HALF / Math.min(1, aspect);
+      } else if (mode === "firstperson") {
+        // The game's 16:9 view, widened to the whole stage so the off-screen parts show too.
+        renderer.setViewport(0, 0, width, height);
+        camera.aspect = aspect;
+        camera.setViewOffset(w, h, -x, -y, width, height);
       } else {
-        camera.aspect = width / height;
+        renderer.setViewport(x, height - y - h, w, h);
+        camera.aspect = aspect;
       }
       camera.updateProjectionMatrix();
+
+      // The slot and the game screen drawn over the stage line up with the view.
+      const stage = stageRef.current;
+      if (stage) {
+        stage.style.setProperty("--view-x", `${x}px`);
+        stage.style.setProperty("--view-y", `${y}px`);
+        stage.style.setProperty("--view-w", `${w}px`);
+        stage.style.setProperty("--view-h", `${h}px`);
+      }
     };
     const observer = new ResizeObserver(resize);
     observer.observe(host);
+    if (footRef.current) observer.observe(footRef.current);
     resize();
 
     const animate = () => {
@@ -233,23 +279,41 @@ export default function ItemPreview3D({ built, display }: Props) {
   }, [built, display, mode]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%" }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <Button active={mode === "free"} onClick={() => setMode("free")}>Rotate</Button>
-        <Button active={mode === "gui"} onClick={() => setMode("gui")}>Inventory</Button>
-        <Button active={mode === "firstperson"} onClick={() => setMode("firstperson")}>In hand</Button>
+    <>
+      <div className="sk-view__bar">
+        <Segmented<ViewMode>
+          label="Camera"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "free", label: "Rotate" },
+            { value: "gui", label: "Inventory" },
+            { value: "firstperson", label: "In hand" },
+          ]}
+        />
       </div>
-      <div
-        ref={hostRef}
-        style={{
-          flex: 1,
-          minHeight: 420,
-          borderRadius: 10,
-          overflow: "hidden",
-          background: "radial-gradient(circle at 50% 40%, var(--color-accent-subtle) 0%, var(--color-surface-sunken) 75%)",
-          cursor: mode === "free" ? "grab" : "default",
-        }}
-      />
-    </div>
+      <div className="sk-stage3d" ref={stageRef}>
+        {mode === "gui" && <div className="sk-slot" aria-hidden="true" />}
+        {mode === "free" && <div className="sk-floor" aria-hidden="true" />}
+        {mode === "firstperson" && <div className="sk-screen" aria-hidden="true" />}
+        <div ref={hostRef} className="sk-stage3d__host" style={{ cursor: mode === "free" ? "grab" : "default" }} />
+        {mode === "firstperson" && (
+          <div className="sk-hud" aria-hidden="true">
+            <span className="sk-screen__label">Game screen, right hand. Faded parts are off-screen in game.</span>
+            <span className="sk-screen__cross" />
+            <span className="sk-screen__hotbar">
+              {Array.from({ length: 9 }, (_, slot) => (
+                <span key={slot} className={slot === 0 ? "is-held" : undefined} />
+              ))}
+            </span>
+          </div>
+        )}
+        {footer && (
+          <div ref={footRef} className="sk-stage3d__foot">
+            {footer}
+          </div>
+        )}
+      </div>
+    </>
   );
 }

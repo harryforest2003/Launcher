@@ -1,4 +1,19 @@
+import { useEffect } from "react";
+
 /* Bits shared by a game section's pages. */
+
+/* How the Mods page's issue panels tell its issues strip what they found, and say what happened. */
+export type IssueTone = "danger" | "warning" | "info";
+export type IssueReport = (kind: string, count: number, tone: IssueTone) => void;
+export type Say = (message: { tone: "good" | "bad" | "warn"; text: string; notes?: string[] }) => void;
+
+/* Reports a panel's count to the strip, and zero when the panel goes. */
+export function useIssueReport(report: IssueReport | undefined, kind: string, count: number, tone: IssueTone) {
+  useEffect(() => {
+    report?.(kind, count, tone);
+  }, [report, kind, count, tone]);
+  useEffect(() => () => report?.(kind, 0, "info"), [report, kind]);
+}
 
 /* An error's message without Electron's "Error invoking remote method" wrapping. */
 export function errorText(err: unknown) {

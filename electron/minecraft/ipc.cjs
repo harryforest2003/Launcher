@@ -260,6 +260,7 @@ function registerInstanceIpc() {
     // Optimise: what's slowing an instance down, the fixes for it, and putting them back.
     const optimiseOptions = (event, name) => ({
         globalJvmArgs: launcherSettings.readSettings().jvmArgs,
+        globalJavaTuning: launcherSettings.readSettings().javaTuning,
         updateInstance: (patch) => instanceManager.updateInstance(name, patch),
         onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
     });
@@ -273,6 +274,7 @@ function registerInstanceIpc() {
         optimise.check(instanceManager.getInstance(name), instanceManager.instanceFolder(name), {
             running: instanceManager.isRunning(name),
             globalJvmArgs: launcherSettings.readSettings().jvmArgs,
+            globalJavaTuning: launcherSettings.readSettings().javaTuning,
         })
     );
 

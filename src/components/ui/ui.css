@@ -23,6 +23,11 @@
   );
   --ui-radius-card: var(--radius-lg);
   --ui-radius-control: var(--radius-md);
+  /* Text boxes and lists: a filled well with a quiet edge that firms up on hover. */
+  --ui-control-fill: var(--color-surface-sunken);
+  --ui-control-edge: color-mix(in srgb, var(--color-border-strong) 38%, var(--color-border));
+  --ui-control-edge-hover: color-mix(in srgb, var(--color-border-strong) 70%, var(--color-border));
+  --ui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-focus) 28%, transparent);
 }
 
 /* ---------------- Button ---------------- */
@@ -236,14 +241,29 @@
   font-family: var(--font-ui);
   font-size: var(--font-size-sm);
   color: var(--color-text);
-  background: var(--color-surface-sunken);
-  border: var(--border-width) solid var(--color-border-strong);
+  background: var(--ui-control-fill);
+  border: var(--border-width) solid var(--ui-control-edge);
   border-radius: var(--ui-radius-control);
-  transition: border-color var(--duration-fast) var(--ease-out);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
-.ui-input:hover {
-  border-color: var(--color-text-muted);
+.ui-input:hover:not(:disabled) {
+  border-color: var(--ui-control-edge-hover);
+}
+
+/* Focused: the edge takes the focus colour with a soft ring round it. */
+.ui-input:focus-visible,
+.ui-select__control:focus-visible {
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: var(--ui-focus-ring);
+}
+
+.ui-input:disabled {
+  color: var(--color-text-disabled);
+  cursor: default;
 }
 
 .ui-input[aria-invalid="true"] {
@@ -274,9 +294,11 @@
 }
 .ui-search > input::placeholder { color: var(--color-text-muted); }
 .ui-search > input:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
+  outline: none;
+  border-color: var(--color-focus);
+  box-shadow: var(--ui-focus-ring);
 }
+.ui-search:focus-within > svg { color: var(--color-text-secondary); }
 
 /* ---------------- Segmented (one of a few) ---------------- */
 
@@ -384,16 +406,18 @@
   font-size: var(--font-size-sm);
   font-weight: var(--weight-medium);
   color: var(--color-text);
-  background: var(--color-surface-sunken);
-  border: var(--border-width) solid var(--color-border-strong);
+  background: var(--ui-control-fill);
+  border: var(--border-width) solid var(--ui-control-edge);
   border-radius: var(--ui-radius-control);
   text-overflow: ellipsis;
   cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
 
 .ui-select__control:hover:not(:disabled) {
-  border-color: var(--color-text-muted);
+  border-color: var(--ui-control-edge-hover);
 }
 
 .ui-select__control:disabled {
@@ -741,6 +765,82 @@
 .ui-account__error {
   font-size: var(--font-size-xs);
   color: var(--color-danger-text);
+}
+
+/* In the sidebar: one card with the picture, a small line saying what it is, and the name.
+   For Minecraft the account list opens from anywhere on it. */
+.ui-account--card {
+  gap: var(--space-1-5);
+}
+
+.ui-account__card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: var(--space-1-5) var(--space-1-5) var(--space-1-5) var(--space-1);
+  border-radius: var(--ui-radius-control);
+  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  box-shadow: var(--edge-highlight), inset 0 0 0 var(--border-width) var(--ui-hairline);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+
+.ui-account__card:has(.ui-account__overlay:hover:not(:disabled)) {
+  background: var(--color-surface-raised);
+}
+
+.ui-account__card:has(.ui-account__overlay:focus-visible) {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+.ui-account__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  line-height: var(--leading-tight);
+}
+
+.ui-account__text .ui-account__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-account__chevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.ui-account__refresh {
+  flex-shrink: 0;
+  width: var(--control-sm);
+  padding: 0;
+}
+
+.ui-account__refresh:disabled {
+  background: transparent;
+}
+
+.ui-account__refresh .is-spinning {
+  animation: ui-spin 0.9s linear infinite;
+}
+
+.ui-account--card > .ui-account__note,
+.ui-account--card > .ui-account__error {
+  padding: 0 var(--space-1);
+  line-height: var(--leading-normal);
+}
+
+.ui-account--card .ui-account__action .ui-button {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
 }
 
 /* ---------------- Toggle (on/off switch) ---------------- */

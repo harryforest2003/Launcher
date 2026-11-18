@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil, TextCursorInput } from "lucide-react";
+import { FolderPlus, ImagePlus, Package, Pencil, Plus, TextCursorInput } from "lucide-react";
+import UiButton from "../../components/ui/Button";
+import Modal from "../../components/ui/Modal";
 import blockbenchLogo from "../../assets/blockbench-logo.svg";
 import BackgroundLogo from "../../components/BackgroundLogo";
 import { BinIcon } from "../../components/Icons";
@@ -8,19 +10,21 @@ import { findItem } from "../catalog";
 import { ATLAS_PIXELS, buildPack, type BuiltPack, type PackSkin } from "../pack";
 import type { DisplayTable, GlowInfo, ModelElement, SkinLibrary, SkinMeta } from "../types";
 import { MC_VERSIONS, NEWEST_VERSION, findVersion } from "../versions";
+import { START_ITEMS } from "./startItems";
 import { usePrompt } from "./prompt";
 import { Button, ErrorNote, PromptDialog, SectionTitle, Slider } from "./shared";
-import { CHECKERBOARD, fieldStyle, panelStyle } from "./styles";
+import { CHECKERBOARD, fieldStyle } from "./styles";
 
 type Props = {
-  onNewSkin: () => void;
+  /** Starts a new skin; itemId preselects the item (a sword when omitted). */
+  onNewSkin: (itemId?: string) => void;
   onEdit: (skin: SkinMeta) => void;
   onEditInBlockbench: (skin: SkinMeta) => void;
   notice: string | null;
 };
 
 // The size of the square buttons on each skin's card, like the instance page's.
-const squareButton = { width: 38, height: 38, boxSizing: "border-box" as const, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" };
+const squareButton = { width: 28, height: 28, boxSizing: "border-box" as const, padding: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" };
 
 const ALL = "__all__";
 const SINGLES = "__singles__";
@@ -56,6 +60,47 @@ async function loadPackSkin(meta: SkinMeta): Promise<PackSkin> {
   return { meta, texturePng, elements, display, glow: { info: glow, stripPng, stillPng } };
 }
 
+// A 16x16 pixel-art sword, drawn like a Minecraft item texture: an outlined blade along the diagonal,
+// a crossguard across it, a wooden grip and a pommel. A darker copy behind it hints at thickness.
+const SWORD_PIXELS: [number, number, string][] = (() => {
+  const pixels: [number, number, string][] = [];
+  const line = (from: number, to: number, y: (x: number) => number, kind: string) => {
+    for (let x = from; x <= to; x++) pixels.push([x, y(x), kind]);
+  };
+  line(6, 13, (x) => 14 - x, "outline");
+  line(8, 15, (x) => 17 - x, "outline");
+  pixels.push([14, 0, "outline"], [15, 0, "outline"], [15, 1, "outline"]);
+  line(6, 14, (x) => 15 - x, "blade");
+  line(7, 14, (x) => 16 - x, "edge");
+  line(3, 7, (x) => x + 5, "guard");
+  line(4, 7, (x) => x + 4, "guardShade");
+  line(2, 4, (x) => 15 - x, "handle");
+  pixels.push([0, 14, "pommel"], [1, 14, "pommel"], [0, 15, "pommel"], [1, 15, "pommelShade"]);
+  return pixels;
+})();
+
+const SWORD_FILL: Record<string, string> = {
+  outline: "#15131c",
+  blade: "#eef1f6",
+  edge: "#a7b1c2",
+  guard: "var(--color-accent)",
+  guardShade: "var(--color-accent-hover, var(--color-accent))",
+  handle: "#8a5a32",
+  pommel: "var(--color-accent)",
+  pommelShade: "#15131c",
+};
+
+function PixelSword() {
+  return (
+    <svg viewBox="-0.5 -0.5 17 17" width="100%" height="100%" style={{ maxWidth: 260, maxHeight: 260 }} shapeRendering="crispEdges" role="presentation">
+      <g transform="translate(0.75 0.75)" fill="#000" opacity="0.4">
+        {SWORD_PIXELS.map(([x, y], i) => <rect key={i} x={x} y={y} width="1" height="1" />)}
+      </g>
+      {SWORD_PIXELS.map(([x, y, kind], i) => <rect key={i} x={x} y={y} width="1" height="1" fill={SWORD_FILL[kind]} />)}
+    </svg>
+  );
+}
+
 export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, notice }: Props) {
   const [library, setLibrary] = useState<SkinLibrary>({ groups: [], skins: [] });
   const [filter, setFilter] = useState(ALL);
@@ -70,6 +115,7 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
   const [atlasBudget, setAtlasBudget] = useState(0.5);
   const [outputFolder, setOutputFolder] = useState("");
   const [building, setBuilding] = useState(false);
+  const [packOpen, setPackOpen] = useState(false);
   const [result, setResult] = useState<(BuiltPack & { path: string }) | null>(null);
 
   const reload = useCallback(async () => {
@@ -252,28 +298,135 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
   const fieldLabel = (text: string) => <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 4 }}>{text}</div>;
   const folderName = outputFolder.split(/[\\/]/).filter(Boolean).pop() ?? outputFolder;
 
+  const hasSkins = library.skins.length > 0;
+
   /*
-   * The models fill the page and scroll on their own; on the right, choosing what to see
-   * sits above building a pack, both sized to fit the window.
+   * No skins: one hero with one action. With skins: a toolbar (filter, group, pack) over a
+   * grid that fills the width. The pack form lives in a dialog, opened from the toolbar.
    */
   return (
-    <div style={{ display: "flex", gap: 18, flex: 1, minHeight: 0, minWidth: 0, alignItems: "stretch" }}>
+    <div className="sk-library" data-testid="skin-list-page">
       <div
         data-testid="skin-list"
-        // No panel of its own: just the skin cards, with the page (and its logo) behind them.
-        style={{ flex: 1, minWidth: 300, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", position: "relative" }}
+        style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", boxSizing: "border-box", position: "relative" }}
       >
         <BackgroundLogo />
         {notice && <div style={{ color: "var(--color-success-text)", fontSize: 14, marginBottom: 12, flexShrink: 0, position: "relative" }}>{notice}</div>}
         {error && <div style={{ marginBottom: 12, flexShrink: 0, position: "relative" }}><ErrorNote>{error}</ErrorNote></div>}
 
-        <div data-testid="skin-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "-4px", padding: 4, position: "relative" }}>
-        {visible.length === 0 ? (
-          <div style={{ color: "var(--color-text-muted)", padding: "50px 10px", textAlign: "center", fontSize: 14 }}>
-            No skins here yet.
+        {hasSkins && (
+          <div data-testid="skin-filters" className="sk-toolbar">
+            <div className="sk-toolbar__filters">
+              {filterButton(ALL, "All skins", library.skins.length)}
+              {filterButton(SINGLES, "Singles", library.skins.filter((skin) => !skin.groupId).length)}
+              {library.groups.length > 0 && (
+                <div data-testid="group-picker" className="sk-toolbar__groups">
+                  <SearchDropdown
+                    compact
+                    active={Boolean(activeGroup)}
+                    label="Show a group"
+                    options={groupOptions}
+                    value={activeGroup ? `${activeGroup.name} (${groupCount(activeGroup.id)})` : ""}
+                    placeholder={`Search ${library.groups.length} group${library.groups.length === 1 ? "" : "s"}...`}
+                    onChange={setFilter}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="sk-toolbar__actions">
+              {activeGroup && (
+                <>
+                  <UiButton size="sm" variant="ghost" onClick={renameGroup}>Rename group</UiButton>
+                  <UiButton size="sm" variant="danger" onClick={deleteGroup}>Delete group</UiButton>
+                </>
+              )}
+              <UiButton variant="secondary" icon={<FolderPlus size={16} aria-hidden="true" />} onClick={createGroup}>
+                {selected.size > 0 ? "Group selected" : "New group"}
+              </UiButton>
+              <UiButton variant="secondary" icon={<Package size={16} aria-hidden="true" />} onClick={() => setPackOpen(true)}>
+                Build resource pack{packSkins.length > 0 ? ` (${packSkins.length})` : ""}
+              </UiButton>
+              <UiButton variant="primary" icon={<Plus size={16} aria-hidden="true" />} onClick={() => onNewSkin()}>New skin</UiButton>
+            </div>
           </div>
+        )}
+
+        <div data-testid="skin-scroll" style={{ flex: 1, minHeight: 0, overflowY: "auto", margin: "-4px", padding: 4, position: "relative" }}>
+        {!hasSkins ? (
+          <div data-testid="skin-empty" className="sk-empty-state">
+            <div className="sk-start__head">
+              <div>
+                <h2>Make your first item model</h2>
+                <p>Pick the kind of item, then import a picture of it. Each model gets its own custom model data number in your resource pack.</p>
+              </div>
+              <UiButton variant="primary" size="lg" icon={<ImagePlus size={18} aria-hidden="true" />} data-testid="skin-template-picture" onClick={() => onNewSkin()}>
+                Import a picture
+              </UiButton>
+            </div>
+
+            <div className="sk-start__main">
+              <section aria-label="Start from">
+                <h3 className="sk-start__label">Start from</h3>
+                <div className="sk-start__cards">
+                  {START_ITEMS.map((entry) => {
+                    const Icon = entry.icon;
+                    return (
+                      <button key={entry.id} type="button" className="sk-start__card" data-testid="skin-template" onClick={() => onNewSkin(entry.id)}>
+                        <span className="sk-start__thumb" aria-hidden="true"><Icon size={22} /></span>
+                        <span className="sk-start__text">
+                          <strong>{entry.name}</strong>
+                          <span className="sk-start__sub">{entry.sub}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section aria-label="Example" className="sk-start__col">
+                <h3 className="sk-start__label">What you get</h3>
+                <div className="sk-start__preview" aria-hidden="true">
+                  <div className="sk-start__tabs">
+                    <span className="sk-start__tab">Selection</span>
+                    <span className="sk-start__tab is-on">Thickness</span>
+                    <span className="sk-start__tab">Preview</span>
+                  </div>
+                  <div className="sk-start__stage" style={{ background: CHECKERBOARD }}>
+                    <PixelSword />
+                  </div>
+                  <div className="sk-start__bar">
+                    <span>Thickness</span>
+                    <span className="sk-start__track" />
+                    <span>2 px</span>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <div>
+              <h3 className="sk-start__label">How it works</h3>
+              <ol className="sk-start__steps">
+                {[
+                  ["Import a picture", "Use a picture of the tool or weapon."],
+                  ["Cut it out", "The background is removed automatically. Touch up the edges."],
+                  ["Pick the item and thickness", "Choose what it is and how chunky it should be."],
+                  ["Build the resource pack", "Each model gets a custom model data number. Give the pack to players or use it on a server."],
+                ].map(([title, text], index) => (
+                  <li key={title} className="sk-start__step">
+                    <span className="sk-start__num">{index + 1}</span>
+                    <span>
+                      <strong>{title}</strong>
+                      <span className="sk-start__sub">{text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        ) : visible.length === 0 ? (
+          <div data-testid="skin-empty" className="sk-empty">Nothing in this view. Pick another group or tick skins and use "Group selected".</div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: 10 }}>
             {visible.map((skin) => (
               <div
                 key={skin.id}
@@ -286,12 +439,12 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
                 }}
               >
                 <label style={{ display: "block", cursor: "pointer" }}>
-                  <div style={{ background: CHECKERBOARD, borderRadius: 8, display: "flex", justifyContent: "center", padding: 8 }}>
+                  <div style={{ background: CHECKERBOARD, borderRadius: 8, display: "flex", justifyContent: "center", padding: 6 }}>
                     <img
                       src={skin.thumb}
                       alt=""
-                      width={112}
-                      height={112}
+                      width={88}
+                      height={88}
                       style={{ imageRendering: "pixelated" }}
                     />
                   </div>
@@ -328,12 +481,12 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
                 </select>
 
                 {/* Square buttons with the app's usual symbols; what each does comes up on hover. */}
-                <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                <div style={{ display: "flex", gap: 4, justifyContent: "center" }}>
                   <button className="sidebar-button" aria-label="Edit" data-tip="Edit: change the selection, item and thickness" style={squareButton} onClick={() => onEdit(skin)}>
-                    <Pencil size={18} aria-hidden="true" />
+                    <Pencil size={15} aria-hidden="true" />
                   </button>
                   <button className="sidebar-button" aria-label="Rename" data-tip="Rename this skin" style={squareButton} onClick={() => renameSkin(skin)}>
-                    <TextCursorInput size={18} aria-hidden="true" />
+                    <TextCursorInput size={15} aria-hidden="true" />
                   </button>
                   <button
                     className="sidebar-button"
@@ -342,10 +495,10 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
                     style={squareButton}
                     onClick={() => onEditInBlockbench(skin)}
                   >
-                    <img src={blockbenchLogo} alt="" style={{ width: 19, height: 19 }} />
+                    <img src={blockbenchLogo} alt="" style={{ width: 16, height: 16 }} />
                   </button>
-                  <button className="bin-button" aria-label="Delete" data-tip="Delete this skin" style={{ width: 38, height: 38, borderRadius: 10 }} onClick={() => deleteSkin(skin)}>
-                    <BinIcon size={18} />
+                  <button className="bin-button" aria-label="Delete" data-tip="Delete this skin" style={{ width: 28, height: 28, borderRadius: 8 }} onClick={() => deleteSkin(skin)}>
+                    <BinIcon size={15} />
                   </button>
                 </div>
               </div>
@@ -355,47 +508,14 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
         </div>
       </div>
 
-      <div style={{ flex: "0 0 360px", minHeight: 0, display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
-        <div data-testid="skin-filters" style={{ ...panelStyle, padding: 14, flexShrink: 0, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Button primary onClick={onNewSkin} style={{ flex: 1 }}>New skin</Button>
-            <Button onClick={createGroup} style={{ flex: 1 }}>
-              {selected.size > 0 ? "Group selected" : "New group"}
-            </Button>
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {filterButton(ALL, "All skins", library.skins.length)}
-            {filterButton(SINGLES, "Singles", library.skins.filter((skin) => !skin.groupId).length)}
-          </div>
-          {/* However many groups there are, they take one line: search for one and pick it. */}
-          {library.groups.length > 0 && (
-            <div data-testid="group-picker">
-              <SearchDropdown
-                compact
-                active={Boolean(activeGroup)}
-                label="Show a group"
-                options={groupOptions}
-                value={activeGroup ? `${activeGroup.name} (${groupCount(activeGroup.id)})` : ""}
-                placeholder={`Search ${library.groups.length} group${library.groups.length === 1 ? "" : "s"}...`}
-                onChange={setFilter}
-              />
-            </div>
-          )}
-          {activeGroup && (
-            <div style={{ display: "flex", gap: 6 }}>
-              <Button onClick={renameGroup} style={{ ...small, flex: 1 }}>Rename group</Button>
-              <Button danger onClick={deleteGroup} style={{ ...small, flex: 1 }}>Delete group</Button>
-            </div>
-          )}
-        </div>
-
-        <div
-          data-testid="pack-builder"
-          // Never smaller than its form; a long result after building scrolls inside it instead.
-          style={{ ...panelStyle, padding: 16, flex: "0 1 auto", minHeight: result ? 0 : undefined, display: "flex", flexDirection: "column" }}
-        >
-        <div style={{ color: "var(--color-accent-text)", fontSize: 16, marginBottom: 2 }}>Build a resource pack</div>
-        <div style={{ color: "var(--color-text-secondary)", fontSize: 12, marginBottom: 10 }}>{packSource}</div>
+      <Modal
+        open={packOpen}
+        onClose={() => setPackOpen(false)}
+        title="Build a resource pack"
+        lead={packSource}
+        size="sm"
+      >
+        <div data-testid="pack-builder" style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
 
         <label style={{ display: "block", marginBottom: 8 }}>
           {fieldLabel("Pack name")}
@@ -408,12 +528,12 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
           />
         </label>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
-          <div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10, marginBottom: 8 }}>
+          <div style={{ minWidth: 0 }}>
             {fieldLabel("Minecraft version")}
             <SearchDropdown compact options={VERSION_OPTIONS} value={minVersion} placeholder="Search..." onChange={setMinVersion} />
           </div>
-          <div>
+          <div style={{ minWidth: 0 }}>
             {fieldLabel("Up to")}
             <SearchDropdown
               compact
@@ -535,7 +655,7 @@ export default function LibraryView({ onNewSkin, onEdit, onEditInBlockbench, not
           </div>
         )}
         </div>
-      </div>
+      </Modal>
 
       <PromptDialog request={request} />
     </div>

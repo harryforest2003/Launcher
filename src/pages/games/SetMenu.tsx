@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Tags } from "lucide-react";
-import IconButton from "../../components/IconButton";
+import { Button } from "../../components/ui";
 
 type Props = {
   mod: GameMod;
@@ -20,72 +20,56 @@ export default function SetMenu({ mod, sets, onMember, onCreate }: Props) {
     const close = (event: MouseEvent) => {
       if (wrapper.current && !wrapper.current.contains(event.target as Node)) setOpen(false);
     };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", key);
+    };
   }, [open]);
 
   const inCount = sets.filter((set) => set.keys.includes(mod.key)).length;
+  const tip = inCount ? `In ${inCount} set${inCount === 1 ? "" : "s"}: change which` : "Add to a set";
 
   return (
-    <div ref={wrapper} style={{ position: "relative" }}>
-      <IconButton
-        tip={inCount ? `In ${inCount} set${inCount === 1 ? "" : "s"}: change which` : "Add to a set"}
-        label={`Sets for ${mod.name}`}
-        testId="set-menu"
-        variant={open ? "ready" : ""}
+    <div ref={wrapper} className="gm-setmenu">
+      <Button
+        variant="ghost"
+        size="sm"
+        className={`gm-iconbtn${open || inCount ? " gm-iconbtn--on" : ""}`}
+        data-testid="set-menu"
+        data-tip={tip}
+        aria-label={`Sets for ${mod.name}`}
+        aria-expanded={open}
+        icon={<Tags size={16} aria-hidden="true" />}
         onClick={() => setOpen((now) => !now)}
-      >
-        <Tags size={18} />
-      </IconButton>
+      />
       {open && (
-        <div
-          role="dialog"
-          aria-label={`Sets for ${mod.name}`}
-          style={{
-            position: "absolute",
-            right: 0,
-            top: 54,
-            zIndex: 50,
-            width: 240,
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 12,
-            boxShadow: "0 12px 30px var(--color-shadow)",
-            padding: 10,
-          }}
-        >
-          <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 6 }}>Sets</div>
-          {sets.length === 0 && <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 6 }}>No sets yet: name one below.</div>}
+        <div role="dialog" aria-label={`Sets for ${mod.name}`} className="gm-setmenu__pop">
+          <div className="gm-setmenu__title">Sets</div>
+          {sets.length === 0 && <div className="gm-setmenu__empty">No sets yet: name one below.</div>}
           {sets.map((set) => (
-            <label key={set.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", cursor: "pointer", fontSize: 13 }}>
-              <input
-                type="checkbox"
-                checked={set.keys.includes(mod.key)}
-                onChange={(event) => onMember(set.id, event.target.checked)}
-                style={{ width: 15, height: 15, accentColor: "var(--color-accent)" }}
-              />
+            <label key={set.id} className="gm-setmenu__row">
+              <input type="checkbox" checked={set.keys.includes(mod.key)} onChange={(event) => onMember(set.id, event.target.checked)} />
               {set.name}
             </label>
           ))}
           <form
+            className="gm-setmenu__form"
             onSubmit={async (event) => {
               event.preventDefault();
               if (!name.trim()) return;
               await onCreate(name.trim());
               setName("");
             }}
-            style={{ display: "flex", gap: 6, marginTop: 8 }}
           >
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="New set..."
-              maxLength={40}
-              style={{ flex: 1, minWidth: 0, padding: "6px 8px", borderRadius: 8, background: "var(--color-surface-sunken)", color: "var(--color-text)", border: "1px solid var(--color-border)", fontSize: 12 }}
-            />
-            <button type="submit" className="sidebar-button" style={{ padding: "6px 10px", fontSize: 12 }}>
+            <input className="ui-input" value={name} onChange={(event) => setName(event.target.value)} placeholder="New set..." maxLength={40} aria-label="New set name" />
+            <Button type="submit" size="sm">
               Add
-            </button>
+            </Button>
           </form>
         </div>
       )}

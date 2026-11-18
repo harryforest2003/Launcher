@@ -46,6 +46,18 @@ function looksLikeGame(game, dir) {
     return markers.some((marker) => fs.existsSync(path.join(dir, marker)));
 }
 
+/*
+ * For a game whose mods go next to its Mac app (Cyberpunk 2077), the folder with the app
+ * in it when the app itself is chosen, or for the App Store version, the app's Contents/Data.
+ */
+function gameFolderOf(game, dir) {
+    const app = game.launch?.darwinAppName;
+    if (!app || !dir || path.basename(dir) !== app) return dir;
+    const data = path.join(dir, "Contents", "Data");
+    if (fs.existsSync(data)) return data;
+    return path.dirname(dir);
+}
+
 /* Candidate folders, best first: [{ dir, source }]. */
 function candidates(game) {
     const found = [];
@@ -105,6 +117,7 @@ function chooseFolder(id, dir) {
     if (dir === null) {
         delete settings.gameDirs[id];
     } else {
+        dir = gameFolderOf(game, dir);
         // Picking a game's .app on a Mac, or the folder with its exe.
         if (!looksLikeGame(game, dir)) {
             const markers = [...new Set([...(game.marker?.win32 ?? []), ...(game.marker?.darwin ?? [])])];

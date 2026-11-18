@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   Box,
@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import logoMark from "../../assets/logo-mark.png";
 import AccountSwitcher from "../AccountSwitcher";
+import { ART } from "../../pages/gameArt";
+import Monogram from "./Monogram";
 import { useDownloads } from "./downloadsContext";
 import type { GamePageKey, McPage, PageNav } from "./shellContext";
 import "./shell.css";
@@ -59,16 +61,73 @@ const GAME_PAGES: { page: GamePageKey; label: string; icon: ReactNode; when?: "c
   { page: "settings", label: "Settings", icon: <SlidersHorizontal size={15} /> },
 ];
 
+/* The last name each page reported, so a title never blanks between pages. */
+const gameNames = new Map<string, string>();
+
+/* A game's picture, cropped square; its initials if there's no picture or it can't load. */
+function GameThumb({ id, name, large = false }: { id: string | null; name: string; large?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const src = id ? ART[id] : undefined;
+  return (
+    <span className={`ui-shell__thumb${large ? " ui-shell__thumb--lg" : ""}`} aria-hidden="true">
+      {src && !failed ? (
+        <img src={src} alt="" referrerPolicy="no-referrer" draggable={false} onError={() => setFailed(true)} />
+      ) : (
+        <Monogram name={name} size={large ? 32 : 28} style={{ width: "100%", height: "100%" }} />
+      )}
+    </span>
+  );
+}
+
+/* Every supported game, for the launcher's lists (found ones first). Minecraft is its own. */
+function useFoundGames(refresh: unknown) {
+  const [games, setGames] = useState<GameSummary[]>([]);
+  useEffect(() => {
+    let live = true;
+    const load = () => {
+      Promise.resolve()
+        .then(() => window.gamesAPI?.list?.())
+        .then((list) => {
+          if (live && Array.isArray(list)) setGames(list);
+        })
+        .catch(() => {
+          // The list stays as it was; the Home page says why games couldn't be checked.
+        });
+    };
+    load();
+    window.addEventListener("focus", load);
+    return () => {
+      live = false;
+      window.removeEventListener("focus", load);
+    };
+  }, [refresh]);
+  return games;
+}
+
 export default function AppSidebar({ current, nav, openGame, collapsed, onToggle, go }: Props) {
   const downloads = useDownloads();
+  const allGames = useFoundGames(current === "home");
+  const games = allGames.filter((game) => game.found);
+  const others = allGames.filter((game) => !game.found);
   const scroller = useRef<HTMLDivElement>(null);
   const [mark, setMark] = useState<{ top: number; height: number } | null>(null);
+  const bar = useRef<HTMLSpanElement>(null);
+  const section = useRef<string>("");
 
   // The highlight slides to the current item: measured after layout, and again when the
   // sidebar folds or the list changes height.
   useLayoutEffect(() => {
     const box = scroller.current;
     if (!box) return;
+    // Moving between lists (launcher, a game, Minecraft): the highlight jumps instead of sliding
+    // across rows that aren't the same ones, which read as a flicker.
+    const kind = current.startsWith("mc:") ? "mc" : openGame ?? (nav?.area === "modGame" ? "modGame" : "home");
+    if (section.current && section.current !== kind && bar.current) {
+      const node = bar.current;
+      node.style.transition = "none";
+      requestAnimationFrame(() => requestAnimationFrame(() => { node.style.transition = ""; }));
+    }
+    section.current = kind;
     const measure = () => {
       const el = box.querySelector<HTMLElement>("[data-current='true']");
       setMark(el ? { top: el.offsetTop, height: el.offsetHeight } : null);
@@ -81,13 +140,13 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
 
   const tip = (label: string) => (collapsed ? label : undefined);
 
-  const item = (key: string, label: string, icon: ReactNode, onClick: () => void, extra?: { aria?: string; badge?: ReactNode; sub?: boolean }) => {
+  const item = (key: string, label: string, icon: ReactNode, onClick: () => void, extra?: { aria?: string; badge?: ReactNode; sub?: boolean; game?: boolean; meta?: string; dim?: boolean }) => {
     const on = current === key;
     return (
       <button
         key={key}
         type="button"
-        className={`ui-shell__item${extra?.sub ? " ui-shell__item--sub" : ""}`}
+        className={`ui-shell__item${extra?.sub ? " ui-shell__item--sub" : ""}${extra?.game ? " ui-shell__item--game" : ""}${extra?.dim ? " ui-shell__item--dim" : ""}`}
         data-current={on ? "true" : undefined}
         aria-current={on ? "page" : undefined}
         aria-label={extra?.aria}
@@ -95,7 +154,10 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
         onClick={onClick}
       >
         <span className="ui-shell__icon">{icon}</span>
-        <span className="ui-shell__label">{label}</span>
+        <span className="ui-shell__label">
+          <span className="ui-shell__name">{label}</span>
+          {extra?.meta && <span className="ui-shell__meta">{extra.meta}</span>}
+        </span>
         {extra?.badge}
       </button>
     );
@@ -113,26 +175,22 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
   const inMinecraft = current.startsWith("mc:");
   const modGame = nav?.area === "modGame" ? nav : null;
   const inGame = inMinecraft || openGame !== null || modGame !== null;
+  const nameKey = inMinecraft ? "minecraft" : openGame ?? "modGame";
+  const knownName = inMinecraft ? "Minecraft" : gameNav?.game ?? modGame?.game ?? games.find((game) => game.id === openGame)?.name ?? "";
+  // The title never goes blank while a page reports its game: keep the last name, else the id.
+  if (knownName) gameNames.set(nameKey, knownName);
+  const gameName = knownName || gameNames.get(nameKey) || openGame || "";
+  const gameArt = inMinecraft ? "minecraft" : openGame;
 
   return (
-    <aside className={`ui-shell${collapsed ? " is-collapsed" : ""}`} aria-label="Launcher" data-testid="sidebar">
+    <aside className={`ui-shell${collapsed ? " is-collapsed" : ""}`} aria-label="Launcher" data-testid="sidebar" data-tip-side={collapsed ? "right" : undefined}>
       <div className="ui-shell__brand">
         <img className="ui-shell__mark" src={logoMark} alt="" draggable={false} />
         <span className="ui-shell__wordmark">Unity Launcher</span>
-        <button
-          type="button"
-          className="ui-shell__fold"
-          onClick={onToggle}
-          aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}
-          aria-expanded={!collapsed}
-          data-tip={`${collapsed ? "Expand" : "Collapse"} the sidebar (Ctrl+B)`}
-        >
-          {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
-        </button>
       </div>
-
       <div className="ui-shell__scroll" ref={scroller}>
         <span
+          ref={bar}
           className="ui-shell__mark-bar"
           aria-hidden="true"
           style={mark ? { transform: `translateY(${mark.top}px)`, height: mark.height, opacity: 1 } : { opacity: 0 }}
@@ -141,8 +199,9 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
           {inGame ? (
             <>
               {item("launcher", "Back to Launcher", <ArrowLeft size={16} />, () => go({ kind: "home" }))}
-              <div className="ui-shell__heading">
-                <span className="ui-shell__label">{inMinecraft ? "Minecraft" : gameNav?.game ?? modGame?.game}</span>
+              <div className="ui-shell__heading ui-shell__heading--game" role="group" aria-label={gameName} data-tip={tip(gameName)} tabIndex={collapsed ? 0 : undefined}>
+                <GameThumb key={gameArt ?? gameName} id={gameArt} name={gameName} large />
+                <span className="ui-shell__label">{gameName}</span>
               </div>
               {inMinecraft
                 ? MC_ITEMS.map(({ page, label, icon }) => [
@@ -164,6 +223,24 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
             <>
               {item("home", "Home", <House size={16} />, () => go({ kind: "home" }))}
               {item("modmanager", "More Games", <Layers size={16} />, () => go({ kind: "modmanager" }))}
+              <div className="ui-shell__heading">
+                <span className="ui-shell__label">Your games</span>
+              </div>
+              {item("play:minecraft", "Minecraft", <GameThumb id="minecraft" name="Minecraft" />, () => go({ kind: "mc", page: "minecraft" }), { game: true, meta: "Java Edition" })}
+              {games.map((game) =>
+                item(`play:${game.id}`, game.name, <GameThumb key={game.id} id={game.id} name={game.name} />, () => go({ kind: "game", id: game.id }), {
+                  game: true,
+                  meta: game.modCount ? `${game.modCount} ${game.modCount === 1 ? "mod" : "mods"}` : "No mods yet",
+                }),
+              )}
+              {others.length > 0 && (
+                <div className="ui-shell__heading">
+                  <span className="ui-shell__label">Not on this computer</span>
+                </div>
+              )}
+              {others.map((game) =>
+                item(`play:${game.id}`, game.name, <GameThumb key={game.id} id={game.id} name={game.name} />, () => go({ kind: "game", id: game.id }), { game: true, dim: true }),
+              )}
             </>
           )}
         </nav>
@@ -185,10 +262,23 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
           <span className="ui-shell__label">Downloads</span>
           {downloads.left > 0 && <span className="ui-shell__badge ui-shell__label">{downloads.left}</span>}
         </button>
+        {!inGame && item("settings", "Settings", <Settings size={16} />, () => go({ kind: "settings" }), { aria: "Launcher settings" })}
         <div className="ui-shell__account">
           <AccountSwitcher compact rail={collapsed} game={inMinecraft ? "minecraft" : openGame} />
         </div>
-        {!inGame && item("settings", "Settings", <Settings size={16} />, () => go({ kind: "settings" }), { aria: "Launcher settings" })}
+        <button
+          type="button"
+          className="ui-shell__fold"
+          onClick={onToggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-expanded={!collapsed}
+          data-tip={collapsed ? "Expand sidebar" : "Collapse sidebar (Ctrl+B)"}
+        >
+          <span className="ui-shell__icon">
+            {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}
+          </span>
+          <span className="ui-shell__label">Collapse</span>
+        </button>
       </div>
     </aside>
   );

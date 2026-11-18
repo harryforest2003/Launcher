@@ -12,9 +12,10 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
+  overflow: hidden;
 }
 
 .lx-col {
@@ -698,8 +699,24 @@
 
 /* ================= The inspector (right) ================= */
 
+.lx-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--z-sticky) + 1);
+  background: var(--color-scrim, rgb(0 0 0 / 0.35));
+}
+
+.lx-panel:focus { outline: none; }
+
 .lx-panel {
-  margin: var(--space-4) var(--space-4) var(--space-4) 0;
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  bottom: var(--space-3);
+  z-index: calc(var(--z-sticky) + 2);
+  width: min(360px, calc(100% - var(--space-6)));
+  box-shadow: var(--shadow-lg), var(--edge-highlight);
+  animation: lx-drawer-in var(--duration-base) var(--ease-out);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -707,12 +724,11 @@
   background: var(--color-surface);
   border-radius: var(--radius-cut-lg);
   corner-shape: var(--corner-cut);
-  box-shadow: var(--edge-highlight);
 }
 
 .lx-panel .lx-art {
   flex-shrink: 0;
-  height: 128px;
+  height: 96px;
   border-radius: var(--radius-cut-lg);
 }
 
@@ -953,11 +969,6 @@
   color: var(--color-text-secondary);
 }
 
-@media (max-width: 1100px) {
-  .lx {
-    grid-template-columns: minmax(0, 1fr) 280px;
-  }
-}
 
 /* ================= New instance / Import ================= */
 
@@ -1519,15 +1530,303 @@
   outline-offset: 3px;
 }
 @container library (max-width: 760px) {
-  .lx {
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-  }
-  .lx-col { height: auto; flex: 0 0 auto; }
-  .lx-body { height: auto; overflow: visible; padding: var(--space-5); }
-  .lx-panel { overflow: visible; flex-shrink: 0; margin: 0 var(--space-5) var(--space-5); }
+  .lx-body { padding: var(--space-5); }
   .lx-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 256px), 1fr)); }
   .lx-list { overflow-x: auto; }
   .lx-list .lx-tile, .lx-list-head { min-width: 540px; }
+}
+
+/* ---------- an instance's own page: header and content table ---------- */
+
+.id-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.id-hero .lx-art {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.id-hero-text {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.id-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-3xl);
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.id-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.id-meta .ui-badge {
+  font-size: var(--font-size-xs);
+}
+
+.id-meta-dot {
+  opacity: 0.5;
+}
+
+.id-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.id-facts {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  margin: 0 0 var(--space-4);
+}
+
+.ct-table {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.ct-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-sunken);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ct-head > span:first-child {
+  flex: 1;
+  padding-left: 44px;
+}
+
+.ct-file-head,
+.ct-file {
+  flex: 0 1 190px;
+  min-width: 0;
+}
+
+.ct-file {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ct-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  min-height: 52px;
+  transition: background-color 0.12s ease;
+}
+
+.ct-row + .ct-row {
+  border-top: 1px solid var(--color-border);
+}
+
+.ct-row:hover {
+  background: var(--color-surface-raised);
+}
+
+.ct-row.off {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+.ct-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+  font-weight: var(--weight-bold);
+}
+
+.ct-name {
+  color: var(--color-text);
+  font-weight: var(--weight-bold);
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ct-sub {
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ct-empty {
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.id-actions .ui-button--icon {
+  width: var(--control-md, 40px);
+  padding: 0;
+  justify-content: center;
+}
+
+.ct-search {
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+.id-meta-played{margin-left:var(--space-1)}
+
+/* ---------- instance drawer and cards ---------- */
+
+@keyframes lx-drawer-in {
+  from { transform: translateX(24px); opacity: 0; }
+}
+
+.lx-panel-close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 2;
+  background: var(--color-surface-raised);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lx-panel { animation: none; }
+}
+
+.lx-grid {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.lx-grid .lx-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: 0 0 var(--space-3);
+  overflow: hidden;
+  transition: background-color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+
+.lx-grid .lx-tile:hover { transform: translateY(-2px); }
+
+.lx-grid .lx-tile .lx-art {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 7 / 3;
+  border-radius: 0;
+}
+
+.lx-grid .lx-text,
+.lx-grid .lx-facts-row {
+  padding: 0 var(--space-3);
+}
+
+.lx-grid .lx-name { font-size: var(--font-size-md); }
+
+.lx-grid .lx-tick { top: var(--space-2); left: var(--space-2); }
+
+/* Play sits over the picture; it appears on hover, focus, or while it matters. */
+.lx-grid .lx-tile-actions {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+
+.lx-grid .lx-play {
+  width: var(--control-lg, 44px);
+  height: var(--control-lg, 44px);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.lx-grid .lx-tile:hover .lx-play,
+.lx-grid .lx-tile:focus-within .lx-play,
+.lx-grid .lx-tile.running .lx-play,
+.lx-grid .lx-play.busy {
+  opacity: 1;
+  transform: none;
+}
+
+.lx-grid .lx-play:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+
+@media (hover: none) {
+  .lx-grid .lx-play, .lx-more { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lx-grid .lx-tile, .lx-grid .lx-play { transition: none; transform: none; }
+}
+
+/* A quiet row under the content list that uses the same add action. */
+.ct-add-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 72px;
+  margin-top: var(--space-2);
+  padding: var(--space-4);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  font: inherit;
+  font-size: var(--text-sm, 13px);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out), background var(--duration-fast) var(--ease-out);
+}
+.ct-add-row:hover {
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft, transparent);
+}
+.ct-add-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ct-add-row { transition: none; }
 }

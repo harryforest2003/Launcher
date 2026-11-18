@@ -1,0 +1,80 @@
+/*
+ * Settings > Reading. runtime.ts puts the choices on <html> as data-font and data-spacing, and
+ * these rules key off them, so a change shows everywhere at once with no re-render.
+ */
+
+/* ---------------- font ---------------- */
+
+/* Verdana and Comic Sans ship with macOS and Windows; the later names cover Linux. Versions,
+   paths and keys stay monospace, and the wordmark keeps its own face. */
+html[data-font="verdana"] {
+  --font-ui: Verdana, Tahoma, "DejaVu Sans", sans-serif;
+  --font-body: Verdana, Tahoma, "DejaVu Sans", sans-serif;
+}
+
+html[data-font="comic"] {
+  --font-ui: "Comic Sans MS", "Comic Neue", "Chalkboard SE", "Comic Relief", cursive;
+  --font-body: "Comic Sans MS", "Comic Neue", "Chalkboard SE", "Comic Relief", cursive;
+}
+
+/* ---------------- spacing ---------------- */
+
+/* The line-height tokens carry most of it; letter and word spacing are forced on everything,
+   since many labels set their own tracking (the way browsers' text-spacing checks do it). */
+html[data-spacing="roomy"] {
+  --leading-tight: 1.3;
+  --leading-normal: 1.6;
+  --leading-relaxed: 1.75;
+}
+
+html[data-spacing="roomy"] body * {
+  letter-spacing: 0.035em !important;
+  word-spacing: 0.08em !important;
+}
+
+/* WCAG 1.4.12: letters 0.12em, words 0.16em, lines 1.5 and more. */
+html[data-spacing="wide"] {
+  --leading-tight: 1.4;
+  --leading-normal: 1.7;
+  --leading-relaxed: 1.85;
+}
+
+html[data-spacing="wide"] body * {
+  letter-spacing: 0.12em !important;
+  word-spacing: 0.16em !important;
+}
+
+html[data-spacing="wide"] :is(p, li, dd, blockquote) {
+  line-height: max(1.6, var(--leading-normal)) !important;
+}
+
+/* ---------------- reading guide ---------------- */
+
+.reading-guide {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  height: 2.25rem;
+  transform: translateY(calc(var(--guide-y, -200px) - 50%));
+  pointer-events: none;
+  z-index: 2147483000;
+  visibility: hidden;
+}
+
+html[data-spacing="wide"] .reading-guide {
+  height: 2.75rem;
+}
+
+.reading-guide[data-shown="true"] {
+  visibility: visible;
+}
+
+.reading-guide--line {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  border-block: 1px solid color-mix(in srgb, var(--color-accent-line) 70%, transparent);
+}
+
+/* A spread shadow dims everything above and below the band. */
+.reading-guide--focus {
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--color-scrim) 85%, transparent);
+}

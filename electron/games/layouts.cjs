@@ -354,10 +354,28 @@ function fomod(files, ctx, configFile) {
 
 /* ---------------- Cyberpunk 2077 ---------------- */
 
-const CP_ROOTS = new Set(["archive", "bin", "r6", "red4ext", "engine", "mods"]);
+const CP_ROOTS = new Set(["archive", "bin", "r6", "red4ext", "engine", "mods", "archive-loader"]);
+
+/*
+ * Where a file laid out for the Windows version goes in the Mac version: { to } or
+ * { reason } when it can't load there. On a Mac only redscript runs, and archive mods load
+ * through archive-loader (Nexus Mods 33616) from archive-loader/mods/enabled.
+ */
+function cyberpunkMacPlace(to) {
+    if (/\.xl$/i.test(to)) return { reason: "needs ArchiveXL, which only runs on Windows" };
+    if (/^archive\/pc\/mod\/(?:.+\/)?[^/]+\.archive$/i.test(to)) return { to: `archive-loader/mods/enabled/${base(to)}` };
+    if (/^archive\//i.test(to)) return { reason: "the Mac version doesn't load this from archive" };
+    if (/^r6\/tweaks\//i.test(to)) return { reason: "needs TweakXL, which only runs on Windows" };
+    if (/^bin\/x64\/plugins\/cyber_engine_tweaks\//i.test(to)) return { reason: "a Cyber Engine Tweaks mod: CET only runs on Windows" };
+    if (/^bin\//i.test(to)) return { reason: "a Windows program file" };
+    if (/^red4ext\//i.test(to)) return { reason: "needs RED4ext, which only runs on Windows" };
+    if (/^mods\//i.test(to)) return { reason: "a REDmod mod: REDmod only runs on Windows" };
+    return { to };
+}
 
 function cyberpunk(files, ctx) {
     const result = { placements: [], skipped: [], notes: [], plugins: [] };
+    const onMac = (ctx.platform ?? process.platform) === "darwin";
     const folder = safeFolder(ctx.modName);
     const prefix = wrapper(files, (top) => CP_ROOTS.has(lower(top)));
     const tops = new Set(files.map((file) => under(file, prefix)).filter((rel) => rel?.includes("/")).map((rel) => lower(rel.split("/")[0])));
@@ -386,10 +404,24 @@ function cyberpunk(files, ctx) {
         else if (!isDoc(file)) result.skipped.push({ file, reason: "not in a folder Cyberpunk 2077 loads mods from" });
     }
 
+    if (onMac) {
+        const kept = [];
+        for (const placement of result.placements) {
+            const moved = cyberpunkMacPlace(placement.to);
+            if (moved.to) kept.push({ ...placement, to: moved.to });
+            else result.skipped.push({ file: placement.from, reason: moved.reason });
+        }
+        result.placements = kept;
+        if (!kept.length && files.some((file) => !isDoc(file))) {
+            result.notes.push("Nothing in this mod loads in the Mac version of Cyberpunk 2077: there, only redscript mods run, and archive mods through archive-loader.");
+        }
+    }
+
     const placed = (pattern) => result.placements.some((p) => pattern.test(p.to));
     const frameworks = [
         { uses: /^bin\/x64\/plugins\/cyber_engine_tweaks\/mods\//i, has: "bin/x64/plugins/cyber_engine_tweaks.asi", name: "Cyber Engine Tweaks" },
-        { uses: /^r6\/scripts\//i, has: "engine/tools/scc.exe", name: "redscript" },
+        { uses: /^r6\/scripts\//i, has: onMac ? "engine/tools/scc" : "engine/tools/scc.exe", name: onMac ? "redscript for macOS" : "redscript" },
+        { uses: /^archive-loader\/mods\/enabled\//i, has: "archive-loader/bin/archive-loader", name: "archive-loader" },
         { uses: /^red4ext\/plugins\//i, has: "red4ext/RED4ext.dll", name: "RED4ext" },
         { uses: /^r6\/tweaks\//i, has: "red4ext/plugins/TweakXL", name: "TweakXL" },
         { uses: /\.xl$/i, has: "red4ext/plugins/ArchiveXL", name: "ArchiveXL" },

@@ -109,18 +109,21 @@ const GAMES = [
         id: "cyberpunk2077",
         name: "Cyberpunk 2077",
         tagline: "Archive mods, Cyber Engine Tweaks, redscript and RED4ext",
+        taglines: { darwin: "redscript mods, and archive mods through archive-loader" },
         colour: "#facc15",
         layout: "cyberpunk",
         nexus: "cyberpunk2077",
         nexusGameId: 3333,
         steamAppIds: ["1091500"],
         steamFolders: ["Cyberpunk 2077"],
-        marker: { win32: ["bin/x64/Cyberpunk2077.exe"], darwin: ["bin/x64/Cyberpunk2077.exe"] },
+        // The Mac version (Apple silicon only) keeps Cyberpunk2077.app next to its r6 and
+        // archive/Mac folders; the App Store one has them in the app's Contents/Data.
+        marker: { win32: ["bin/x64/Cyberpunk2077.exe"], darwin: ["Cyberpunk2077.app/Contents/MacOS", "archive/Mac/content"] },
         installs: {
+            darwin: ["/Applications/Cyberpunk 2077", path.join(home, "Games", "Heroic", "Cyberpunk 2077"), "/Applications/Cyberpunk2077.app/Contents/Data"],
             win32: ["C:\\Program Files (x86)\\GOG Galaxy\\Games\\Cyberpunk 2077", "C:\\Program Files\\Epic Games\\Cyberpunk2077"],
         },
-        launch: { win32Exe: ["bin/x64/Cyberpunk2077.exe"] },
-        windowsOnly: true,
+        launch: { win32Exe: ["bin/x64/Cyberpunk2077.exe"], darwinAppName: "Cyberpunk2077.app" },
     },
     {
         id: "stardew",

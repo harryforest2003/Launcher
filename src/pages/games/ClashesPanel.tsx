@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { Swords } from "lucide-react";
-import { errorText, note, smallButton } from "./shared";
+import { Button } from "../../components/ui";
+import { errorText, useIssueReport, type IssueReport, type Say } from "./shared";
 
 type Props = {
   detail: GameDetail;
   /* The mods as listed: when they change, conflicts are looked at again. */
   mods: GameMod[];
   reload: () => Promise<void>;
+  report?: IssueReport;
+  say?: Say;
 };
 
 const SHOWN = 25;
@@ -58,12 +61,10 @@ function describe(clash: GameClash) {
  * or the same files loaded (Stardew). Each with what it means, and turning one off, or for
  * plugins, choosing which wins.
  */
-export default function ClashesPanel({ detail, mods, reload }: Props) {
+export default function ClashesPanel({ detail, mods, reload, report, say }: Props) {
   const [clashes, setClashes] = useState<GameClash[] | null>(null);
-  const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [said, setSaid] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -78,11 +79,10 @@ export default function ClashesPanel({ detail, mods, reload }: Props) {
 
   async function run(id: string, action: () => Promise<string>) {
     setBusy(id);
-    setSaid(null);
     try {
-      setSaid({ tone: "good", text: await action() });
+      say?.({ tone: "good", text: await action() });
     } catch (err) {
-      setSaid({ tone: "bad", text: errorText(err) });
+      say?.({ tone: "bad", text: errorText(err) });
     }
     setBusy(null);
   }
@@ -104,87 +104,76 @@ export default function ClashesPanel({ detail, mods, reload }: Props) {
     window.gamesAPI
       .hideClash(detail.id, id, hidden)
       .then(setClashes)
-      .catch((err) => setSaid({ tone: "bad", text: errorText(err) }));
+      .catch((err) => say?.({ tone: "bad", text: errorText(err) }));
 
   const shown = (clashes ?? []).filter((c) => !c.hidden).sort((a, b) => (a.severity === b.severity ? b.count - a.count : a.severity === "error" ? -1 : 1));
   const hiddenCount = (clashes ?? []).length - shown.length;
-  if (!shown.length) {
-    if (said) return <div style={note(said.tone)}>{said.text}</div>;
-    return null;
-  }
   const errors = shown.filter((c) => c.severity === "error").length;
+  useIssueReport(report, "Clashes", shown.length, errors ? "danger" : "warning");
+  if (!shown.length) return null;
   const visible = all ? shown : shown.slice(0, SHOWN);
   const patchSearch = (clash: GameClash) =>
     detail.nexus && `https://www.nexusmods.com/games/${detail.nexus}/mods?keyword=${encodeURIComponent(`${clash.mods.map((m) => m.name.replace(/\.(esp|esm|esl)$/i, "")).join(" ")} patch`)}`;
 
   return (
-    <div style={note(errors ? "bad" : "warn")} data-testid="clashes">
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <Swords size={18} style={{ flexShrink: 0 }} />
-        <span style={{ flex: 1 }}>
+    <section className={`gm-issue gm-issue--${errors ? "danger" : "warning"}`} data-testid="clashes">
+      <div className="gm-issue__head">
+        <Swords size={16} className="gm-issue__icon" aria-hidden="true" />
+        <span className="gm-issue__text">
           {shown.length === 1 ? `${list(shown[0].mods.map((m) => m.name))} change the same thing in the game` : `${shown.length} pairs of mods change the same things in the game`}
           {errors ? (errors === shown.length ? ": " : ` (${errors} need${errors === 1 ? "s" : ""} fixing): `) : ": "}
           {errors ? (shown.length === 1 ? "keep one." : "keep one of each.") : "the one loaded later wins."}
         </span>
-        <button className="sidebar-button" style={{ ...smallButton, padding: "6px 12px", fontSize: 12, flexShrink: 0 }} onClick={() => setOpen((now) => !now)}>
-          {open ? "Hide" : "See which"}
-        </button>
       </div>
-      {said && <div style={{ fontSize: 12, marginTop: 8, color: said.tone === "bad" ? "var(--color-danger-text)" : "var(--color-success-text)" }}>{said.text}</div>}
-      {open && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-          {visible.map((clash) => {
-            const text = describe(clash);
-            const loser = clash.kind === "records" ? clash.mods.find((m) => m.name !== clash.winner) : null;
-            const search = clash.kind === "records" ? patchSearch(clash) : null;
-            return (
-              <div key={clash.id} style={{ padding: "8px 10px", background: "var(--color-hover)", borderRadius: 8 }} data-testid="clash">
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{text.title}</div>
-                <div style={{ fontSize: 12, marginTop: 3, opacity: 0.85 }}>{text.why}</div>
-                {clash.examples.length > 0 && (
-                  <div style={{ fontSize: 11, marginTop: 4, fontFamily: "monospace", opacity: 0.7, overflowWrap: "anywhere" }}>
-                    {clash.examples.join(", ")}
-                    {clash.count > clash.examples.length && clash.kind !== "records" ? `, and ${clash.count - clash.examples.length} more` : ""}
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                  {loser && (
-                    <button className="sidebar-button" disabled={busy !== null} style={{ ...smallButton, padding: "5px 10px", fontSize: 12 }} onClick={() => makeWin(clash, loser.name)}>
-                      Make {loser.name} win
-                    </button>
-                  )}
-                  {search && (
-                    <button className="sidebar-button" style={{ ...smallButton, padding: "5px 10px", fontSize: 12 }} onClick={() => window.gamesAPI.openUrl(search)}>
-                      Find a patch
-                    </button>
-                  )}
-                  {clash.mods.map((mod) => (
-                    <button key={mod.key} className="sidebar-button" disabled={busy !== null} style={{ ...smallButton, padding: "5px 10px", fontSize: 12 }} onClick={() => turnOff(clash, mod)}>
-                      Turn off {mod.name}
-                    </button>
-                  ))}
-                  <button className="sidebar-button" style={{ ...smallButton, padding: "5px 10px", fontSize: 12 }} title="Stop showing this one" onClick={() => hide(clash.id, true)}>
-                    It's fine
-                  </button>
+      <div className="gm-issue__list">
+        {visible.map((clash) => {
+          const text = describe(clash);
+          const loser = clash.kind === "records" ? clash.mods.find((m) => m.name !== clash.winner) : null;
+          const search = clash.kind === "records" ? patchSearch(clash) : null;
+          return (
+            <div key={clash.id} className="gm-issue__item" data-testid="clash">
+              <div className="gm-issue__item-title">{text.title}</div>
+              <div className="gm-issue__item-text">{text.why}</div>
+              {clash.examples.length > 0 && (
+                <div className="gm-issue__files gm-issue__files--inline">
+                  {clash.examples.join(", ")}
+                  {clash.count > clash.examples.length && clash.kind !== "records" ? `, and ${clash.count - clash.examples.length} more` : ""}
                 </div>
+              )}
+              <div className="gm-issue__buttons">
+                {loser && (
+                  <Button size="sm" disabled={busy !== null} onClick={() => makeWin(clash, loser.name)}>
+                    Make {loser.name} win
+                  </Button>
+                )}
+                {search && (
+                  <Button size="sm" onClick={() => window.gamesAPI.openUrl(search)}>
+                    Find a patch
+                  </Button>
+                )}
+                {clash.mods.map((mod) => (
+                  <Button key={mod.key} size="sm" disabled={busy !== null} onClick={() => turnOff(clash, mod)}>
+                    Turn off {mod.name}
+                  </Button>
+                ))}
+                <Button size="sm" variant="ghost" title="Stop showing this one" onClick={() => hide(clash.id, true)}>
+                  It's fine
+                </Button>
               </div>
-            );
-          })}
-          {shown.length > visible.length && (
-            <button className="sidebar-button" style={{ ...smallButton, padding: "6px 12px", fontSize: 12, alignSelf: "flex-start" }} onClick={() => setAll(true)}>
-              Show all {shown.length}
-            </button>
-          )}
-          {hiddenCount > 0 && (
-            <button
-              style={{ background: "none", border: "none", padding: 0, color: "inherit", cursor: "pointer", font: "inherit", fontSize: 12, textDecoration: "underline", alignSelf: "flex-start", opacity: 0.8 }}
-              onClick={() => hide("*", false)}
-            >
-              Show the {hiddenCount === 1 ? "one" : `${hiddenCount}`} marked fine
-            </button>
-          )}
-        </div>
-      )}
-    </div>
+            </div>
+          );
+        })}
+        {shown.length > visible.length && (
+          <Button size="sm" className="gm-issue__more" onClick={() => setAll(true)}>
+            Show all {shown.length}
+          </Button>
+        )}
+        {hiddenCount > 0 && (
+          <button type="button" className="gm-link gm-issue__more" onClick={() => hide("*", false)}>
+            Show the {hiddenCount === 1 ? "one" : `${hiddenCount}`} marked fine
+          </button>
+        )}
+      </div>
+    </section>
   );
 }

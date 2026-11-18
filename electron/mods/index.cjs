@@ -4,7 +4,7 @@ const { ipcMain, shell, dialog, BrowserWindow } = require("electron");
 const { assertGranted, openExternalSafely } = require("../security.cjs");
 
 const { detectGames } = require("./gameDetector.cjs");
-const { getGame } = require("./gameRegistry.cjs");
+const { getGame, catalog } = require("./gameRegistry.cjs");
 const modLibrary = require("./modLibrary.cjs");
 const installer = require("./installer.cjs");
 const settings = require("./settings.cjs");
@@ -81,6 +81,9 @@ function registerModIpc() {
             })),
         }));
     });
+
+    // Every game the launcher supports, found or not.
+    ipcMain.handle("mods:catalog", () => catalog());
 
     ipcMain.handle("mods:refreshGames", () => {
         const list = games({ refresh: true });

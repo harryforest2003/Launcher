@@ -266,6 +266,7 @@ expose("modAPI", {
     // Games
     getGames: (opts) => ipcRenderer.invoke("mods:getGames", opts),
     refreshGames: () => ipcRenderer.invoke("mods:refreshGames"),
+    catalog: () => ipcRenderer.invoke("mods:catalog"),
 
     // Installed mods
     list: (gameId) => ipcRenderer.invoke("mods:list", gameId),

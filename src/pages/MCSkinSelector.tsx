@@ -1,7 +1,10 @@
-import BackgroundLogo from "../components/BackgroundLogo";
+import "./skins.css";
+import Button from "../components/ui/Button";
+import Notice from "../components/ui/Notice";
+import SearchField from "../components/ui/SearchField";
 import blockbenchLogo from "../assets/blockbench-logo.svg";
 import IconButton from "../components/IconButton";
-import { DownloadIcon, ResetIcon, SaveIcon, StarIcon } from "../components/Icons";
+import { BinIcon, DownloadIcon, ResetIcon, SaveIcon, StarIcon } from "../components/Icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Sidebar from "../components/MCSidebar";
 import BlockbenchFrame from "../components/BlockbenchFrame";
@@ -9,6 +12,7 @@ import SkinFront from "../components/SkinFront";
 import SkinPreview from "../components/SkinPreview";
 import { usePrompt } from "../skinBuilder/ui/prompt";
 import { PromptDialog } from "../skinBuilder/ui/shared";
+import { DEFAULT_SKINS } from "./defaultSkins";
 
 type PlayerSearchResult = {
   username: string;
@@ -35,6 +39,10 @@ type Preview =
   | { source: "player"; skin: string; label: string }
   | { source: "file"; skin: string; label: string; pickedId: string }
   | { source: "saved"; skin: string; label: string; savedId: string };
+
+// Shown until a real skin is picked, so the preview is never an empty box.
+const FIRST_DEFAULT = DEFAULT_SKINS[0];
+const defaultPreview = (): Preview => ({ source: "player", skin: FIRST_DEFAULT.skin, label: `${FIRST_DEFAULT.name}'s skin` });
 
 /*
  * A spinning 3D view while the card is on screen, and a flat picture otherwise. A page
@@ -88,12 +96,17 @@ const cardButton: React.CSSProperties = {
   borderRadius: 10,
 };
 
-const TickIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M20 6 9 17l-5-5" />
-  </svg>
-);
+type RecentSkin = { name: string; skin: string; slim: boolean };
+const RECENT_KEY = "unity.skins.recent";
 
+function loadRecent(): RecentSkin[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((entry) => entry && typeof entry.skin === "string").slice(0, 6) : [];
+  } catch {
+    return [];
+  }
+}
 
 const message = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(
@@ -101,13 +114,17 @@ const message = (err: unknown) =>
     ""
   );
 
-const card: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 10,
-  marginTop: 16,
-  fontSize: 13,
-  lineHeight: 1.5,
-};
+const PlusIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+const ShirtIcon = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20.4 7.6 16 4a4 4 0 0 1-8 0L3.6 7.6l2 3.4L8 10v10h8V10l2.4 1z" />
+  </svg>
+);
 
 function SkinSelector({
   onBack,
@@ -127,9 +144,11 @@ function SkinSelector({
   const [profile, setProfile] = useState<SkinProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
 
-  const [preview, setPreview] = useState<Preview | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(defaultPreview);
   const [slim, setSlim] = useState(false);
   const [capeId, setCapeId] = useState("");
+
+  const [recent, setRecent] = useState<RecentSkin[]>(loadRecent);
 
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -163,7 +182,8 @@ function SkinSelector({
       setPreview({ source: "mine", skin: mine.skin.url, label: "Your skin" });
       setSlim(mine.skin.slim);
     } else {
-      setPreview(null);
+      setPreview(defaultPreview());
+      setSlim(FIRST_DEFAULT.slim);
     }
   }, []);
 
@@ -179,6 +199,7 @@ function SkinSelector({
   }, [showMine]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProfile();
   }, [loadProfile]);
 
@@ -195,16 +216,16 @@ function SkinSelector({
   }, []);
 
   useEffect(() => {
-    if (!search.trim()) {
-        setPlayers([]);
-        setLoading(false);
-        return;
-    }
-
     // Guards against an older, slower search overwriting a newer one.
     let active = true;
 
     const timer = setTimeout(async () => {
+        if (!search.trim()) {
+            setPlayers([]);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
 
         try {
@@ -249,7 +270,22 @@ function SkinSelector({
   const activeCape = profile?.capes.find((cape) => cape.active)?.id ?? "";
   const previewCape = profile?.capes.find((cape) => cape.id === capeId)?.url ?? null;
 
+  function rememberRecent(entry: RecentSkin) {
+    const next = [entry, ...recent.filter((old) => old.skin !== entry.skin)].slice(0, 6);
+    setRecent(next);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    } catch {
+      // Storage is blocked; the list just isn't kept.
+    }
+  }
+
   function previewPlayer(player: PlayerSearchResult) {
+    // Skins found by searching are remembered, so they're easy to get back to.
+    if (!DEFAULT_SKINS.some((entry) => entry.id === player.uuid)) {
+      rememberRecent({ name: player.username, skin: player.skin, slim: player.slim });
+    }
+
     setPreview({ source: "player", skin: player.skin, label: `${player.username}'s skin` });
     setSlim(player.slim);
     setNotice(null);
@@ -477,16 +513,80 @@ function SkinSelector({
     preview &&
     (preview.source !== "mine" || slim !== profile?.skin?.slim || capeId !== activeCape);
 
-  return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        background: "var(--color-bg)",
-        color: "var(--color-text)",
-        fontFamily: "var(--font-ui)",
-      }}
+  const toolTip = (tip: string, enabled: boolean) => ({
+    "data-tip": tip,
+    "aria-disabled": !enabled || undefined,
+  });
+
+  const addTile = (primary: boolean) => (
+    <button
+      type="button"
+      className={`sk-tile sk-tile--add${primary ? " sk-tile--upload" : ""}`}
+      data-testid={primary ? "upload-skin" : undefined}
+      disabled={!!busy}
+      onClick={uploadSkin}
+      title="Choose a PNG to preview, then Save Changes to make it your skin"
     >
+      <span className="sk-tile__plus"><PlusIcon /></span>
+      <strong>{busy === "upload" ? "Opening..." : primary ? "Upload skin" : "Add skin"}</strong>
+      <small>PNG file</small>
+    </button>
+  );
+
+  const savedCard = (entry: SavedSkin, testId: string) => (
+    <div
+      key={entry.id}
+      className={`sk-tile${preview?.source === "saved" && preview.savedId === entry.id ? " is-selected" : ""}`}
+      data-testid={testId}
+      onClick={() => previewSaved(entry)}
+      title="Preview"
+    >
+      <div className="sk-tile__art">
+        <SkinFront skin={entry.dataUrl} slim={entry.slim} scale={3} />
+      </div>
+      <div className="sk-tile__name">{entry.name}</div>
+      <div className="sk-tile__row">
+        <Button
+          size="sm"
+          variant="primary"
+          // Looks like the others even when it can't be used yet; hovering says why.
+          aria-disabled={!signedIn || !!busy || undefined}
+          data-tip={
+            !signedIn
+              ? "Sign in with Microsoft on the Minecraft page to use this skin"
+              : busy
+              ? "Wait for the current change to finish"
+              : "Make this your skin in game"
+          }
+          onClick={(event) => {
+            event.stopPropagation();
+            if (signedIn && !busy) applySavedSkin(entry);
+          }}
+        >
+          {busy === `use-${entry.id}` ? "..." : "Use"}
+        </Button>
+        <Button
+          size="sm"
+          variant={confirmingDelete === entry.id ? "danger" : "ghost"}
+          disabled={!!busy}
+          aria-label={confirmingDelete === entry.id ? `Click again to delete ${entry.name}` : `Delete ${entry.name}`}
+          title={confirmingDelete === entry.id ? "Click again to delete" : "Delete"}
+          onClick={(event) => {
+            event.stopPropagation();
+            deleteSavedSkin(entry);
+          }}
+          onMouseLeave={() => {
+            if (confirmingDelete === entry.id) setConfirmingDelete(null);
+          }}
+        >
+          {confirmingDelete === entry.id ? "Sure?" : <BinIcon size={15} />}
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="sk-page">
       <Sidebar
         currentPage="skins"
         goHome={goHome}
@@ -499,430 +599,80 @@ function SkinSelector({
         onBack={onBack}
       />
 
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
+      <div className="sk-shell">
         {busy === "blockbench" && preview && <BlockbenchFrame title={`Editing ${preview.label}`} />}
 
-        {/* Main Content, with the logo centred behind it and staying put while it scrolls */}
-        <div style={{ flex: 1, minWidth: 0, position: "relative", display: "flex" }}>
-        <BackgroundLogo />
-        <div
-          style={{
-            flex: 1,
-            minWidth: 0,
-            padding: "35px",
-            overflowY: "auto",
-            position: "relative",
-          }}
-        >
-          <div style={{ position: "relative", zIndex: 1 }}>
-            <h1
-              style={{
-                lineHeight: 1,
-                marginBottom: "10px" }}
-            >
-              Minecraft Skin Selector
-            </h1>
-
-            <p
-              style={{
-                color: "var(--color-text-muted)",
-                marginBottom: "30px",
-              }}
-            >
-              Upload, preview and manage your Minecraft skins.
-            </p>
-
-            <input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setView("search");
-              }}
-              placeholder="Search Minecraft Players..."
-              style={{
-                width: "100%",
-                padding: "15px",
-                borderRadius: "12px",
-                border: "1px solid var(--color-border)",
-                background: "var(--color-surface)",
-                color: "var(--color-text)",
-                fontSize: "16px",
-                boxSizing: "border-box",
-              }}
-            />
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
-              <button
-                className="sidebar-button"
-                disabled={!!busy}
-                onClick={uploadSkin}
-                title="Choose a PNG to preview, then Save Changes to make it your skin"
-              >
-                {busy === "upload" ? "Opening..." : "Upload Skin"}
-              </button>
-
-              <button
-                className="sidebar-button"
-                data-testid="saved-tab"
-                aria-pressed={view === "saved"}
-                onClick={() => setView(view === "saved" ? "search" : "saved")}
-                style={{ background: view === "saved" ? "var(--color-accent-subtle)" : undefined }}
-              >
-                Favourites ({saved.length})
-              </button>
-
-              <button
-                className="sidebar-button"
-                disabled={!!busy}
-                onClick={() => run("refresh", async () => {
-                  await loadProfile();
-                  setSaved(await window.skinAPI.saved());
-                  return null;
-                })}
-              >
-                {busy === "refresh" ? "Refreshing..." : "Refresh"}
-              </button>
-            </div>
-
-            {profileLoaded && !signedIn && (
-              <div
-                data-testid="skin-signed-out"
-                style={{ ...card, background: "var(--color-warning-bg)", border: "1px solid var(--color-warning-border)", color: "var(--color-warning-text)" }}
-              >
-                Sign in with Microsoft on the Minecraft page to change your skin. You can
-                still search and preview skins here.
-              </div>
-            )}
-
-            {error && (
-              <div
-                role="alert"
-                data-testid="skin-error"
-                style={{ ...card, background: "var(--color-danger-bg)", border: "1px solid var(--color-danger-border)", color: "var(--color-danger-text)" }}
-              >
-                {error}
-              </div>
-            )}
-
-            {notice && (
-              <div
-                data-testid="skin-notice"
-                style={{ ...card, background: "var(--color-success-bg)", border: "1px solid var(--color-success-border)", color: "var(--color-success-text)" }}
-              >
-                {notice}
-              </div>
-            )}
-
-            {/* ---------- saved skins ---------- */}
-            {view === "saved" && (
-            <div style={{ marginTop: 28 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-                <h2 style={{ margin: 0 }}>Favourites</h2>
-
-                {signedIn && profile?.skin && (
-                  <button
-                    className="sidebar-button"
-                    style={{ fontSize: 12, padding: "6px 12px" }}
-                    disabled={!!busy}
-                    onClick={saveMyCurrentSkin}
-                  >
-                    Save my current skin
-                  </button>
-                )}
-              </div>
-
-              {saved.length === 0 ? (
-                <p style={{ color: "var(--color-text-muted)", fontSize: 13 }}>
-                  Nothing saved yet. Save your current skin, or any skin you preview, to
-                  switch back to it later.
-                </p>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))",
-                    gap: 14,
-                  }}
-                >
-                  {saved.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="game-card"
-                      data-testid="saved-skin"
-                      style={{ padding: 12, cursor: "pointer", textAlign: "center" }}
-                      onClick={() => previewSaved(entry)}
-                      title="Preview"
-                    >
-                      <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-                        <SkinFront skin={entry.dataUrl} slim={entry.slim} scale={4} />
-                      </div>
-
-                      <div style={{ color: "var(--color-accent-text)", fontSize: 13, marginBottom: 8, wordBreak: "break-word" }}>
-                        {entry.name}
-                      </div>
-
-                      <button
-                        className="sidebar-button"
-                        style={{ width: "100%", fontSize: 12, padding: "6px", marginBottom: 6 }}
-                        // Looks like the others even when it can't be used yet; hovering says why.
-                        aria-disabled={!signedIn || !!busy || undefined}
-                        data-tip={
-                          !signedIn
-                            ? "Sign in with Microsoft on the Minecraft page to use this skin"
-                            : busy
-                            ? "Wait for the current change to finish"
-                            : "Make this your skin in game"
-                        }
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          if (signedIn && !busy) applySavedSkin(entry);
-                        }}
-                      >
-                        {busy === `use-${entry.id}` ? "Applying..." : "Use"}
-                      </button>
-
-                      <button
-                        className="sidebar-button"
-                        style={{
-                          width: "100%",
-                          fontSize: 12,
-                          padding: "6px",
-                          background: confirmingDelete === entry.id ? "var(--color-danger-solid)" : undefined,
-                        }}
-                        disabled={!!busy}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          deleteSavedSkin(entry);
-                        }}
-                        onMouseLeave={() => {
-                          if (confirmingDelete === entry.id) setConfirmingDelete(null);
-                        }}
-                      >
-                        {confirmingDelete === entry.id ? "Click again to delete" : "Delete"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            )}
-
-            {view === "search" && loading && (
-              <p style={{ color: "var(--color-text-muted)", marginTop: 16 }}>
-                Searching...
-              </p>
-            )}
-
-            {view === "search" && !loading && search.trim() && players.length === 0 && (
-              <p style={{ color: "var(--color-text-muted)", marginTop: 16 }}>
-                No Java players found for "{search.trim()}".
-              </p>
-            )}
-
-            {view === "search" && (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))",
-                gap: "18px",
-                marginTop: "30px",
-              }}
-            >
-              {players.map((player) => (
-                <div
-                  key={player.uuid}
-                  className="game-card"
-                  data-testid="player-card"
-                  style={{ cursor: "pointer" }}
-                  onClick={() => previewPlayer(player)}
-                >
-                  <div
-                    style={{
-                      height: "230px",
-                      background: "var(--color-surface)",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: "14px",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      color: "var(--color-text-muted)",
-                      marginBottom: "14px",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <PlayerPreview player={player} />
-                  </div>
-
-                  <h3
-                    style={{
-                      marginBottom: "10px" }}
-                  >
-                    {player.username}
-                  </h3>
-
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <IconButton
-                      label="Save to favourites"
-                      tip={busy ? wait : "Save to favourites"}
-                      disabled={!!busy}
-                      style={cardButton}
-                      onClick={() =>
-                        saveToMySkins(
-                          { source: "player", skin: player.skin, label: `${player.username}'s skin` },
-                          player.username,
-                          player.slim
-                        )
-                      }
-                    >
-                      <StarIcon size={17} />
-                    </IconButton>
-
-                    <IconButton
-                      label="Apply"
-                      tip={
-                        busy === `apply-${player.uuid}`
-                          ? "Making this your skin..."
-                          : busy
-                          ? wait
-                          : signedIn
-                          ? "Make this your skin in game"
-                          : "Make this your skin in game (sign in with Microsoft on the Minecraft page first)"
-                      }
-                      disabled={!signedIn || !!busy}
-                      style={cardButton}
-                      onClick={() => applyPlayer(player)}
-                    >
-                      {busy === `apply-${player.uuid}` ? "…" : <TickIcon />}
-                    </IconButton>
-
-                    <IconButton
-                      label="Edit in Blockbench"
-                      tip={busy ? wait : blockbenchReady ? "Edit in Blockbench" : "Edit in Blockbench (it's still getting ready)"}
-                      disabled={!!busy || !blockbenchReady}
-                      style={cardButton}
-                      onClick={() =>
-                        editInBlockbench(
-                          { source: "player", skin: player.skin, label: `${player.username}'s skin` },
-                          player.slim
-                        )
-                      }
-                    >
-                      <img src={blockbenchLogo} alt="" style={{ width: 19, height: 19 }} />
-                    </IconButton>
-                  </div>
-                </div>
-              ))}
-            </div>
-            )}
-          </div>
-        </div>
-        </div>
-
-        {/* Right Sidebar: fits the window, with the preview taking whatever height is left */}
-        <div
-          style={{
-            width: "340px",
-            borderLeft: "1px solid var(--color-border)",
-            background: "var(--color-chrome)",
-            padding: "20px 22px",
-            boxSizing: "border-box",
-            display: "flex",
-            flexDirection: "column",
-            overflowY: "auto",
-          }}
-        >
-          <h2 style={{ margin: "0 0 14px", flexShrink: 0 }}>3D Preview</h2>
-
-          <div
-            data-testid="skin-preview-box"
-            style={{
-              flex: 1,
-              minHeight: 220,
-              background: "var(--color-surface-raised)",
-              border: "1px solid var(--color-border)",
-              borderRadius: "18px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              alignItems: "center",
-              color: "var(--color-text-muted)",
-              overflow: "hidden",
-              padding: preview ? 0 : 20,
-            }}
-          >
+        {/* Left: the big 3D preview, with the one main action under it */}
+        <aside className="sk-stage" aria-label="Skin preview">
+          <div className="sk-stage__box" data-testid="skin-preview-box" title="Drag to rotate">
             {preview ? (
               <SkinPreview skin={preview.skin} slim={slim} cape={previewCape} fill fullBody />
             ) : (
-              "Search for a player, or import a skin, to preview it"
+              <div className="sk-stage__empty">
+                <ShirtIcon />
+                <p>Pick a skin, search for a player or add your own to preview it here.</p>
+              </div>
             )}
           </div>
 
-          <div
-            data-testid={preview ? "preview-label" : undefined}
-            style={{ color: "var(--color-accent-text)", margin: "8px 0 14px", fontSize: 13, minHeight: 17, flexShrink: 0 }}
+          <div className="sk-stage__label" data-testid={preview ? "preview-label" : undefined}>
+            {preview ? preview.label : "No skin picked"}
+            {unsaved && <span className="sk-stage__unsaved">Not saved yet</span>}
+          </div>
+
+          <Button
+            variant="primary"
+            size="lg"
+            className="sk-stage__edit"
+            data-testid="edit-in-blockbench"
+            aria-label="Edit in Blockbench"
+            icon={<img src={blockbenchLogo} alt="" width={18} height={18} />}
+            {...toolTip(tips.blockbench, canBlockbench)}
+            onClick={() => (canBlockbench ? editInBlockbench() : setWhy(tips.blockbench))}
           >
-            {preview ? `${preview.label}${unsaved ? " • not saved yet" : ""}` : ""}
+            Edit skin
+          </Button>
+
+          <div className="sk-stage__fields">
+            <div>
+              <label htmlFor="skin-model">Player model</label>
+              <select
+                id="skin-model"
+                className="sidebar-button"
+                aria-label="Player model"
+                value={slim ? "slim" : "normal"}
+                disabled={!preview}
+                onChange={(event) => setSlim(event.target.value === "slim")}
+              >
+                <option value="normal">Normal</option>
+                <option value="slim">Slim</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="skin-cape">Cape</label>
+              <select
+                id="skin-cape"
+                className="sidebar-button"
+                aria-label="Cape"
+                title={signedIn && profile?.capes.length === 0 ? "Your account doesn't have any capes." : undefined}
+                value={capeId}
+                disabled={!signedIn}
+                onChange={(event) => setCapeId(event.target.value)}
+              >
+                <option value="">No Cape</option>
+                {profile?.capes.map((cape) => (
+                  <option key={cape.id} value={cape.id}>
+                    {cape.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", alignItems: "center", gap: "10px 12px", flexShrink: 0, textAlign: "left" }}>
-            <label htmlFor="skin-model" style={{ color: "var(--color-accent-text)", fontSize: 14, fontWeight: 600 }}>
-              Player Model
-            </label>
-            <select
-              id="skin-model"
-              className="sidebar-button"
-              aria-label="Player model"
-              value={slim ? "slim" : "normal"}
-              disabled={!preview}
-              onChange={(event) => setSlim(event.target.value === "slim")}
-              style={{ width: "100%", padding: "8px 10px" }}
-            >
-              <option value="normal">Normal</option>
-              <option value="slim">Slim</option>
-            </select>
-
-            <label htmlFor="skin-cape" style={{ color: "var(--color-accent-text)", fontSize: 14, fontWeight: 600 }}>
-              Cape
-            </label>
-            <select
-              id="skin-cape"
-              className="sidebar-button"
-              aria-label="Cape"
-              value={capeId}
-              disabled={!signedIn}
-              onChange={(event) => setCapeId(event.target.value)}
-              style={{ width: "100%", padding: "8px 10px" }}
-            >
-              <option value="">No Cape</option>
-              {profile?.capes.map((cape) => (
-                <option key={cape.id} value={cape.id}>
-                  {cape.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {signedIn && profile?.capes.length === 0 && (
-            <p style={{ color: "var(--color-text-muted)", fontSize: 12, margin: "8px 0 0", flexShrink: 0 }}>
-              Your account doesn't have any capes.
-            </p>
-          )}
-
-          {/* All five look alike; what each does, or why it can't yet, comes up on hover (HoverTips). */}
-          <div data-testid="skin-actions" style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 18, flexShrink: 0 }}>
-            <IconButton testId="edit-in-blockbench" label="Edit in Blockbench" tip={tips.blockbench} disabled={!canBlockbench} onUnavailable={() => setWhy(tips.blockbench)} onClick={() => editInBlockbench()}>
-              <img src={blockbenchLogo} alt="" style={{ width: 24, height: 24 }} />
-            </IconButton>
-
+          {/* What each does, or why it can't yet, comes up on hover (HoverTips). */}
+          <div data-testid="skin-actions" className="sk-stage__actions">
             <IconButton testId="save-changes" label="Save changes" variant={unsaved ? "ready" : ""} tip={tips.save} disabled={!canSave} onUnavailable={() => setWhy(tips.save)} onClick={saveChanges}>
-              <SaveIcon size={21} />
+              <SaveIcon size={20} />
             </IconButton>
 
             <IconButton
@@ -933,11 +683,11 @@ function SkinSelector({
               onUnavailable={() => setWhy(tips.download)}
               onClick={() => preview && downloadSkin(preview.skin, preview.source === "mine" ? profile?.name ?? "skin" : preview.label)}
             >
-              <DownloadIcon size={21} />
+              <DownloadIcon size={20} />
             </IconButton>
 
             <IconButton testId="reset-skin" label="Reset to default" variant={confirmingReset ? "confirming" : ""} tip={tips.reset} disabled={!canReset} onUnavailable={() => setWhy(tips.reset)} onClick={resetToDefault}>
-              <ResetIcon size={21} />
+              <ResetIcon size={20} />
             </IconButton>
 
             <IconButton
@@ -956,11 +706,11 @@ function SkinSelector({
                 )
               }
             >
-              <StarIcon size={21} filled={preview?.source === "saved"} />
+              <StarIcon size={20} filled={preview?.source === "saved"} />
             </IconButton>
           </div>
 
-          <div role="status" style={{ minHeight: 17, marginTop: 10, fontSize: 12, color: confirmingReset ? "var(--color-danger-text)" : "var(--color-accent-text)", flexShrink: 0 }}>
+          <div role="status" className={`sk-stage__status${confirmingReset ? " is-danger" : ""}`}>
             {busy === "save"
               ? "Saving..."
               : busy === "blockbench"
@@ -971,7 +721,254 @@ function SkinSelector({
               ? "Click reset again to put your skin back to the default."
               : why ?? ""}
           </div>
-        </div>
+        </aside>
+
+        {/* Right: search, then saved skins or search results as a tile grid */}
+        <main className="sk-main">
+          <header className="sk-head">
+            <div>
+              <h1 className="sk-title">Skin selector</h1>
+              <p className="sk-sub">Preview, save and wear your skins.</p>
+            </div>
+            <Button variant="ghost" size="sm" disabled={!!busy} onClick={() => run("refresh", async () => {
+              await loadProfile();
+              setSaved(await window.skinAPI.saved());
+              return null;
+            })}>
+              {busy === "refresh" ? "Refreshing..." : "Refresh"}
+            </Button>
+          </header>
+
+          <div className="sk-toolbar">
+            <SearchField
+              label="Search Minecraft players"
+              wrapperClassName="sk-search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setView("search");
+              }}
+              placeholder="Search Minecraft players..."
+            />
+
+            <div className="sk-tabs" role="group" aria-label="Skins shown">
+              <Button
+                variant="secondary"
+                className={view === "search" ? "is-on" : ""}
+                aria-pressed={view === "search"}
+                onClick={() => setView("search")}
+              >
+                Players
+              </Button>
+              <Button
+                variant="secondary"
+                data-testid="saved-tab"
+                className={view === "saved" ? "is-on" : ""}
+                aria-pressed={view === "saved"}
+                onClick={() => setView(view === "saved" ? "search" : "saved")}
+              >
+                Favourites ({saved.length})
+              </Button>
+            </div>
+          </div>
+
+          {profileLoaded && !signedIn && (
+            <p className="sk-hint" data-testid="skin-signed-out">
+              Sign in with Microsoft on the Minecraft page to change your skin. You can still search and preview skins here.
+            </p>
+          )}
+          {error && <Notice tone="danger" data-testid="skin-error">{error}</Notice>}
+          {notice && <Notice tone="success" data-testid="skin-notice">{notice}</Notice>}
+
+          {view === "saved" && (
+            <section>
+              <div className="sk-section-head">
+                <h2>Favourites</h2>
+                {signedIn && profile?.skin && (
+                  <Button size="sm" disabled={!!busy} onClick={saveMyCurrentSkin}>
+                    Save my current skin
+                  </Button>
+                )}
+              </div>
+
+              <div className="sk-grid">
+                {addTile(false)}
+                {saved.map((entry) => savedCard(entry, "saved-skin"))}
+              </div>
+
+              {saved.length === 0 && (
+                <p className="sk-empty">
+                  Nothing saved yet. Save your current skin, or any skin you preview, to switch back to it later.
+                </p>
+              )}
+            </section>
+          )}
+
+          {view === "search" && (
+            <section>
+              {!search.trim() && (
+                <>
+                  <div className="sk-section-head">
+                    <h2>Default skins</h2>
+                  </div>
+                  <div className="sk-grid" data-testid="default-skins">
+                    {addTile(true)}
+
+                    {DEFAULT_SKINS.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className={`sk-tile${preview?.skin === entry.skin ? " is-selected" : ""}`}
+                        data-testid="default-skin"
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Preview ${entry.name}`}
+                        onClick={() => previewPlayer({ username: entry.name, uuid: entry.id, skin: entry.skin, slim: entry.slim })}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            previewPlayer({ username: entry.name, uuid: entry.id, skin: entry.skin, slim: entry.slim });
+                          }
+                        }}
+                      >
+                        <div className="sk-tile__art">
+                          <SkinFront skin={entry.skin} slim={entry.slim} scale={3} />
+                        </div>
+                        <div className="sk-tile__name">{entry.name}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {recent.length > 0 && (
+                    <>
+                      <div className="sk-section-head">
+                        <h2>Recently used</h2>
+                      </div>
+                      <div className="sk-grid" data-testid="recent-skins">
+                        {recent.map((entry) => (
+                          <div
+                            key={entry.skin}
+                            className={`sk-tile${preview?.skin === entry.skin ? " is-selected" : ""}`}
+                            data-testid="recent-skin"
+                            tabIndex={0}
+                            role="button"
+                            aria-label={`Preview ${entry.name}`}
+                            onClick={() => previewPlayer({ username: entry.name, uuid: entry.skin, skin: entry.skin, slim: entry.slim })}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                previewPlayer({ username: entry.name, uuid: entry.skin, skin: entry.skin, slim: entry.slim });
+                              }
+                            }}
+                          >
+                            <div className="sk-tile__art">
+                              <SkinFront skin={entry.skin} slim={entry.slim} scale={3} />
+                            </div>
+                            <div className="sk-tile__name">{entry.name}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {saved.length > 0 && (
+                    <>
+                      <div className="sk-section-head">
+                        <h2>Favourites</h2>
+                      </div>
+                      <div className="sk-grid" data-testid="favourite-skins">
+                        {saved.map((entry) => savedCard(entry, "favourite-skin"))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {search.trim() && (
+                <div className="sk-section-head">
+                  <h2>Players</h2>
+                </div>
+              )}
+
+              {loading && <p className="sk-empty">Searching...</p>}
+
+              {!loading && search.trim() && players.length === 0 && (
+                <p className="sk-empty">No Java players found for "{search.trim()}".</p>
+              )}
+
+              <div className="sk-grid sk-grid--players">
+                {players.map((player) => (
+                  <div
+                    key={player.uuid}
+                    className={`sk-tile${preview?.skin === player.skin ? " is-selected" : ""}`}
+                    data-testid="player-card"
+                    onClick={() => previewPlayer(player)}
+                  >
+                    <div className="sk-tile__art sk-tile__art--tall">
+                      <PlayerPreview player={player} />
+                    </div>
+
+                    <div className="sk-tile__name">{player.username}</div>
+
+                    <div className="sk-tile__row">
+                      <IconButton
+                        label="Save to favourites"
+                        tip={busy ? wait : "Save to favourites"}
+                        disabled={!!busy}
+                        style={cardButton}
+                        onClick={() =>
+                          saveToMySkins(
+                            { source: "player", skin: player.skin, label: `${player.username}'s skin` },
+                            player.username,
+                            player.slim
+                          )
+                        }
+                      >
+                        <StarIcon size={17} />
+                      </IconButton>
+
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        aria-label="Apply"
+                        aria-disabled={!signedIn || !!busy || undefined}
+                        data-tip={
+                          busy === `apply-${player.uuid}`
+                            ? "Making this your skin..."
+                            : busy
+                            ? wait
+                            : signedIn
+                            ? "Make this your skin in game"
+                            : "Make this your skin in game (sign in with Microsoft on the Minecraft page first)"
+                        }
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (signedIn && !busy) applyPlayer(player);
+                        }}
+                      >
+                        {busy === `apply-${player.uuid}` ? "Applying..." : "Use"}
+                      </Button>
+
+                      <IconButton
+                        label="Edit in Blockbench"
+                        tip={busy ? wait : blockbenchReady ? "Edit in Blockbench" : "Edit in Blockbench (it's still getting ready)"}
+                        disabled={!!busy || !blockbenchReady}
+                        style={cardButton}
+                        onClick={() =>
+                          editInBlockbench(
+                            { source: "player", skin: player.skin, label: `${player.username}'s skin` },
+                            player.slim
+                          )
+                        }
+                      >
+                        <img src={blockbenchLogo} alt="" style={{ width: 19, height: 19 }} />
+                      </IconButton>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </main>
       </div>
 
       <PromptDialog request={namePrompt} />

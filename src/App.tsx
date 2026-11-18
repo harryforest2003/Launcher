@@ -330,6 +330,7 @@ function Screens({
           initialGame={modGame}
           onBack={navigation.goHome}
           onMinecraft={navigation.goMinecraft}
+          onGame={openGame}
           onSettings={() => setScreen("launcherSettings")}
         />
       );

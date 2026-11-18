@@ -18,6 +18,10 @@ function harness({ backup = async () => null, open = async () => {}, target = "s
         "./saves.cjs": { backup },
         "./launch.cjs": { launch: async (_game, _loc, options) => { await options.open(target); return { how: "Steam", safe: false }; } },
     };
+    // The real link checks, opening through the mocked shell.
+    const security = { module: { exports: {} }, require: (id) => (id === "electron" ? { ...modules.electron, app: { isPackaged: true, on() {} }, protocol: { registerSchemesAsPrivileged() {} } } : require(id)), console, URL, __dirname: path.join(__dirname, "../electron"), process };
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../electron/security.cjs"), "utf8"), security);
+    modules["../security.cjs"] = security.module.exports;
     const context = { require: (id) => modules[id] ?? {}, module: { exports: {} }, console };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../electron/games/ipc.cjs"), "utf8"), context);
     context.module.exports.registerGamesIpc();

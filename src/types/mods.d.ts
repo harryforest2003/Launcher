@@ -13,12 +13,28 @@ declare global {
         modExtensions: string[];
         notes: string | null;
         windowsOnlyModding: boolean;
+        /** The game itself only runs on Windows. */
+        windowsOnly?: boolean;
         managedByInstances: boolean;
         availableProviders: {
             id: string;
             label: string;
             ready: boolean;
         }[];
+    };
+
+    /** A game the launcher supports, whether or not it is on this computer. */
+    type CatalogGame = {
+        id: string;
+        name: string;
+        steamAppId: string | null;
+        /** Set when the game has no PC version; says where it is out. */
+        notOnPC: string | null;
+        windowsOnly: boolean;
+        providers: string[];
+        modExtensions: string[];
+        /** Its mods replace game files, so there is no mods folder to manage. */
+        noModFolder: boolean;
     };
 
     type InstalledMod = {
@@ -62,6 +78,7 @@ declare global {
         modAPI: {
             getGames(opts?: { refresh?: boolean }): Promise<DetectedGame[]>;
             refreshGames(): Promise<number>;
+            catalog(): Promise<CatalogGame[]>;
 
             list(gameId: string): Promise<InstalledMod[]>;
 

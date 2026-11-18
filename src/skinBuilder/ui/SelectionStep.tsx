@@ -2,8 +2,20 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { CutoutCancelled, runCutout } from "../cutoutClient";
 import { HINT_KEEP, HINT_NONE, HINT_REMOVE } from "../grabcut";
 import { imageDataOf, type Draft } from "../workingImage";
-import { Button, ErrorNote, Slider } from "./shared";
-import { CHECKERBOARD, panelStyle } from "./styles";
+import Button from "../../components/ui/Button";
+import Segmented from "../../components/ui/Segmented";
+import { ErrorNote, Slider } from "./shared";
+import { useTheme } from "../../theme/runtime";
+import { hexToRgb } from "../../theme/color";
+
+// The removed-area tint (magenta, the way Word's background removal shows it).
+const REMOVED = { r: 214, g: 40, b: 150 };
+
+/* A theme colour as 0-255 channels, so brush marks follow the colour-vision setting. */
+const channels = (hex: string, fallback: { r: number; g: number; b: number }) => {
+  const rgb = hexToRgb(hex);
+  return rgb ? { r: rgb.r * 255, g: rgb.g * 255, b: rgb.b * 255 } : fallback;
+};
 
 type Tool = "keep" | "remove" | "erase";
 type View = "marks" | "result";
@@ -27,6 +39,7 @@ const TOOL_VALUE: Record<Tool, number> = {
 export default function SelectionStep({ draft, onChange, onApprove, onStartOver }: Props) {
   const { source } = draft;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const resultRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
   const hintsRef = useRef<Uint8Array>(draft.hints);
   const maskRef = useRef<Uint8Array>(draft.mask);
@@ -43,6 +56,9 @@ export default function SelectionStep({ draft, onChange, onApprove, onStartOver 
   const [undoCount, setUndoCount] = useState(0);
   const [keptShare, setKeptShare] = useState(0);
   const [image] = useState(() => imageDataOf(source));
+  const { palette } = useTheme();
+  const keepHex = palette.colors["success-solid"];
+  const removeHex = palette.colors["danger-solid"];
 
   const paint = useCallback(() => {
     const canvas = canvasRef.current;
@@ -58,6 +74,8 @@ export default function SelectionStep({ draft, onChange, onApprove, onStartOver 
     const mask = maskRef.current;
     const hints = hintsRef.current;
     const showMarks = view === "marks";
+    const keep = channels(keepHex, { r: 34, g: 197, b: 94 });
+    const remove = channels(removeHex, { r: 239, g: 68, b: 68 });
 
     for (let y = 0; y < height; y += 1) {
       for (let x = 0; x < width; x += 1) {
@@ -78,10 +96,9 @@ export default function SelectionStep({ draft, onChange, onApprove, onStartOver 
         let b = data[p + 2];
 
         if (!kept) {
-          // Removed areas are tinted, the way Word's background removal shows them.
-          r = r * 0.35 + 214 * 0.65;
-          g = g * 0.35 + 40 * 0.65;
-          b = b * 0.35 + 150 * 0.65;
+          r = r * 0.35 + REMOVED.r * 0.65;
+          g = g * 0.35 + REMOVED.g * 0.65;
+          b = b * 0.35 + REMOVED.b * 0.65;
         } else if (
           x === 0 || y === 0 || x === width - 1 || y === height - 1 ||
           !mask[i - 1] || !mask[i + 1] || !mask[i - width] || !mask[i + width]
@@ -92,13 +109,13 @@ export default function SelectionStep({ draft, onChange, onApprove, onStartOver 
         }
 
         if (hints[i] === HINT_KEEP) {
-          r = r * 0.4 + 34 * 0.6;
-          g = g * 0.4 + 197 * 0.6;
-          b = b * 0.4 + 94 * 0.6;
+          r = r * 0.4 + keep.r * 0.6;
+          g = g * 0.4 + keep.g * 0.6;
+          b = b * 0.4 + keep.b * 0.6;
         } else if (hints[i] === HINT_REMOVE) {
-          r = r * 0.4 + 239 * 0.6;
-          g = g * 0.4 + 68 * 0.6;
-          b = b * 0.4 + 68 * 0.6;
+          r = r * 0.4 + remove.r * 0.6;
+          g = g * 0.4 + remove.g * 0.6;
+          b = b * 0.4 + remove.b * 0.6;
         }
 
         out[p] = r;
@@ -109,7 +126,21 @@ export default function SelectionStep({ draft, onChange, onApprove, onStartOver 
     }
 
     ctx.putImageData(output, 0, 0);
-  }, [image, view]);
+
+    // The small result picture in the column follows every change.
+    const thumb = resultRef.current?.getContext("2d");
+    if (thumb) {
+      const cut = thumb.createImageData(width, height);
+      for (let i = 0; i < width * height; i += 1) {
+        const p = i * 4;
+        cut.data[p] = data[p];
+        cut.data[p + 1] = data[p + 1];
+        cut.data[p + 2] = data[p + 2];
+        cut.data[p + 3] = mask[i] === 1 ? 255 : 0;
+      }
+      thumb.putImageData(cut, 0, 0);
+    }
+  }, [image, view, keepHex, removeHex]);
 
   const schedulePaint = useCallback(() => {
     cancelAnimationFrame(frameRef.current);
@@ -222,110 +253,112 @@ export default function SelectionStep({ draft, onChange, onApprove, onStartOver 
   const nothingKept = keptShare === 0;
 
   return (
-    <div style={{ display: "flex", gap: 18, alignItems: "flex-start", flexWrap: "wrap" }}>
-      <div style={{ ...panelStyle, flex: "1 1 460px", minWidth: 320 }}>
-        <div
-          style={{
-            position: "relative",
-            margin: "0 auto",
-            maxWidth: "100%",
-            width: "fit-content",
-            lineHeight: 0,
-            overflow: "hidden",
-            background: CHECKERBOARD,
-            borderRadius: 8,
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            data-testid="selection-canvas"
-            width={source.width}
-            height={source.height}
-            style={{
-              display: "block",
-              maxWidth: "100%",
-              maxHeight: "calc(100vh - 230px)",
-              minHeight: 280,
-              aspectRatio: `${source.width} / ${source.height}`,
-              cursor: "crosshair",
-              touchAction: "none",
-            }}
-            onPointerDown={(event) => {
-              event.currentTarget.setPointerCapture(event.pointerId);
-              undoRef.current.push(hintsRef.current.slice());
-              undoRef.current = undoRef.current.slice(-UNDO_LIMIT);
-              setUndoCount(undoRef.current.length);
-              if (rerunRef.current) clearTimeout(rerunRef.current);
-              if (view === "result") setView("marks");
-              strokeRef.current = null;
-              strokeTo(toImagePoint(event));
-            }}
-            onPointerMove={(event) => {
-              moveCursor(event);
-              if (strokeRef.current) strokeTo(toImagePoint(event));
-            }}
-            onPointerUp={() => {
-              if (!strokeRef.current) return;
-              strokeRef.current = null;
-              scheduleRerun();
-            }}
-            onPointerLeave={() => {
-              if (cursorRef.current) cursorRef.current.style.display = "none";
-            }}
+    <div className="sk-workspace">
+      <div className="sk-view">
+        <div className="sk-view__bar">
+          <Button size="sm" disabled={undoCount === 0} onClick={undo}>Undo</Button>
+          <Button size="sm" onClick={clearMarks}>Clear marks</Button>
+          <span className="sk-view__spacer" />
+          <Segmented<View>
+            label="View"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "marks", label: "Marks" },
+              { value: "result", label: "Result" },
+            ]}
           />
-          <div
-            ref={cursorRef}
-            style={{
-              display: "none",
-              position: "absolute",
-              pointerEvents: "none",
-              borderRadius: "50%",
-              border: "1px solid var(--color-text)",
-              boxShadow: "0 0 0 1px var(--color-bg)",
-            }}
-          />
+        </div>
+
+        <div className="sk-fit">
+          <div className="sk-fit__frame" style={{ ["--sk-ar" as string]: source.width / source.height }}>
+            <canvas
+              ref={canvasRef}
+              data-testid="selection-canvas"
+              width={source.width}
+              height={source.height}
+              className="sk-fit__canvas"
+              onPointerDown={(event) => {
+                event.currentTarget.setPointerCapture(event.pointerId);
+                undoRef.current.push(hintsRef.current.slice());
+                undoRef.current = undoRef.current.slice(-UNDO_LIMIT);
+                setUndoCount(undoRef.current.length);
+                if (rerunRef.current) clearTimeout(rerunRef.current);
+                if (view === "result") setView("marks");
+                strokeRef.current = null;
+                strokeTo(toImagePoint(event));
+              }}
+              onPointerMove={(event) => {
+                moveCursor(event);
+                if (strokeRef.current) strokeTo(toImagePoint(event));
+              }}
+              onPointerUp={() => {
+                if (!strokeRef.current) return;
+                strokeRef.current = null;
+                scheduleRerun();
+              }}
+              onPointerLeave={() => {
+                if (cursorRef.current) cursorRef.current.style.display = "none";
+              }}
+            />
+            <div ref={cursorRef} className="sk-fit__cursor" />
+          </div>
         </div>
       </div>
 
-      <div style={{ ...panelStyle, flex: "0 0 300px" }}>
-        <div style={{ color: "var(--color-accent-text)", fontSize: 16, marginBottom: 6 }}>Check the selection</div>
-        <div style={{ color: "var(--color-text-secondary)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
-          Tinted areas will be removed. Brush or click to correct them. The cut-out re-runs after each stroke.
-        </div>
+      <div className="sk-ctl">
+        <div className="sk-ctl__body">
+          <h2 className="sk-ctl__title">Check the selection</h2>
+          <p className="sk-ctl__hint">
+            Tinted areas will be removed. Brush or click to correct them. The cut-out re-runs after each stroke.
+          </p>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <Button active={tool === "keep"} onClick={() => setTool("keep")} style={{ flex: 1 }}>Keep</Button>
-          <Button active={tool === "remove"} onClick={() => setTool("remove")} style={{ flex: 1 }}>Remove</Button>
-          <Button active={tool === "erase"} onClick={() => setTool("erase")} style={{ flex: 1 }}>Erase</Button>
-        </div>
-
-        <Slider label="Brush size" value={brush} min={2} max={60} step={1} format={(v) => `${v} px`} onChange={setBrush} />
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <Button disabled={undoCount === 0} onClick={undo} style={{ flex: 1 }}>Undo</Button>
-          <Button onClick={clearMarks} style={{ flex: 1 }}>Clear marks</Button>
-        </div>
-
-        <Button onClick={rerun} disabled={running} style={{ width: "100%", marginBottom: 12 }}>
-          {running ? "Cutting out..." : "Re-run cut-out"}
-        </Button>
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <Button active={view === "marks"} onClick={() => setView("marks")} style={{ flex: 1 }}>Marks</Button>
-          <Button active={view === "result"} onClick={() => setView("result")} style={{ flex: 1 }}>Result</Button>
-        </div>
-
-        {error && <div style={{ marginBottom: 12 }}><ErrorNote>{error}</ErrorNote></div>}
-        {nothingKept && !running && (
-          <div style={{ marginBottom: 12 }}>
-            <ErrorNote>Nothing is selected. Use Keep to mark the item.</ErrorNote>
+          <div className="sk-seg">
+            <Segmented<Tool>
+              label="Brush"
+              value={tool}
+              onChange={setTool}
+              options={[
+                { value: "keep", label: "Keep" },
+                { value: "remove", label: "Remove" },
+                { value: "erase", label: "Erase" },
+              ]}
+            />
           </div>
-        )}
 
-        <Button primary disabled={running || nothingKept} onClick={onApprove} style={{ width: "100%", marginBottom: 8 }}>
-          Approve selection
-        </Button>
-        <Button onClick={onStartOver} style={{ width: "100%" }}>Choose another image</Button>
+          <Slider label="Brush size" value={brush} min={2} max={60} step={1} format={(v) => `${v} px`} onChange={setBrush} />
+
+          <div className="sk-key">
+            <div className="sk-key__row">
+              <span className="sk-swatch" style={{ background: "var(--color-success-solid)" }} />Keep mark
+            </div>
+            <div className="sk-key__row">
+              <span className="sk-swatch" style={{ background: "var(--color-danger-solid)" }} />Remove mark
+            </div>
+            <div className="sk-key__row">
+              <span className="sk-swatch" style={{ background: `rgb(${REMOVED.r} ${REMOVED.g} ${REMOVED.b})` }} />Removed area
+              <span className="sk-key__share">{Math.round(keptShare * 100)}% kept</span>
+            </div>
+          </div>
+
+          <div className="sk-thumb" style={{ ["--sk-ar" as string]: source.width / source.height }}>
+            <canvas ref={resultRef} width={source.width} height={source.height} aria-label="Result" />
+          </div>
+
+          <Button size="sm" onClick={rerun} disabled={running}>
+            {running ? "Cutting out..." : "Re-run cut-out"}
+          </Button>
+
+          {error && <ErrorNote>{error}</ErrorNote>}
+          {nothingKept && !running && <ErrorNote>Nothing is selected. Use Keep to mark the item.</ErrorNote>}
+        </div>
+
+        <div className="sk-ctl__foot">
+          <Button variant="primary" size="lg" disabled={running || nothingKept} onClick={onApprove}>
+            Approve selection
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onStartOver}>Choose another image</Button>
+        </div>
       </div>
     </div>
   );

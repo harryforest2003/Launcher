@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import "../pages/library.css";
 import ContentFilter from "./ContentFilter";
 import { ALL_TYPES, NO_FILTERS, activeFilterCount, type FilterCounts, type Filters } from "./contentFilters";
-import { BinIcon, FilterIcon, PlusIcon, SearchIcon } from "./Icons";
+import { BinIcon, FilterIcon, PlusIcon } from "./Icons";
+import { Button, SearchField } from "./ui";
 import Toggle from "./Toggle";
 import { ItemUpdateStatus, UpdatesControls, UpdatesMessages } from "./UpdatesBar";
 import type { ContentUpdates } from "./useContentUpdates";
@@ -116,39 +118,22 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
   return (
     <div style={{ textAlign: "left" }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-        <label
-          style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 220px", maxWidth: 340, padding: "6px 10px", borderRadius: 10, background: "var(--color-surface-sunken)", border: "1px solid var(--color-border)", color: "var(--color-text-muted)" }}
-        >
-          <SearchIcon size={14} />
-          <input
-            data-testid="content-search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${all.length} items...`}
-            aria-label="Search this instance's content"
-            style={{ flex: 1, minWidth: 0, background: "none", border: "none", outline: "none", color: "var(--color-text)", fontSize: 13 }}
-          />
-          {search && (
-            <button aria-label="Clear search" onClick={() => setSearch("")} style={{ background: "none", border: "none", color: "var(--color-text-muted)", cursor: "pointer", padding: 0, fontSize: 15 }}>
-              ×
-            </button>
-          )}
-        </label>
+        <SearchField
+          wrapperClassName="ct-search"
+          label="Search this instance's content"
+          data-testid="content-search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={`Search ${all.length} items...`}
+        />
 
-        <button
-          className="sidebar-button"
-          data-testid="filter-button"
-          onClick={() => setShowFilter(true)}
-          style={{ padding: "6px 12px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, background: active ? "var(--color-accent-subtle)" : undefined }}
-        >
-          <FilterIcon size={14} />
+        <Button data-testid="filter-button" icon={<FilterIcon size={14} />} onClick={() => setShowFilter(true)} variant={active ? "primary" : "secondary"}>
           Filter{active ? ` (${active})` : ""}
-        </button>
+        </Button>
 
-        <button className="sidebar-button" data-testid="add-content" onClick={onAddContent} style={{ padding: "6px 12px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <PlusIcon size={14} />
-          Add Content
-        </button>
+        <Button data-testid="add-content" variant="primary" icon={<PlusIcon size={14} />} onClick={onAddContent}>
+          Add content
+        </Button>
 
         <UpdatesControls updates={updates} />
       </div>
@@ -171,51 +156,42 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
       )}
 
       {all.length === 0 ? (
-        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: 16, color: "var(--color-text-muted)" }}>
+        <div className="ct-empty">
           Nothing here yet. Use <b>Add Content</b> to find mods, resource packs and shaders that work on Minecraft {mcVersion}.
         </div>
       ) : shown.length === 0 ? (
-        <div style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, padding: 16, color: "var(--color-text-muted)" }}>Nothing matches your search or filters.</div>
+        <div className="ct-empty">Nothing matches your search or filters.</div>
       ) : (
-        <div data-testid="content-list" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {shown.map(({ item, key, status, name, icon, author, version }) => (
+        <div data-testid="content-list" className="ct-table">
+          <div className="ct-head" aria-hidden="true">
+            <span>Project</span>
+            <span className="ct-file-head">Version</span>
+            <span>Actions</span>
+          </div>
+          {shown.map(({ item, key, status, name, icon, author, version, source }) => (
             <div
               key={key}
               data-testid="content-item"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                padding: "7px 12px",
-                background: "var(--color-surface)",
-                border: `1px solid ${item.enabled ? "var(--color-border)" : "var(--color-border)"}`,
-                borderRadius: 10,
-                opacity: item.enabled ? 1 : 0.55,
-                // Turned off: the whole item goes grey.
-                filter: item.enabled ? undefined : "grayscale(1)",
-              }}
+              className={`ct-row${item.enabled ? "" : " off"}`}
             >
               {icon ? (
-                <img src={icon} alt="" width={36} height={36} style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0, imageRendering: "auto" }} />
+                <img src={icon} alt="" width={32} height={32} className="ct-icon" />
               ) : (
-                <div
-                  aria-hidden="true"
-                  style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: "var(--color-accent-subtle)", color: "var(--color-accent-text)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}
-                >
+                <div aria-hidden="true" className="ct-icon">
                   {name.charAt(0).toUpperCase()}
                 </div>
               )}
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <span title={item.fileName} style={{ color: "var(--color-accent-text)", fontWeight: 600, fontSize: 14, lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span title={item.fileName} className="ct-name">
                     {name}
                   </span>
                   {TYPE_BADGE[item.type] && (
                     <span style={{ flexShrink: 0, fontSize: 10, color: "var(--color-accent-text)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "1px 6px" }}>{TYPE_BADGE[item.type]}</span>
                   )}
                 </div>
-                <div style={{ fontSize: 12, lineHeight: 1.35, color: "var(--color-text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div className="ct-sub">
                   {[
                     author && `by ${author}`,
                     version && (
@@ -224,6 +200,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
                         {status?.state === "update" && <span style={{ color: "var(--color-success-text)" }}> → {status.latest}</span>}
                       </span>
                     ),
+                    !source.startsWith("Not on") && source,
                     formatBytes(item.size),
                     item.type === "datapack" ? (item.world ? `World: ${item.world}` : "Not in a world yet") : null,
                     item.enabled ? null : "off",
@@ -236,6 +213,10 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
                       </span>
                     ))}
                 </div>
+              </div>
+
+              <div className="ct-file" title={item.fileName}>
+                {item.fileName}
               </div>
 
               {item.type === "datapack" && !item.world && content.worlds.length > 0 && (
@@ -266,6 +247,14 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
               </button>
             </div>
           ))}
+          {!narrowed && (
+            <button type="button" className="ct-add-row" data-testid="add-content-row" onClick={onAddContent}>
+              <PlusIcon size={14} />
+              <span>
+                {all.length < 4 ? `Add more mods, resource packs and shaders for Minecraft ${mcVersion}` : "Add content"}
+              </span>
+            </button>
+          )}
         </div>
       )}
 

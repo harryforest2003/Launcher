@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import IconButton from "../../components/IconButton";
-import { DownloadIcon } from "../../components/Icons";
+import { Clock, Download, ExternalLink, Heart, Info } from "lucide-react";
+import "../discover.css";
+import "./gameDiscover.css";
 import Pagination from "../../components/Pagination";
+import DiscoverRow from "../DiscoverRow";
 import CollectionsList from "./CollectionsList";
-import { countText, errorText, installSummary, MORE_SITES, note, panel, shortDate } from "./shared";
-import { SearchField, Select, Tabs } from "../../components/ui";
+import { countText, errorText, installSummary, MORE_SITES, shortDate } from "./shared";
+import { Badge, Button, EmptyState, Monogram, Notice, SearchField, Select, Skeleton, Tabs } from "../../components/ui";
 
 type Props = {
   detail: GameDetail;
@@ -26,9 +28,18 @@ const SORTS = [
   { id: "new", label: "Newest" },
 ];
 
+function ago(iso: string) {
+  const days = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 86400000));
+  if (Number.isNaN(days)) return "";
+  if (days < 1) return "Today";
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.round(days / 30)}mo ago`;
+  return `${Math.round(days / 365)}y ago`;
+}
+
 const BADGE: Record<string, { label: string; colour: string }> = {
-  nexus: { label: "NEXUS MODS", colour: "var(--color-warning-solid)" },
-  curseforge: { label: "CURSEFORGE", colour: "var(--color-warning-solid)" },
+  nexus: { label: "Nexus", colour: "var(--color-warning-solid)" },
+  curseforge: { label: "CurseForge", colour: "var(--color-warning-solid)" },
 };
 
 /*
@@ -49,6 +60,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
   const [installing, setInstalling] = useState<string | null>(null);
   const [message, setMessage] = useState<{ tone: "good" | "bad" | "warn" | "info"; text: string } | null>(null);
   const [account, setAccount] = useState<{ name: string; premium: boolean } | null | undefined>(undefined);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const infoRef = useRef<HTMLDivElement>(null);
   const listTop = useRef<HTMLDivElement>(null);
 
   const filterKey = JSON.stringify([debounced, provider, sort]);
@@ -87,7 +100,11 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
   const result = loaded?.result ?? null;
   const loadError = loading ? null : (loaded?.error ?? null);
 
+  const shownPage = useRef(page);
   useEffect(() => {
+    // Only when the page number changes: arriving must not scroll the search out of sight.
+    if (shownPage.current === page) return;
+    shownPage.current = page;
     listTop.current?.scrollIntoView({ block: "start" });
   }, [page]);
 
@@ -140,173 +157,199 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
   }
 
 
-  const mods = result?.mods ?? [];
+  // The same mod listed on both sites is one row with both site chips.
+  const mods = (() => {
+    const rows: { mod: GameRemoteMod; also: GameRemoteMod["provider"][] }[] = [];
+    for (const mod of result?.mods ?? []) {
+      const twin = rows.find((row) => (row.mod.provider === mod.provider && row.mod.id === mod.id) || (row.mod.provider !== mod.provider && row.mod.name.trim().toLowerCase() === mod.name.trim().toLowerCase()));
+      if (!twin) rows.push({ mod, also: [mod.provider] });
+      else if (!twin.also.includes(mod.provider)) twin.also.push(mod.provider);
+    }
+    return rows;
+  })();
   const label = provider === "curseforge" ? "CurseForge" : provider === "nexus" ? "Nexus Mods" : "Nexus Mods and CurseForge";
   const showsNexus = provider !== "curseforge";
+  const hasTips = !!MORE_SITES[detail.id] || (showsNexus && !!account && !account.premium);
+  useEffect(() => {
+    if (!infoOpen) return;
+    const away = (event: MouseEvent) => {
+      if (!infoRef.current?.contains(event.target as Node)) setInfoOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setInfoOpen(false);
+    };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [infoOpen]);
+  const tone = (t: "good" | "bad" | "warn" | "info") => (t === "good" ? "success" : t === "bad" ? "danger" : t === "warn" ? "warning" : "info");
 
   return (
-    <div>
-      <header className="page-header"><h1 className="page-title">Discover Mods</h1></header>
-      {detail.nexus && (
-        <div style={{ marginBottom: 12 }}>
-          <Tabs
-            label="Discover"
-            idBase="discover"
-            value={showing}
-            onChange={setShowing}
-            tabs={[
-              { value: "mods", label: "Mods" },
-              { value: "collections", label: "Collections" },
-            ]}
-          />
+    <div className="gd-page dc-workspace">
+      <div className="dc-bar">
+        {showing === "mods" && (
+          <div className="dc-bar__row">
+            <SearchField wrapperClassName="gd-search" label={`Search ${detail.name} mods`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${detail.name} mods`} />
+            <Select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort by">
+              {SORTS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+            {hasTips && (
+              <div className="dc-info" ref={infoRef}>
+                <Button
+                  variant="ghost"
+                  aria-label="More sites and notes"
+                  title="More sites and notes"
+                  aria-expanded={infoOpen}
+                  aria-controls="discover-info"
+                  icon={<Info size={16} aria-hidden="true" />}
+                  onClick={() => setInfoOpen((open) => !open)}
+                />
+                {infoOpen && (
+                  <div id="discover-info" className="dc-info__panel" data-testid="more-sites">
+                    {MORE_SITES[detail.id] && (
+                      <>
+                        <div className="dc-info__sites">
+                          <span className="dc-info__label">More sites</span>
+                          {MORE_SITES[detail.id]!.map((site) => (
+                            <Button
+                              key={site.url}
+                              size="sm"
+                              variant="ghost"
+                              icon={<ExternalLink size={13} aria-hidden="true" />}
+                              data-tip={`${site.about}. Opens in your browser`}
+                              onClick={() => window.gamesAPI.openUrl(site.url).catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
+                            >
+                              {site.name}
+                            </Button>
+                          ))}
+                        </div>
+                        <p title="These sites don't let apps list their mods.">
+                          Download there, then <button type="button" className="dc-link" onClick={() => { setInfoOpen(false); goMods(); }}>Add from Downloads</button>.
+                        </p>
+                      </>
+                    )}
+                    {showsNexus && account && !account.premium && (
+                      <p title={`Using ${account.name}'s Nexus Mods key. Nexus only lets apps download straight away for Premium accounts, so Install opens the file's download on the website: press the download button there and the launcher installs it by itself.`}>
+                        Nexus: Install opens the download on the site; press its button and the launcher finishes.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="dc-bar__row dc-bar__row--tabs">
+          {detail.nexus && (
+            <div className="dc-tabs"><Tabs
+              label="Discover"
+              idBase="discover"
+              value={showing}
+              onChange={setShowing}
+              tabs={[
+                { value: "mods", label: "Mods" },
+                { value: "collections", label: "Collections" },
+              ]}
+            /></div>
+          )}
+          {showing === "mods" && detail.curseforge && (
+            <Select size="sm" wrapperClassName="dc-bar__source" value={provider} onChange={(event) => setProvider(event.target.value as "any" | "nexus" | "curseforge")} aria-label="Where to search">
+              <option value="any">Any source</option>
+              <option value="nexus">Nexus Mods</option>
+              <option value="curseforge">CurseForge</option>
+            </Select>
+          )}
+          {showing === "mods" && result && (
+            <span
+              className="dc-bar__count dc-bar__count--keep"
+              title={`${result.totals && Object.keys(result.totals).length > 1 ? `${countText(result.totals.nexus ?? 0)} on Nexus Mods, ${countText(result.totals.curseforge ?? 0)}${(result.totals.curseforge ?? 0) >= 10000 ? "+" : ""} on CurseForge` : `${countText(result.total)} on ${label}`}. Page ${page.toLocaleString()} of ${pageCount.toLocaleString()}`}
+            >
+              {countText(result.total)} mods
+            </span>
+          )}
         </div>
-      )}
+      </div>
       {showing === "collections" ? (
         <CollectionsList detail={detail} openCollection={openCollection} />
       ) : (
       <>
 
-      <SearchField label={`Search ${detail.name} mods`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${label} for ${detail.name} mods…`} />
-
-      <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-        {detail.curseforge && (
-          <Select value={provider} onChange={(event) => setProvider(event.target.value as "any" | "nexus" | "curseforge")} aria-label="Where to search">
-            <option value="any">Any source</option>
-            <option value="nexus">Nexus Mods</option>
-            <option value="curseforge">CurseForge</option>
-          </Select>
-        )}
-        <Select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort by">
-          {SORTS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
-      </div>
-
-      {MORE_SITES[detail.id] && (
-        <div style={{ ...panel, marginTop: 16, padding: 14 }} data-testid="more-sites">
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "var(--color-accent-text)", fontWeight: 600, fontSize: 13, marginRight: 4 }}>More sites</span>
-            {MORE_SITES[detail.id]!.map((site) => (
-              <button
-                key={site.url}
-                className="sidebar-button"
-                data-tip={`${site.about}. Opens in your browser`}
-                style={{ padding: "8px 14px", fontSize: 13 }}
-                onClick={() => window.gamesAPI.openUrl(site.url).catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
-              >
-                {site.name} ↗
-              </button>
-            ))}
-          </div>
-          <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
-            These sites don't let apps list their mods, so they open in your browser. Download what you like there, then{" "}
-            <button onClick={goMods} style={{ background: "none", border: "none", padding: 0, color: "var(--color-accent-text)", cursor: "pointer", font: "inherit", textDecoration: "underline" }}>
-              Add from Downloads
-            </button>{" "}
-            installs them all at once.
-          </div>
-        </div>
-      )}
-
-      {showsNexus && account === null && (
-        <div style={{ ...note("warn"), marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ flex: 1 }}>
+      <div className="dc-notices">
+        {showsNexus && account === null && (
+          <Notice tone="warning" actions={<Button size="sm" onClick={goLauncherSettings}>Open Settings</Button>}>
             Searching Nexus Mods needs no key, but installing does: add your personal Nexus Mods API key in Settings → API keys.
-          </span>
-          <button className="sidebar-button" style={{ padding: "6px 12px", fontSize: 12 }} onClick={goLauncherSettings}>
-            Open Settings
-          </button>
-        </div>
-      )}
-      {showsNexus && account && !account.premium && (
-        <div style={{ ...note("info"), marginTop: 16 }}>
-          Using {account.name}'s Nexus Mods key. Nexus only lets apps download straight away for Premium accounts, so Install opens the file's
-          download on the website: press the download button there and the launcher installs it by itself.
-        </div>
-      )}
-
-      {message && (
-        <div style={{ ...note(message.tone), marginTop: 16 }} data-testid="discover-message">
-          {message.text}
-        </div>
-      )}
-      {[...(result?.warnings ?? []), ...(loadError ? [loadError] : [])].map((warning) => (
-        <div key={warning} style={{ ...note("warn"), marginTop: 16 }}>
-          {warning}
-        </div>
-      ))}
-
-      <div ref={listTop} style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
-        {result && (
-          <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-            {result.totals && Object.keys(result.totals).length > 1
-              ? `${(result.totals.nexus ?? 0).toLocaleString()} on Nexus Mods • ${(result.totals.curseforge ?? 0).toLocaleString()}${(result.totals.curseforge ?? 0) >= 10000 ? "+" : ""} on CurseForge`
-              : `${result.total.toLocaleString()} on ${label}`}
-            {` • Page ${page.toLocaleString()} of ${pageCount.toLocaleString()}`}
-          </div>
+          </Notice>
         )}
-        {result && <Pagination page={page} pageCount={pageCount} disabled={loading} onChange={goToPage} />}
+        {message && (
+          <Notice tone={tone(message.tone)} data-testid="discover-message">
+            {message.text}
+          </Notice>
+        )}
+        {[...(result?.warnings ?? []), ...(loadError ? [loadError] : [])].map((warning) => (
+          <Notice key={warning} tone="warning">{warning}</Notice>
+        ))}
       </div>
 
-      <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-        {loading ? (
-          <div>Loading...</div>
-        ) : mods.length === 0 ? (
-          <div style={{ color: "var(--color-text-muted)", padding: 20 }}>No mods found{search.trim() ? ` for "${search.trim()}"` : ""}.</div>
-        ) : (
-          mods.map((mod) => (
-            <div
+      <div ref={listTop} />
+
+      {loading ? (
+        <div className="dc-list" aria-busy="true" aria-label="Loading results">
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="dc-skeleton">
+              <Skeleton shape="block" width={48} height={48} />
+              <Skeleton lines={2} />
+              <Skeleton width={100} />
+              <Skeleton width={84} height={32} shape="block" />
+            </div>
+          ))}
+        </div>
+      ) : mods.length === 0 ? (
+        <EmptyState title={`No mods found${search.trim() ? ` for "${search.trim()}"` : ""}`} body="Try a different search or source." />
+      ) : (
+        <div className="dc-list">
+          {mods.map(({ mod, also }) => (
+            <DiscoverRow
               key={`${mod.provider}-${mod.id}`}
-              className="game-card"
-              data-testid="game-discover-card"
-              role="button"
-              tabIndex={0}
-              aria-label={`Open ${mod.name}`}
-              onClick={() => openMod(mod.provider, mod.id)}
-              onKeyDown={(event) => {
-                if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
-                  event.preventDefault();
-                  openMod(mod.provider, mod.id);
-                }
-              }}
-              style={{ display: "flex", alignItems: "center", gap: 14, minHeight: 100, padding: 12, cursor: "pointer" }}
-            >
-              {/* PICTURE: Nexus' are wide screenshots, CurseForge's square logos */}
-              <div
-                style={{
-                  width: mod.provider === "nexus" ? 124 : 70,
-                  height: 70,
-                  borderRadius: 10,
-                  overflow: "hidden",
-                  border: "1px solid var(--color-border)",
-                  flexShrink: 0,
-                  background: "var(--color-surface-sunken)",
-                }}
-              >
-                {mod.picture ? (
-                  <img src={mod.picture} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover", filter: mod.adult && blurAdult ? "blur(10px)" : undefined }} />
-                ) : null}
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <div style={{ fontWeight: 600, color: "var(--color-accent-text)" }}>{mod.name}</div>
-                <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{mod.summary?.slice(0, 160)}</div>
-                <div style={{ fontSize: 11, marginTop: 4, color: "var(--color-text-secondary)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <span style={{ padding: "1px 6px", borderRadius: 5, background: BADGE[mod.provider].colour, color: "var(--color-on-warning)", fontWeight: 700, fontSize: 10 }}>{BADGE[mod.provider].label}</span>
-                  {mod.adult && <span style={{ padding: "1px 6px", borderRadius: 5, border: "1px solid var(--color-danger-border)", color: "var(--color-danger-text)", fontWeight: 700, fontSize: 10 }}>18+</span>}
-                  {mod.author && <span>by {mod.author}</span>}
-                  <span>↓ {countText(mod.downloads)}</span>
-                  {mod.endorsements != null && <span>♥ {countText(mod.endorsements)}</span>}
-                  {mod.updated && <span>updated {shortDate(mod.updated)}</span>}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexShrink: 0, cursor: "default" }} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-                <IconButton
-                  tip={
+              testId="game-discover-card"
+              name={mod.name}
+              author={mod.author}
+              summary={mod.summary}
+              onOpen={() => openMod(mod.provider, mod.id)}
+              art={mod.picture ? (
+                <img src={mod.picture} alt="" loading="lazy" style={{ filter: mod.adult && blurAdult ? "blur(10px)" : undefined }} />
+              ) : (
+                <Monogram name={mod.name} size={48} />
+              )}
+              meta={
+                <>
+                  <span className="dc-stat" title="Downloads"><Download size={12} aria-hidden="true" /><strong>{countText(mod.downloads)}</strong></span>
+                  {mod.endorsements != null && (
+                    <span className="dc-stat" title="Endorsements"><Heart size={12} aria-hidden="true" />{countText(mod.endorsements)}</span>
+                  )}
+                  {mod.updated && (
+                    <span className="dc-stat" title={`Updated ${shortDate(mod.updated)}`}><Clock size={12} aria-hidden="true" />{ago(mod.updated)}</span>
+                  )}
+                  {also.map((provider) => (
+                    <Badge key={provider} className="dc-chip" tone={provider === "nexus" ? "accent" : "neutral"}>{BADGE[provider].label}</Badge>
+                  ))}
+                  {mod.adult && <Badge className="dc-chip" tone="danger">18+</Badge>}
+                </>
+              }
+              action={
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="iti__install"
+                  icon={<Download size={14} aria-hidden="true" />}
+                  aria-label={`Install ${mod.name}`}
+                  title={
                     installing === mod.id
                       ? "Installing..."
                       : mod.provider === "nexus" && !account?.premium
@@ -317,21 +360,19 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
                           ? "Its author only allows downloads from their website: opens it"
                           : `Install into ${detail.name}`
                   }
-                  label={`Install ${mod.name}`}
-                  variant={installing === mod.id ? "ready" : ""}
                   disabled={installing !== null}
                   onClick={() => quickInstall(mod)}
                 >
-                  <DownloadIcon size={20} />
-                </IconButton>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+                  {installing === mod.id ? "Installing..." : "Install"}
+                </Button>
+              }
+            />
+          ))}
+        </div>
+      )}
 
       {result && !loading && mods.length > 0 && (
-        <div style={{ marginTop: 16 }}>
+        <div className="dc-bottom">
           <Pagination page={page} pageCount={pageCount} onChange={goToPage} />
         </div>
       )}

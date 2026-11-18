@@ -237,16 +237,19 @@ function MinecraftMenu({
               }} />
             </div>
           ) : <>
-          {createdName && <Notice tone="success" actions={<Button size="sm" variant="ghost" onClick={goLibrary}>Open Library</Button>}>
+          {createdName && <Notice tone="success" actions={<>
+            <Button size="sm" variant="ghost" onClick={goLibrary}>Open Library</Button>
+            <Button size="sm" variant="ghost" onClick={() => setCreatedName(null)}>Dismiss</Button>
+          </>}>
             {createdName} is ready. Open Library to play or manage it.
           </Notice>}
           {/* The top: the welcome and the last-played card on the left, and the signed-in player
               (or a way to sign in) on the right, as tall as both together. */}
-          <div className="mh-top">
+          <div className={`mh-top${account?.loggedIn ? "" : " mh-top--solo"}`}>
             <div className="mh-top__main">
               <header className="mh-head">
                 <div className="mh-head__text">
-                  <h1 className="page-title">{firstTime ? "Welcome to Minecraft" : `Welcome back, ${account?.loggedIn ? account.username : "Player"}!`}</h1>
+                  <h1 className="page-title">{firstTime ? "Welcome to Minecraft" : account?.loggedIn ? `Welcome back, ${account.username}!` : "Welcome back!"}</h1>
                   <p className="page-lead">{firstTime ? "Start with your own setup, a modpack, or an instance you already have." : "Pick up where you left off, or find something new."}</p>
                 </div>
 
@@ -255,6 +258,7 @@ function MinecraftMenu({
                 instance={latest}
                 stat={latest ? statFor(latest.name) : undefined}
                 loaded={loaded}
+                banner
                 starting={starting}
                 onPlay={launch}
                 onCreate={() => setCreatingInstance(true)}
@@ -300,16 +304,15 @@ function MinecraftMenu({
                 </div>
               </section>
             ) : (
-              <section className="mh-signin mh-signin--card" aria-label="Microsoft account">
+              <section className="mh-signin mh-signin--bar" aria-label="Microsoft account">
                     <span className="mh-signin__icon" aria-hidden="true">
                       <UserRound size={18} />
                     </span>
                     <p className="mh-signin__text">
-                      <strong>Not signed in.</strong> Sign in with Microsoft to play online, see and change your skin, and keep
-                      several accounts on this launcher.
+                      <strong>Not signed in.</strong> Sign in to play online and change your skin.
                     </p>
-                    <Button className="mh-wrap" icon={<LogIn size={16} aria-hidden="true" />} onClick={handleMicrosoftLogin}>
-                      {signingIn ? "Waiting for your browser. Click to start again" : "Sign in with Microsoft"}
+                    <Button size="sm" className="mh-wrap" icon={<LogIn size={16} aria-hidden="true" />} onClick={handleMicrosoftLogin}>
+                      {signingIn ? "Waiting for your browser. Click to retry" : "Sign in with Microsoft"}
                     </Button>
                     {signInError && (
                       <Notice
@@ -327,8 +330,6 @@ function MinecraftMenu({
 
           <div className="mh-layout mh-layout--solo">
             <div className="mh-main">
-              <MinecraftOffers />
-
               {launchError && (
                 <Notice tone="danger" actions={<Button size="sm" variant="ghost" onClick={clearError}>Dismiss</Button>}>
                   {launchError}
@@ -342,19 +343,21 @@ function MinecraftMenu({
                 }}
               />
 
-              {instances.length > 0 && <div className="mh-split">
+              {instances.length > 0 && <>
                 <section aria-labelledby="mh-others">
                   <div className="mh-section-head">
                     <h2 className="mh-section-title" id="mh-others">
                       {others.length ? "Your other instances" : "Your instances"}
                     </h2>
-                    <Button variant="ghost" size="sm" onClick={goLibrary}>
-                      Open Library
-                    </Button>
+                    <span className="mh-section-actions">
+                      {others.length > 3 && <Button variant="ghost" size="sm" aria-expanded={showAllInstances} aria-controls="mh-recent-instances" onClick={() => setShowAllInstances((show) => !show)}>
+                        {showAllInstances ? "Show recent instances" : `Show all ${others.length} other instances`}
+                      </Button>}
+                      <Button variant="ghost" size="sm" onClick={goLibrary}>
+                        Open Library
+                      </Button>
+                    </span>
                   </div>
-                  {others.length > 3 && <Button variant="ghost" size="sm" aria-expanded={showAllInstances} aria-controls="mh-recent-instances" onClick={() => setShowAllInstances((show) => !show)}>
-                    {showAllInstances ? "Show recent instances" : `Show all ${others.length} other instances`}
-                  </Button>}
                   <ul className="mh-cards" id="mh-recent-instances">
                     {visibleOthers.map((instance) => {
                       const stat = statFor(instance.name);
@@ -404,11 +407,19 @@ function MinecraftMenu({
                   </ul>
                 </section>
 
-                <ActivityPanel items={dashboard.activity.data} loading={dashboard.activity.loading} failed={dashboard.activity.failed} />
-              </div>}
+                <NewsPanel cards more={3} news={dashboard.news.data} loading={dashboard.news.loading} failed={dashboard.news.failed} onRefresh={dashboard.refreshNews} title="Minecraft news" />
 
-              {instances.length > 0 && <PlayStats stats={stats} loading={dashboard.stats.loading} failed={dashboard.stats.failed} range={range} onRange={setRange} show={["trend", "most"]} onInstance={goLibrary} />}
-              <NewsPanel news={dashboard.news.data} loading={dashboard.news.loading} failed={dashboard.news.failed} onRefresh={dashboard.refreshNews} title="Minecraft news" from="Mojang, Java and Bedrock releases, Fabric, Forge and NeoForge" />
+                <div className="mh-duo">
+                  <PlayStats compact stats={stats} loading={dashboard.stats.loading} failed={dashboard.stats.failed} range={range} onRange={setRange} show={["trend"]} />
+                  <div className="mh-duo__side">
+                    <ActivityPanel items={dashboard.activity.data} loading={dashboard.activity.loading} failed={dashboard.activity.failed} />
+                    {/* Buying and trying are for someone without a signed-in account. */}
+                    {!account?.loggedIn && <MinecraftOffers />}
+                  </div>
+                </div>
+              </>}
+
+              {instances.length === 0 && !account?.loggedIn && <MinecraftOffers />}
 
               <section aria-labelledby="mh-links">
                 <div className="mh-section-head">

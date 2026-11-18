@@ -9,7 +9,9 @@ import GameSettings from "./games/GameSettings";
 import LoadOrderPage from "./games/LoadOrderPage";
 import CCBrowser from "./games/CCBrowser";
 import PlayPrompt from "./games/PlayPrompt";
+import { CircleAlert, CircleCheck, Play, TriangleAlert } from "lucide-react";
 import { Button, Notice, ProgressBar } from "../components/ui";
+import { ART } from "./gameArt";
 import { timeAgo } from "./playedAgo";
 import "./dashboard/dashboard.css";
 import { errorText, installSummary } from "./games/shared";
@@ -52,6 +54,18 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
   const [finder, setFinder] = useState<GameFinder>({ active: false });
   const [finderIntro, setFinderIntro] = useState(false);
   const [finderBusy, setFinderBusy] = useState(false);
+  // What the game's Home lists as needing a look, checked again whenever the mods change.
+  const [status, setStatus] = useState<GameStatus | null>(null);
+  const [statusFailed, setStatusFailed] = useState(false);
+  const found = Boolean(detail?.found);
+  useEffect(() => {
+    if (page !== "home" || !found) return;
+    let active = true;
+    window.gamesAPI.status(gameId)
+      .then((next) => { if (active) { setStatus(next); setStatusFailed(false); } })
+      .catch(() => { if (active) setStatusFailed(true); });
+    return () => { active = false; };
+  }, [gameId, page, found, mods]);
 
   const reload = useCallback(async () => {
     try {
@@ -388,27 +402,45 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
             <>
               {page === "home" && (
                 <div className="game-overview">
-                  <header className="db-header">
-                    <div>
-                      <h1 className="db-header__title">{detail.name}</h1>
-                      <p className="db-header__lead">{detail.tagline}</p>
-                    </div>
-                    {detail.found
-                      ? <Button disabled={Boolean(playing)} onClick={onPlay}>{playing ?? "Play"}</Button>
-                      : <Button onClick={() => go("settings")}>Choose game folder</Button>}
-                  </header>
-                  <section className="db-card" aria-label="Game overview">
-                    <dl className="db-kpis">
-                      <div><dt>Last launched</dt><dd>{detail.lastPlayed ? timeAgo(detail.lastPlayed) : "No launch recorded"}</dd></div>
-                      <div><dt>Play time</dt><dd className="db-unknown">Unavailable</dd></div>
-                      <div><dt>Version</dt><dd>{detail.version ?? "Unknown"}</dd></div>
-                      <div><dt>Enabled mods</dt><dd>{mods.filter((mod) => mod.enabled).length}</dd></div>
-                    </dl>
-                    <div className="db-actions">
-                      <Button variant="ghost" onClick={() => go("mods")}>Manage mods</Button>
-                      <Button variant="ghost" onClick={() => go("discover")}>Discover mods</Button>
+                  <section className={`game-hero${detail.found ? "" : " game-hero--missing"}`} style={{ "--game-colour": detail.colour } as React.CSSProperties}>
+                    {ART[detail.id] && <img className="game-hero__backdrop" src={ART[detail.id]} alt="" aria-hidden="true" referrerPolicy="no-referrer" draggable={false} />}
+                    <div className="game-hero__body">
+                      <h1 className="game-hero__title">{detail.name}</h1>
+                      <p className="game-hero__lead">{detail.tagline}</p>
+                      <div className="game-hero__actions">
+                        {!detail.found
+                          ? <Button variant="primary" size="lg" onClick={() => go("settings")}>Choose game folder</Button>
+                          : detail.cantRun
+                            ? <>
+                                <Button variant="primary" size="lg" onClick={() => go("discover")}>Discover mods</Button>
+                                <Button variant="secondary" size="sm" icon={<Play size={14} aria-hidden="true" />} disabled title={detail.cantRun}>Play</Button>
+                                <span className="game-hero__source">Can't play on this Mac</span>
+                              </>
+                            : <Button variant="primary" size="lg" icon={<Play size={16} aria-hidden="true" />} disabled={Boolean(playing)} onClick={onPlay}>{playing ?? "Play"}</Button>}
+                        {!detail.cantRun && <span className="game-hero__source">{detail.found ? (detail.source ? `Found through ${detail.source}` : "Found on this computer") : "Not found on this computer"}</span>}
+                      </div>
                     </div>
                   </section>
+                  {detail.cantRun && <Notice tone="warning" data-testid="game-home-cant-run">{detail.cantRun} You can still install and manage its mods here.</Notice>}
+                  {(() => {
+                    const on = mods.filter((mod) => mod.enabled).length;
+                    const off = mods.length - on;
+                    const facts = [
+                      detail.lastPlayed ? { label: "Last launched", value: timeAgo(detail.lastPlayed) } : null,
+                      detail.version ? { label: "Version", value: detail.version } : null,
+                      mods.length > 0 ? { label: "Enabled mods", value: String(on) } : null,
+                      off > 0 ? { label: "Turned off", value: String(off) } : null,
+                    ].filter((fact): fact is { label: string; value: string } => fact !== null);
+                    if (!facts.length) return null;
+                    return (
+                      <section className="db-card" aria-label="Game overview">
+                        <dl className="db-kpis" style={{ "--kpi-cols": Math.min(facts.length, 4) } as React.CSSProperties}>
+                          {facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd title={fact.value}>{fact.value}</dd></div>)}
+                        </dl>
+                      </section>
+                    );
+                  })()}
+                  {detail.found && <GameChecks status={status} failed={statusFailed} detail={detail} modCount={mods.length} go={go} />}
                 </div>
               )}
 
@@ -481,5 +513,58 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
 
       {asking && detail && <PlayPrompt detail={detail} risky={risky} onChoose={(choice) => (choice === "cancel" ? setAsking(false) : play(choice === "safe"))} />}
     </div>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+type Check = { tone: "danger" | "warning"; label: string; page: GamePage; action: string };
+
+/* The game's Home: what needs a look in its mods, each with the page that deals with it. */
+function GameChecks({ status, failed, detail, modCount, go }: {
+  status: GameStatus | null;
+  failed: boolean;
+  detail: GameDetail;
+  modCount: number;
+  go: (page: GamePage) => void;
+}) {
+  if (failed && !status) return <Notice tone="warning">The mod checks couldn't be completed. The Mods page runs each one again.</Notice>;
+  const found: (Check | null)[] = !status ? [] : [
+    status.crashes ? { tone: "danger", label: status.crashes === 1 ? "The game crashed since you last played" : `${status.crashes} crash reports since you last played`, page: "mods", action: "See why" } : null,
+    status.clashes ? { tone: "danger", label: plural(status.clashes, "mod conflict", "mod conflicts"), page: "mods", action: "Resolve" } : null,
+    status.loadOrder ? { tone: "danger", label: "A plugin loads before something it needs", page: "loadorder", action: "Fix load order" } : null,
+    status.requirements ? { tone: "danger", label: `${plural(status.requirements, "required mod is", "required mods are")} missing`, page: "mods", action: "Get them" } : null,
+    status.health ? { tone: "warning", label: plural(status.health, "mod folder problem", "mod folder problems"), page: "mods", action: "Review" } : null,
+    detail.updated ? { tone: "warning", label: "The game updated since you last played: some mods may need updates too", page: "mods", action: "Check mods" } : null,
+    status.updates ? { tone: "warning", label: `${plural(status.updates, "mod update", "mod updates")} available`, page: "mods", action: "Update" } : null,
+  ];
+  const rows = found.filter((row): row is Check => row !== null);
+  return (
+    <section className="db-card game-checks" aria-labelledby="game-checks-title" aria-busy={!status} data-testid="game-checks">
+      <header className="db-card__head">
+        <h2 className="db-card__title" id="game-checks-title">Mod checks</h2>
+        <span className="db-card__meta">{!status ? "Checking…" : rows.length ? `${rows.length} to look at` : modCount ? "All good" : null}</span>
+      </header>
+      {!status ? (
+        <p className="game-checks__ok">Checking for crashes, conflicts, missing requirements and updates…</p>
+      ) : rows.length === 0 && modCount === 0 ? (
+        <div className="game-checks__empty">
+          <p className="game-checks__ok">No mods yet. Find some for {detail.name}, or add a file you downloaded on the Mods page.</p>
+          <Button size="sm" variant="primary" onClick={() => go("discover")}>Discover mods</Button>
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="game-checks__ok"><CircleCheck size={16} aria-hidden="true" />No crashes, conflicts, missing requirements or folder problems found.</p>
+      ) : (
+        <ul className="game-checks__list">
+          {rows.map((row) => (
+            <li key={row.label} className={`game-checks__row game-checks__row--${row.tone}`}>
+              {row.tone === "danger" ? <CircleAlert size={16} aria-hidden="true" /> : <TriangleAlert size={16} aria-hidden="true" />}
+              <span>{row.label}</span>
+              <Button size="sm" variant="ghost" onClick={() => go(row.page)}>{row.action}</Button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

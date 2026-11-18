@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from "react";
-import { UserRound } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { ChevronsUpDown, Gamepad2, RefreshCw, UserRound } from "lucide-react";
 import Monogram from "./ui/Monogram";
 import Select from "./ui/Select";
 import Button from "./ui/Button";
@@ -62,40 +62,120 @@ function StoreAccount({ game, compact, rail }: { game: GameId; compact: boolean;
   const info = account?.game === game ? account.info : null;
   const who = info?.name ?? (info?.store === "steam" ? "No local profile found" : info?.storeName ?? "");
   const label = info?.storeName ? (info.store === "steam" ? "Last-used Steam profile" : `Signs in with the ${info.storeName}`) : "Sign-in";
-  const avatar = <Monogram name={info?.name ?? info?.storeName ?? ""} icon={info?.name ? undefined : <UserRound size={16} />} size={28} />;
+  const status = info?.storeName ? (info.store === "steam" ? "Steam profile" : info.name ? info.storeName : "Sign-in app") : checking ? "Checking…" : "Sign-in";
+  const avatar = <Monogram name={info?.name ?? info?.storeName ?? ""} icon={info?.name ? undefined : <Gamepad2 size={16} />} size={rail ? 32 : 28} />;
+  const refreshLabel = error ? "Retry account check" : "Refresh account";
+  const refresh = () => setRefreshCount((value) => value + 1);
 
-  if (rail) {
+  const details = (
+    <>
+      <div className="ui-account__menu-head">
+        <strong className="ui-account__name">{who || (checking ? "Checking…" : "Couldn’t check")}</strong>
+        <span className="ui-account__label">{label}</span>
+      </div>
+      {checking && <div className="ui-account__note" role="status">Checking account information…</div>}
+      {info && <div className="ui-account__note">{info.how}</div>}
+      {game === "sims4" && info?.store === "steam" && <p className="ui-account__note">The Sims 4 also uses your linked EA account.</p>}
+      {info?.store && <PlatformAccountAction key={`${game}:${info.store}`} provider={info.store} />}
+      {error && <div role="alert" className="ui-account__error">Couldn’t check the account: {error}</div>}
+      <Button size="sm" variant="ghost" icon={<RefreshCw size={14} aria-hidden="true" className={checking ? "is-spinning" : undefined} />} disabled={checking} onClick={refresh}>{refreshLabel}</Button>
+    </>
+  );
+
+  if (!compact && !rail) {
     return (
-      <div data-testid="account-switcher" className="ui-account ui-account--rail" data-tip={info ? `${label}${info.name ? `: ${info.name}` : ""}. ${info.how}` : label}>
-        {avatar}
+      <div data-testid="account-switcher" className="ui-account" data-store={info?.store ?? "none"}>
+        <div className="ui-account__row">{who && <strong className="ui-account__name">{who}</strong>}</div>
+        {details}
       </div>
     );
   }
 
   return (
-    <div data-testid="account-switcher" className="ui-account" data-store={info?.store ?? "none"}>
-      {compact && <span className="ui-account__label">{label}</span>}
-      <div className="ui-account__row">
-        {compact && avatar}
-        {who && <strong className="ui-account__name">{who}</strong>}
-      </div>
-      {checking && <div className="ui-account__note" role="status">Checking account information…</div>}
-      {info && <div className="ui-account__note">{info.how}</div>}
-      {info?.store && <PlatformAccountAction key={`${game}:${info.store}`} provider={info.store} />}
-      {game === "sims4" && info?.store === "steam" && <p className="ui-account__note">The Sims 4 also uses your linked EA account.</p>}
-      {error && <div role="alert" className="ui-account__error">Couldn’t check the account: {error}</div>}
-      <Button size="sm" variant="ghost" disabled={checking} onClick={() => setRefreshCount((value) => value + 1)}>{error ? "Retry account check" : "Refresh account"}</Button>
+    <AccountMenu
+      store={info?.store ?? "none"}
+      rail={rail}
+      avatar={avatar}
+      name={who || (checking ? "Checking…" : "Couldn’t check")}
+      status={status}
+      tip={`${status}: ${who || "no profile"}`}
+    >
+      {details}
+    </AccountMenu>
+  );
+}
+
+/*
+ * The one account pattern for the sidebar: a card (picture, name, one short line, chevron) or,
+ * folded, a round picture. Either opens a small panel with the explanation and the actions.
+ */
+function AccountMenu({ store, rail, avatar, name, status, tip, children }: { store: string; rail: boolean; avatar: ReactNode; name: string; status: string; tip: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+
+  const toggle = () => {
+    const box = trigger.current?.getBoundingClientRect();
+    if (box) setPos({ left: Math.min(box.right + 8, window.innerWidth - 264), bottom: Math.max(8, window.innerHeight - box.bottom) });
+    setOpen((value) => !value);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!panel.current?.contains(target) && !trigger.current?.contains(target)) setOpen(false);
+    };
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); }
+    };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", key); };
+  }, [open]);
+
+  return (
+    <div data-testid="account-switcher" className={`ui-account ui-account--menu${rail ? " ui-account--rail" : ""}`} data-store={store}>
+      <button
+        ref={trigger}
+        type="button"
+        className="ui-account__trigger"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        aria-label={`Account: ${name}, ${status}`}
+        data-tip={rail ? tip : undefined}
+        data-tip-side={rail ? "right" : undefined}
+        onClick={toggle}
+      >
+        {avatar}
+        {!rail && (
+          <>
+            <span className="ui-account__text">
+              <strong className="ui-account__name">{name}</strong>
+              <span className="ui-account__label">{status}</span>
+            </span>
+            <ChevronsUpDown className="ui-account__chevron" size={14} aria-hidden="true" />
+          </>
+        )}
+      </button>
+      {open && (
+        <div ref={panel} id={panelId} role="dialog" aria-label="Account" className="ui-account__panel" style={pos ?? undefined}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function AccountSwitcher({ compact = false, rail = false, game }: Props) {
   if (game && game !== "minecraft") return <StoreAccount game={game} compact={compact} rail={rail} />;
-  return <MicrosoftAccounts compact={compact} rail={rail} inMinecraft={game === "minecraft"} />;
+  return <MicrosoftAccounts compact={compact} rail={rail} />;
 }
 
 /* Minecraft's Microsoft accounts: who the game launches as, and switching or adding one. */
-function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; rail: boolean; inMinecraft: boolean }) {
+function MicrosoftAccounts({ compact, rail }: { compact: boolean; rail: boolean }) {
   const [accounts, setAccounts] = useState<MinecraftAccount[]>([]);
   const [busy, setBusy] = useState(false);
   const [operation, setOperation] = useState<"signin" | "switch" | null>(null);
@@ -158,9 +238,10 @@ function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; r
     setBusy(false);
   }
 
+  const placeholder = loading ? "Checking accounts…" : loadError ? "Account check unavailable" : busy ? "Signing in..." : "Not signed in";
   const options = (
     <>
-      {!active && <option value="">{loading ? "Checking accounts…" : loadError ? "Account check unavailable" : busy ? "Signing in..." : "Not signed in"}</option>}
+      {!active && <option value="">{placeholder}</option>}
       {accounts.map((account) => (
         <option key={account.uuid} value={account.uuid}>
           {account.name}
@@ -169,12 +250,52 @@ function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; r
       <option value={ADD}>{accounts.length ? "Add another account..." : "Sign in with Microsoft..."}</option>
     </>
   );
-  const avatar = <Monogram name={active?.name ?? ""} icon={active ? undefined : <UserRound size={16} />} size={28} />;
+  const avatar = <Monogram name={active?.name ?? ""} icon={active ? undefined : <UserRound size={16} />} size={rail ? 32 : 28} />;
+
+  const signedOut = !active && !loading && !loadError && accounts.length === 0;
+
+  // Signed out: a calm card (neutral avatar, "Not signed in", a small Sign in button), or,
+  // folded, a neutral round avatar button. Both start the Microsoft sign-in directly.
+  if (signedOut && (rail || compact)) {
+    return (
+      <div data-testid="account-switcher" className={`ui-account${rail ? " ui-account--rail" : " ui-account--card"}`}>
+        {rail ? (
+          <button
+            type="button"
+            className="ui-account__trigger ui-account__signin"
+            disabled={busy}
+            aria-label="Sign in with Microsoft"
+            data-tip="Not signed in. Sign in with Microsoft"
+            data-tip-side="right"
+            onClick={() => choose(ADD)}
+          >
+            {avatar}
+          </button>
+        ) : (
+          <div className="ui-account__quiet">
+            {avatar}
+            <span className="ui-account__text">
+              <strong className="ui-account__name">{busy ? "Signing in…" : "Not signed in"}</strong>
+            </span>
+            <Button size="sm" variant="secondary" className="ui-account__signin" disabled={busy} aria-label="Sign in with Microsoft" onClick={() => choose(ADD)}>
+              Sign in
+            </Button>
+          </div>
+        )}
+        {!rail && (busy || status || error) && (
+          <>
+            {busy && <div className="ui-account__note" role="status">Finish signing in in your browser.</div>}
+            {error && <div role="alert" className="ui-account__error">{error}</div>}
+          </>
+        )}
+      </div>
+    );
+  }
 
   // Folded sidebar: the picture, with the list laid invisibly over it so a click opens it.
   if (rail) {
     return (
-      <div data-testid="account-switcher" className="ui-account ui-account--rail" data-tip={active ? `Playing as ${active.name}` : "Not signed in"}>
+      <div data-testid="account-switcher" className="ui-account ui-account--rail" data-tip={active ? `Playing as ${active.name}` : "Not signed in"} data-tip-side="right">
         {avatar}
         <select
           className="ui-account__overlay"
@@ -189,19 +310,53 @@ function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; r
     );
   }
 
+  const notes = (
+    <>
+      {busy && <div className="ui-account__note" role="status">{operation === "signin" ? "Finish signing in in your browser." : "Switching Minecraft account…"}</div>}
+      {!busy && status && <div className="ui-account__note" role="status">{status}</div>}
+      {loadError && <div role="alert" className="ui-account__error">Couldn’t load Minecraft accounts: {loadError}<Button size="sm" variant="ghost" disabled={loading} onClick={() => setRefreshCount((value) => value + 1)}>Retry account check</Button></div>}
+      {error && (
+        <div role="alert" className="ui-account__error">
+          {error}
+        </div>
+      )}
+    </>
+  );
+
+  // The sidebar: a card showing who's playing; the list opens from anywhere on it.
+  if (compact) {
+    return (
+      <div data-testid="account-switcher" className="ui-account ui-account--card">
+        <div className="ui-account__card">
+          {avatar}
+          <span className="ui-account__text">
+            <strong className="ui-account__name">{active?.name ?? placeholder}</strong>
+            <label className="ui-account__label" htmlFor={selectId}>
+              Microsoft account
+            </label>
+          </span>
+          <ChevronsUpDown className="ui-account__chevron" size={14} aria-hidden="true" />
+          <select
+            id={selectId}
+            className="ui-account__overlay"
+            value={active?.uuid ?? ""}
+            disabled={busy || loading}
+            onChange={(e) => choose(e.target.value)}
+          >
+            {options}
+          </select>
+        </div>
+        {notes}
+      </div>
+    );
+  }
+
   return (
     <div data-testid="account-switcher" className="ui-account">
-      {compact && (
-        <label className="ui-account__label" htmlFor={selectId}>
-          {inMinecraft ? "Playing as" : "Minecraft account"}
-        </label>
-      )}
       <div className="ui-account__row">
-        {compact && avatar}
         <Select
           id={selectId}
-          aria-label={compact ? undefined : "Minecraft account"}
-          size={compact ? "sm" : "md"}
+          aria-label="Minecraft account"
           wrapperClassName="ui-account__select"
           style={{ width: "100%" }}
           value={active?.uuid ?? ""}
@@ -211,14 +366,7 @@ function MicrosoftAccounts({ compact, rail, inMinecraft }: { compact: boolean; r
           {options}
         </Select>
       </div>
-      {busy && <div className="ui-account__note" role="status">{operation === "signin" ? "Finish signing in in your browser." : "Switching Minecraft account…"}</div>}
-      {!busy && status && <div className="ui-account__note" role="status">{status}</div>}
-      {loadError && <div role="alert" className="ui-account__error">Couldn’t load Minecraft accounts: {loadError}<Button size="sm" variant="ghost" disabled={loading} onClick={() => setRefreshCount((value) => value + 1)}>Retry account check</Button></div>}
-      {error && (
-        <div role="alert" className="ui-account__error">
-          {error}
-        </div>
-      )}
+      {notes}
     </div>
   );
 }

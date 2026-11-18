@@ -101,6 +101,7 @@ function initialState(): PreviewState {
       defaultRam: 8,
       javaPath: "",
       jvmArgs: "",
+      javaTuning: "performance",
       closeOnLaunch: false,
       showSnapshots: false,
       cloudFolder: "",
@@ -834,6 +835,47 @@ function sampleGame(id: string, name: string, source: string): DetectedGame {
 const sampleGames = [
   sampleGame("stardew", "Stardew Valley", "Steam (sample)"),
   sampleGame("terraria", "Terraria", "Steam (sample)"),
+  sampleGame("hytale", "Hytale", "Installed (sample)"),
+];
+
+// The supported games, as electron/mods/gameRegistry.cjs lists them.
+const catalogGame = (id: string, name: string, extra: Partial<CatalogGame> = {}): CatalogGame => ({
+  id, name, steamAppId: null, notOnPC: null, windowsOnly: true, providers: ["nexus"], modExtensions: [], noModFolder: false, ...extra,
+});
+const sampleCatalog: CatalogGame[] = [
+  catalogGame("sims4", "The Sims 4", { windowsOnly: false, providers: ["curseforge", "nexus"] }),
+  catalogGame("gtav", "Grand Theft Auto V"),
+  catalogGame("stardew", "Stardew Valley", { windowsOnly: false, providers: ["curseforge", "nexus"] }),
+  catalogGame("palworld", "Palworld", { providers: ["curseforge"] }),
+  catalogGame("terraria", "Terraria", { windowsOnly: false, providers: ["curseforge"] }),
+  catalogGame("skyrimse", "Skyrim Special Edition"),
+  catalogGame("cyberpunk2077", "Cyberpunk 2077"),
+  catalogGame("bg3", "Baldur's Gate 3", { windowsOnly: false }),
+  catalogGame("valheim", "Valheim", { providers: [] }),
+  catalogGame("rimworld", "RimWorld", { windowsOnly: false, providers: [] }),
+  catalogGame("hytale", "Hytale", { windowsOnly: false, providers: ["curseforge", "nexus"] }),
+  catalogGame("rdr2", "Red Dead Redemption 2"),
+  catalogGame("rdr1", "Red Dead Redemption", { noModFolder: true }),
+  catalogGame("gta6", "Grand Theft Auto VI", { providers: [], notOnPC: "Out on PS5 and Xbox Series X|S on 19 November 2026. Rockstar hasn't announced a PC version yet." }),
+  catalogGame("eldenring", "Elden Ring"),
+  catalogGame("witcher3", "The Witcher 3: Wild Hunt"),
+  catalogGame("falloutnv", "Fallout: New Vegas"),
+  catalogGame("starfield", "Starfield"),
+  catalogGame("oblivionremastered", "The Elder Scrolls IV: Oblivion Remastered"),
+  catalogGame("hogwartslegacy", "Hogwarts Legacy"),
+  catalogGame("kcd2", "Kingdom Come: Deliverance II"),
+  catalogGame("bannerlord", "Mount & Blade II: Bannerlord"),
+  catalogGame("satisfactory", "Satisfactory"),
+  catalogGame("ets2", "Euro Truck Simulator 2", { windowsOnly: false }),
+  catalogGame("factorio", "Factorio", { windowsOnly: false, providers: [] }),
+  catalogGame("sims3", "The Sims 3", { windowsOnly: false }),
+  catalogGame("silksong", "Hollow Knight: Silksong", { windowsOnly: false }),
+  catalogGame("wukong", "Black Myth: Wukong"),
+  catalogGame("lethalcompany", "Lethal Company"),
+  catalogGame("subnautica", "Subnautica", { windowsOnly: false }),
+  catalogGame("schedule1", "Schedule I"),
+  catalogGame("kenshi", "Kenshi"),
+  catalogGame("mhwilds", "Monster Hunter Wilds"),
 ];
 
 const installedGameMods: Record<string, InstalledMod[]> = {};
@@ -841,6 +883,7 @@ const installedGameMods: Record<string, InstalledMod[]> = {};
 const modBridge = {
   getGames: async () => sampleGames,
   refreshGames: async () => sampleGames.length,
+  catalog: async () => sampleCatalog,
   list: async (gameId: string) => installedGameMods[gameId] ?? [],
   setEnabled: async (gameId: string, relativePath: string, enabled: boolean) => {
     const mod = installedGameMods[gameId]?.find((m) => m.relativePath === relativePath);
@@ -1065,7 +1108,11 @@ const skinBridge = {
   reset: needsDesktop,
   setCape: needsDesktop,
   download: needsDesktop,
-  saved: async () => [],
+  // Two kept skins, so the favourites grid has something to show.
+  saved: async () => [
+    { id: "mock-saved-1", name: "Steve, kept", slim: false, savedAt: "2026-11-01T10:00:00.000Z", dataUrl: "https://textures.minecraft.net/texture/31f477eb1a7beee631c2ca64d06f8f68fa93a3386d04452ab27f43acdf1b60cb" },
+    { id: "mock-saved-2", name: "Alex, kept", slim: true, savedAt: "2026-11-02T10:00:00.000Z", dataUrl: "https://textures.minecraft.net/texture/46acd06e8483b176e8ea39fc12fe105eb3a2a4970f5100057e9d84d4b60bdfa7" },
+  ],
   save: needsDesktop,
   useSaved: needsDesktop,
   deleteSaved: needsDesktop,
@@ -1115,7 +1162,9 @@ function previewStats(): DashboardStats {
       });
     }
     const seconds = Object.values(byInstance).reduce((sum, value) => sum + value, 0);
-    daily.push({ date: localDay(now - i * DAY_MS), seconds, byInstance });
+    // Calendar days, not 24-hour steps: a day across a clock change isn't 24 hours long.
+    const day = new Date(now);
+    daily.push({ date: localDay(new Date(day.getFullYear(), day.getMonth(), day.getDate() - i).getTime()), seconds, byInstance });
   }
 
   const instances: DashboardInstanceStat[] = state.instances.map((instance, index) => {

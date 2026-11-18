@@ -34,6 +34,14 @@ export type Scheme = "dark" | "light";
 /** "auto" follows the picked colour (pale colours give a light launcher); "system" follows the OS. */
 export type ThemeMode = "auto" | "dark" | "light" | "system";
 export type ThemeContrast = "standard" | "more";
+/** Which kind of colour vision the status colours are tuned for. */
+export type ColourVision = "standard" | "protanopia" | "deuteranopia" | "tritanopia";
+/** The face used for everything people read. Verdana and Comic Sans are the British Dyslexia Association's suggestions. */
+export type ReadingFont = "launcher" | "verdana" | "comic";
+/** Letter, word and line spacing; "wide" is WCAG 1.4.12's text-spacing values. */
+export type TextSpacing = "standard" | "roomy" | "wide";
+/** A band that follows the pointer to keep your place in text: a tinted line, or dimming everything else. */
+export type ReadingGuide = "off" | "line" | "focus";
 
 export type ThemeSettings = {
   /** The colour the user picked, as #rrggbb. */
@@ -42,12 +50,28 @@ export type ThemeSettings = {
   contrast: ThemeContrast;
   /** How strongly backgrounds take on the colour: 0 is neutral grey, 1 is deeply dyed. */
   tint: number;
+  vision: ColourVision;
+  font: ReadingFont;
+  spacing: TextSpacing;
+  guide: ReadingGuide;
 };
 
 /** Unity violet, taken from the logo. */
 export const DEFAULT_SEED = "#7b34e6";
 
-export const DEFAULT_THEME: ThemeSettings = { seed: DEFAULT_SEED, mode: "dark", contrast: "standard", tint: 0.2 };
+export const DEFAULT_THEME: ThemeSettings = {
+  seed: DEFAULT_SEED,
+  mode: "dark",
+  contrast: "standard",
+  tint: 0.2,
+  vision: "standard",
+  font: "launcher",
+  spacing: "standard",
+  guide: "off",
+};
+
+/** The settings that are about how someone sees and reads, not the launcher's look: Reset leaves them alone. */
+export const ACCESS_KEYS = ["vision", "font", "spacing", "guide"] as const;
 
 const STATUSES = ["success", "warning", "danger", "info"] as const;
 export type Status = (typeof STATUSES)[number];
@@ -209,6 +233,22 @@ function fillPair(fill: OKLCH, tintHue: number, tintC: number, target: number, p
 /** Status hues stay recognisable (red is red) but lean a little towards the picked hue, or away when too close. */
 const STATUS_HUES: Record<Status, number> = { danger: 25, warning: 78, success: 150, info: 252 };
 
+/*
+ * Status hues for each kind of colour blindness. Picked by simulating full-strength protanopia,
+ * deuteranopia and tritanopia (Machado et al. 2009) on the launcher's own status shades and
+ * keeping the hues as far apart as they can get, with the pairs that carry meaning (working vs
+ * failed, warning vs failed) weighted over info. Red-green types get a blue "working" and a
+ * yellow warning; blue-yellow types keep red and green and move info to cyan. These never lean
+ * towards the picked colour, and lightness also differs (warning lighter, danger and info darker), which
+ * no colour blindness takes away.
+ */
+const VISION_HUES: Record<Exclude<ColourVision, "standard">, Record<Status, number>> = {
+  protanopia: { danger: 15, warning: 90, success: 220, info: 305 },
+  deuteranopia: { danger: 15, warning: 68, success: 195, info: 245 },
+  tritanopia: { danger: 15, warning: 90, success: 140, info: 200 },
+};
+const VISION_LIGHTNESS: Record<Status, number> = { danger: -0.05, warning: 0.07, success: 0, info: -0.08 };
+
 function statusHue(base: number, seedHue: number, seedChroma: number) {
   const d = hueDelta(base, seedHue);
   const shift = Math.abs(d) < 30 ? -Math.sign(d || 1) * (30 - Math.abs(d)) * 0.4 : clamp(d * 0.12, -10, 10);
@@ -235,6 +275,10 @@ export function normaliseTheme(raw: unknown): ThemeSettings {
     mode: (["auto", "dark", "light", "system"] as const).find((m) => m === value.mode) ?? DEFAULT_THEME.mode,
     contrast: value.contrast === "more" ? "more" : "standard",
     tint: typeof value.tint === "number" && Number.isFinite(value.tint) ? clamp(value.tint, 0, 1) : DEFAULT_THEME.tint,
+    vision: (["standard", "protanopia", "deuteranopia", "tritanopia"] as const).find((v) => v === value.vision) ?? DEFAULT_THEME.vision,
+    font: (["launcher", "verdana", "comic"] as const).find((f) => f === value.font) ?? DEFAULT_THEME.font,
+    spacing: (["standard", "roomy", "wide"] as const).find((v) => v === value.spacing) ?? DEFAULT_THEME.spacing,
+    guide: (["off", "line", "focus"] as const).find((g) => g === value.guide) ?? DEFAULT_THEME.guide,
   };
 }
 
@@ -295,7 +339,10 @@ export function buildPalette(input: ThemeSettings, systemPrefersDark = true): Pa
     colors.pressed = hexA({ l: 0.25, c: Math.min(C, 0.1) * 0.3, h: H }, 0.1);
   }
 
-  const statusHues = Object.fromEntries(STATUSES.map((s) => [s, statusHue(STATUS_HUES[s], H, C)])) as Record<Status, number>;
+  const vision = settings.vision === "standard" ? null : VISION_HUES[settings.vision];
+  const statusHues = Object.fromEntries(STATUSES.map((s) => [s, vision ? vision[s] : statusHue(STATUS_HUES[s], H, C)])) as Record<Status, number>;
+  // Under a colour-vision setting the statuses also step apart in lightness.
+  const stepL = (s: Status) => (vision ? VISION_LIGHTNESS[s] : 0);
   for (const s of STATUSES) {
     put(`${s}-bg`, dark ? { l: b + 0.055, c: 0.045, h: statusHues[s] } : { l: b - 0.03, c: 0.04, h: statusHues[s] });
   }
@@ -349,11 +396,11 @@ export function buildPalette(input: ThemeSettings, systemPrefersDark = true): Pa
   /* Status colours. */
   for (const s of STATUSES) {
     const h = statusHues[s];
-    put(`${s}-text`, fit({ l: dark ? 0.8 : 0.5, c: dark ? 0.14 : 0.17, h }, textBgs, TEXT, dir));
+    put(`${s}-text`, fit({ l: (dark ? 0.8 : 0.5) + stepL(s) * (dark ? 1 : -1), c: dark ? 0.14 : 0.17, h }, textBgs, TEXT, dir));
     const own = resolve(`${s}-bg`);
     put(`${s}-border`, fit({ l: dark ? 0.62 : 0.6, c: 0.13, h }, [...solidBgs, own], UI, dir));
     // Amber reads as a warning only while it stays bright, so it carries dark text.
-    const solid = fillPair({ l: dark ? 0.66 : 0.56, c: dark ? 0.17 : 0.18, h }, h, 0.05, TEXT, s === "warning" ? "dark" : "light");
+    const solid = fillPair({ l: (dark ? 0.66 : 0.56) + stepL(s), c: dark ? 0.17 : 0.18, h }, h, 0.05, TEXT, s === "warning" ? "dark" : "light");
     colors[`${s}-solid`] = solid.fill;
     colors[`${s}-solid-hover`] = solid.hover;
     colors[`on-${s}`] = solid.on;

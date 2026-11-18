@@ -250,17 +250,25 @@ function cyberpunk(game, loc) {
         );
     }
     if (noInit.length) out.push(issue("cet-no-init", "warn", `${noInit.length} folder${noInit.length === 1 ? "" : "s"} in CET's mods won't load`, "There's no init.lua in them, so Cyber Engine Tweaks skips them.", noInit.map((r) => `…/cyber_engine_tweaks/mods/${r}`), null));
-    const stray = walk(root, 0).filter((f) => !f.dir && /\.(archive|xl)$/i.test(f.rel));
+    // On a Mac, archive mods load through archive-loader, from its mods/enabled folder.
+    const onMac = process.platform === "darwin";
+    const modRel = onMac ? "archive-loader/mods/enabled" : "archive/pc/mod";
+    const pcMods = path.join(root, "archive", "pc", "mod");
+    const stray = [
+        ...walk(root, 0).filter((f) => !f.dir && /\.(archive|xl)$/i.test(f.rel)),
+        ...(onMac ? walk(pcMods, 0).filter((f) => !f.dir && /\.archive$/i.test(f.rel)).map((f) => ({ ...f, rel: `archive/pc/mod/${f.rel}` })) : []),
+    ];
     if (stray.length) {
+        const where = onMac ? "On a Mac, archive mods only load through archive-loader, from archive-loader/mods/enabled." : "Archive mods only load from archive/pc/mod.";
         out.push(
-            issue("cp-stray-archives", "warn", `${stray.length} archive mod${stray.length === 1 ? " is" : "s are"} in the game folder`, "Archive mods only load from archive/pc/mod.", stray.map((f) => f.rel), "Move them", () => {
-                for (const f of stray) moveTo(path.join(root, f.rel), path.join(root, "archive", "pc", "mod", f.rel));
-                return `Moved ${stray.length} archive mod${stray.length === 1 ? "" : "s"} to archive/pc/mod.`;
+            issue("cp-stray-archives", "warn", `${stray.length} archive mod${stray.length === 1 ? " is" : "s are"} where the game doesn't load ${stray.length === 1 ? "it" : "them"}`, where, stray.map((f) => f.rel), "Move them", () => {
+                for (const f of stray) moveTo(path.join(root, f.rel), path.join(root, modRel, path.basename(f.rel)));
+                return `Moved ${stray.length} archive mod${stray.length === 1 ? "" : "s"} to ${modRel}.`;
             })
         );
     }
-    const modDir = path.join(root, "archive", "pc", "mod");
-    out.push(...archives(game, modDir, walk(modDir, 0).filter((f) => !f.dir), "archive/pc/mod"));
+    const modDir = path.join(root, modRel);
+    out.push(...archives(game, modDir, walk(modDir, 0).filter((f) => !f.dir), modRel));
     return out;
 }
 

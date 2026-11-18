@@ -20,10 +20,14 @@ declare global {
         playingAs?: GamePlayer | null;
         jvmArgs?: string;
         javaPath?: string;
+        /** "" or missing follows Settings. */
+        javaTuning?: JavaTuning | "";
         notes?: string;
         error?: string;
         folder?: string;
     };
+
+    type JavaTuning = "performance" | "standard";
 
     type MinecraftAccount = { name: string; uuid: string; skin: string | null; savedAt: string; active: boolean };
 
@@ -324,6 +328,8 @@ declare global {
         defaultRam: number;
         javaPath: string;
         jvmArgs: string;
+        /** Performance (tuned Java flags) or Standard (the Minecraft Launcher's). */
+        javaTuning: JavaTuning;
         closeOnLaunch: boolean;
         showSnapshots: boolean;
         cloudFolder: string;
@@ -538,6 +544,7 @@ declare global {
                     ram: number;
                     jvmArgs: string;
                     javaPath: string;
+                    javaTuning: JavaTuning | "";
                     notes: string;
                 }>
             ): Promise<Instance>;

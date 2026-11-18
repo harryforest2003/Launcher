@@ -1,7 +1,8 @@
 /*
  * The launcher's security check: Electronegativity (Doyensec's scanner for Electron apps)
  * over the app's own code, and npm audit over its dependencies. Exits 1 if either finds
- * anything. Run it with npm run security:check, or:
+ * anything, except build-tool advisories that have no fix yet (AWAITING_FIX below).
+ * Run it with npm run security:check, or:
  *   node scripts/security-check.cjs [folder for the reports]
  * The reports, the copy that's scanned and the scanner's own working files all go in that
  * folder (release/security-check unless one is given); nothing outside it is touched.
@@ -36,6 +37,25 @@ fs.mkdirSync(out, { recursive: true });
 // The scanner's temporary folder (its saved list of Electron releases lives there).
 const scannerTemp = path.join(out, "scanner-tmp");
 fs.mkdirSync(scannerTemp, { recursive: true });
+
+/*
+ * Advisories with no fixed release yet that reach only the build tools, never the app.
+ * npm audit still lists them, but they don't fail the check while all of this holds:
+ *   - every advisory npm audit reports is on this list,
+ *   - npm audit --omit=dev (what the app ships) finds nothing,
+ *   - the newest published release of the package is still the last one the advisory covers.
+ * Once a fixed release is published, the last condition fails and so does the check, which
+ * is the cue to update and remove the entry.
+ */
+const AWAITING_FIX = [
+    {
+        // picomatch ReDoS through extglobs like +(*). It needs an attacker-chosen glob, and
+        // the build tools (vite, typescript-eslint, electron-builder) only match our own.
+        advisory: "GHSA-fc5q-39xc-vjpf",
+        package: "picomatch",
+        lastVulnerable: "4.0.7",
+    },
+];
 
 const SCANNED = ["electron", "src", "scripts", "index.html", "package.json", "package-lock.json"];
 const SOURCE = /\.(c|m)?js$|\.jsx$|\.tsx?$|\.html?$|\.json$/i;
@@ -122,6 +142,36 @@ function run(command, args, options = {}) {
     return spawnSync(command, args, { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, shell: process.platform === "win32", ...options });
 }
 
+function auditTotal(report) {
+    return Object.entries(report.metadata.vulnerabilities).filter(([level]) => level !== "total").reduce((sum, [, n]) => sum + n, 0);
+}
+
+/* The AWAITING_FIX entries behind every finding in an npm audit report, or null if any
+   finding falls outside them (see AWAITING_FIX for the conditions). */
+function awaitingFix(report) {
+    const advisories = new Set();
+    for (const vulnerability of Object.values(report.vulnerabilities ?? {})) {
+        for (const via of vulnerability.via) if (typeof via === "object") advisories.add(via.url?.split("/").pop());
+    }
+    const entries = [...advisories].map((id) => AWAITING_FIX.find((entry) => entry.advisory === id));
+    if (!entries.length || entries.includes(undefined)) return null;
+
+    const shipped = run("npm", ["audit", "--omit=dev", "--json"]);
+    try {
+        if (auditTotal(JSON.parse(shipped.stdout))) return null;
+    } catch {
+        return null;
+    }
+    for (const entry of entries) {
+        const latest = run("npm", ["view", entry.package, "version"]).stdout?.trim();
+        if (latest !== entry.lastVulnerable) {
+            console.log(`  ${entry.package}@${latest || "?"} is out, past ${entry.advisory}: update it and remove the AWAITING_FIX entry.`);
+            return null;
+        }
+    }
+    return entries;
+}
+
 function readCsv(file) {
     if (!fs.existsSync(file)) return null;
     const lines = fs.readFileSync(file, "utf8").trim().split(/\r?\n/).slice(1).filter(Boolean);
@@ -159,10 +209,19 @@ function readCsv(file) {
     const audit = run("npm", ["audit", "--json"]);
     fs.writeFileSync(path.join(out, "npm-audit.json"), audit.stdout ?? "");
     try {
-        const counts = JSON.parse(audit.stdout).metadata.vulnerabilities;
-        const total = Object.entries(counts).filter(([level]) => level !== "total").reduce((sum, [, n]) => sum + n, 0);
+        const report = JSON.parse(audit.stdout);
+        const total = auditTotal(report);
         console.log(`npm audit: ${total} vulnerabilit${total === 1 ? "y" : "ies"}.`);
-        if (total) failed = true;
+        if (total) {
+            const waiting = awaitingFix(report);
+            if (waiting) {
+                for (const { advisory, package: name, lastVulnerable } of waiting) {
+                    console.log(`  All from ${advisory} (${name}), build tools only. No release after ${name}@${lastVulnerable} yet, so not counted.`);
+                }
+            } else {
+                failed = true;
+            }
+        }
     } catch {
         console.log("npm audit didn't answer: see npm-audit.json.");
         failed = true;

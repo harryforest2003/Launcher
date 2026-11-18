@@ -1,0 +1,74 @@
+/* More Games: sections of cover cards, and the Minecraft Home offers row. */
+
+.mg-section { margin-top: var(--space-6); }
+.mg-section__head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
+.mg-section__head .mh-section-title { margin: 0; }
+.mg-section__count {
+  min-width: 22px; padding: 0 var(--space-1-5); text-align: center;
+  font-size: var(--font-size-xs); line-height: 22px;
+  color: var(--color-text-secondary); background: var(--color-surface-raised); border-radius: var(--radius-full, 999px);
+}
+
+.mg-grid {
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  justify-content: stretch;
+  gap: var(--space-4);
+  max-width: none;
+  margin: 0; padding: 0; list-style: none;
+}
+.mg-game {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--edge-highlight), var(--shadow-sm);
+}
+.mg-game:hover { box-shadow: var(--edge-highlight), var(--shadow-md); }
+.mg-game .mg-game__art {
+  aspect-ratio: 460 / 215;
+  border-radius: 0;
+  box-shadow: none;
+}
+.mg-game:hover .mg-game__art { box-shadow: none; }
+.mg-game__body { padding: var(--space-3); gap: var(--space-1); }
+.mg-game__go {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm); font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+}
+.mg-game__go--muted { color: var(--color-text-muted); font-weight: var(--weight-regular, 400); font-size: var(--font-size-xs); }
+
+.mg-game--off { cursor: default; }
+.mg-game--off:hover { transform: none; box-shadow: var(--edge-highlight), var(--shadow-sm); }
+.mg-game--off .mg-game__art img { filter: grayscale(1); opacity: 0.55; }
+.mg-game--off:hover .mg-game__art img { transform: none; }
+.mg-game--off .mg-game__name { color: var(--color-text-secondary); }
+
+.mg-game--rescan {
+  align-items: center; justify-content: center; text-align: center;
+  gap: var(--space-1); min-height: 180px; padding: var(--space-4);
+  background: transparent; box-shadow: none;
+  border: 1px dashed var(--color-border);
+}
+.mg-game--rescan:hover { background: var(--color-surface); box-shadow: none; }
+.mg-rescan__icon {
+  display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: var(--space-1);
+  border-radius: var(--radius-lg); background: var(--color-accent-subtle); color: var(--color-accent-text);
+}
+
+/* A workspace game that isn't found yet: greyed art, but it opens to choose its folder. */
+.mg-grid > li { display: flex; min-width: 0; }
+.mg-grid > li > .mg-game { flex: 1; }
+.mg-game--setup .mg-game__art img { filter: grayscale(1); opacity: 0.7; }
+.mg-game--setup:hover .mg-game__art img,
+.mg-game--setup:focus-visible .mg-game__art img { filter: none; opacity: 1; }
+
+.mg-search { flex: 0 1 300px; }
+.mg-none { margin: 0 0 var(--space-4); font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+
+/* Minecraft Home: a compact row of offer tiles and a one-line caption. */
+.mh-offers .mh-offers__links { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: var(--space-2); }
+.mh-offers .mh-offers__link { padding: var(--space-3); align-items: center; gap: var(--space-3); }
+.mh-offers .mh-offers__link .mh-link__icon { width: 36px; height: 36px; border-radius: var(--radius-md, var(--radius-sm)); }
+.mh-offers .mh-offers__link .mh-link__lead { display: none; }
+.mh-offers .mh-offers__note { margin: var(--space-2) 0 0; max-width: none; }
+@media (min-width: 900px) { .mh-offers .mh-offers__link .mh-link__lead { display: block; } }

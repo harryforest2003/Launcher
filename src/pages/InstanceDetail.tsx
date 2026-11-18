@@ -11,7 +11,9 @@ import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
 import { Cloud, Folder, Gauge, Hammer, Play, Settings, Square } from "lucide-react";
 import OptimisePanel from "../components/OptimisePanel";
-import { Tabs } from "../components/ui";
+import { Badge, Segmented, Tabs } from "../components/ui";
+import InstanceArt from "../components/InstanceArt";
+import "./library.css";
 import { AccountClashNotice, PlayAsMenu } from "../components/PlayAs";
 import { useAccountChoice } from "../components/playAsChoice";
 
@@ -128,6 +130,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   const [system, setSystem] = useState<LauncherSettings["system"] | null>(null);
   // The Java chosen in Settings for every instance, if any, and what automatic would use here.
   const [globalJava, setGlobalJava] = useState("");
+  const [globalTuning, setGlobalTuning] = useState<JavaTuning>("performance");
   const [javaInfo, setJavaInfo] = useState<{ majorVersion: number; downloaded: boolean } | null>(null);
 
   useEffect(() => {
@@ -140,6 +143,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       .then((s) => {
         setSystem(s.system);
         setGlobalJava(s.javaPath ?? "");
+        setGlobalTuning(s.javaTuning ?? "performance");
       })
       .catch(() => setSystem(null));
   }, []);
@@ -370,9 +374,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     </div>
   );
 
-  const actionStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 7, padding: "8px 14px" };
-  // The square buttons that are only an icon; what each does comes up on hover.
-  const iconStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 9 };
 
   const loaderLabel =
     instance.loader === "vanilla"
@@ -381,31 +382,117 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
   return (
     <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "var(--color-text)", position: "relative" }}>
-      <h1 style={{ marginBottom: 6 }}>{instance.name}</h1>
+      <div className="id-hero">
+        <InstanceArt name={instance.name} cols={8} rows={8} />
+        <div className="id-hero-text">
+          <h1 className="id-title">{instance.name}</h1>
+          <div className="id-meta">
+            <Badge tone="accent">Minecraft {instance.version}</Badge>
+            <Badge>{loaderLabel}</Badge>
+            {instance.loader !== "vanilla" && instance.installed && (
+              <LoaderUpdate
+                instanceName={instance.name}
+                loaderVersion={instance.loaderVersion}
+                onDone={(result) => {
+                  setTab("mods");
+                  void updates.finish(result);
+                }}
+              />
+            )}
+            <Badge>{instance.ram} GB RAM</Badge>
+            <span className="id-meta-played">{instance.lastPlayed ? `Played ${new Date(instance.lastPlayed).toLocaleDateString()}` : "Not played yet"}</span>
+          </div>
+        </div>
+        <div className="id-actions">
+          <button
+            className="ui-button ui-button--ghost ui-button--sm"
+            aria-label="Open folder"
+            data-tip="Open this instance's folder"
+            onClick={() => window.instanceAPI.openFolder(instanceName).catch(() => {})}
+          >
+            <Folder size={16} aria-hidden="true" />
+            Folder
+          </button>
 
-      <p style={{ color: "var(--color-text-muted)", marginBottom: 4 }}>
-        Minecraft {instance.version} • {loaderLabel}
-        {instance.loader !== "vanilla" && instance.installed && (
-          <LoaderUpdate
-            instanceName={instance.name}
-            loaderVersion={instance.loaderVersion}
-            onDone={(result) => {
-              setTab("mods");
-              void updates.finish(result);
-            }}
-          />
-        )}{" "}
-        • {instance.ram} GB RAM
-      </p>
+          <button
+            className="ui-button ui-button--ghost ui-button--sm"
+            aria-label="Repair"
+            data-tip={busy === "repair" ? "Repairing..." : "Repair: download anything this instance is missing, and fix broken files"}
+            aria-disabled={busy === "repair" || undefined}
+            onClick={() => busy !== "repair" && run("repair", () => window.instanceAPI.repair(instanceName))}
+          >
+            <Hammer size={16} aria-hidden="true" />
+            Repair
+          </button>
 
-      <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginBottom: 18 }}>
+          <button
+            className="ui-button ui-button--ghost ui-button--sm"
+            aria-label="Back up to cloud"
+            data-tip={busy === "cloud" ? "Backing up..." : "Back up this instance to your cloud folder"}
+            aria-disabled={busy === "cloud" || undefined}
+            onClick={() =>
+            busy !== "cloud" &&
+            run("cloud", async () => {
+              setProgress(null);
+              const result = await window.instanceAPI.cloudExport(instanceName);
+              setNotice(
+                `Backed up ${result.files.toLocaleString()} files (${formatBytes(result.bytes)}) to your cloud folder. ` +
+                "It reaches your other devices once your cloud service has synced it."
+              );
+              await loadLastBackup();
+            })
+            }
+          >
+            <Cloud size={16} aria-hidden="true" />
+            Back up
+          </button>
+
+          <button
+            className="ui-button ui-button--ghost ui-button--sm"
+            data-testid="optimise"
+            aria-label="Optimise"
+            data-tip="Optimise: find what's slowing this instance down, and fix it"
+            onClick={() => setOptimising(true)}
+          >
+            <Gauge size={16} aria-hidden="true" />
+            Optimise
+          </button>
+
+          {instance.running && (
+            <button className="ui-button ui-button--danger" onClick={() => run("stop", () => window.instanceAPI.stop(instanceName))}>
+              <Square size={14} fill="currentColor" aria-hidden="true" />
+              Stop
+            </button>
+          )}
+
+          <button
+            className="ui-button ui-button--primary ui-button--lg"
+            data-testid="play"
+            disabled={busy === "launch" || instance.running}
+            onClick={() => launch()}
+          >
+            <Play size={16} fill="currentColor" aria-hidden="true" />
+            {instance.running ? (instance.playingAs ? `Running as ${instance.playingAs.name}` : "Running") : busy === "launch" ? "Starting..." : "Play"}
+          </button>
+          {!instance.running && busy !== "launch" && <PlayAsMenu choice={choice} instance={instanceName} onPlayAs={(id) => launch(id)} />}
+
+          <button
+            className="ui-button ui-button--ghost ui-button--icon"
+            aria-label="Settings"
+            title="This instance's settings"
+            aria-pressed={tab === "settings"}
+            onClick={() => setTab("settings")}
+          >
+            <Settings size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <p className="id-facts">
         {content.mod.length} mod{content.mod.length === 1 ? "" : "s"} •{" "}
         {content.resourcepack.length} resource pack{content.resourcepack.length === 1 ? "" : "s"} •{" "}
         {content.shader.length} shader{content.shader.length === 1 ? "" : "s"} •{" "}
         {content.datapack.length} data pack{content.datapack.length === 1 ? "" : "s"}
-        {instance.lastPlayed
-          ? ` • last played ${new Date(instance.lastPlayed).toLocaleString()}`
-          : ""}
         <span data-testid="last-backup">
           {lastBackup
             ? ` • last backed up ${new Date(lastBackup).toLocaleString()}`
@@ -507,91 +594,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto", paddingBottom: 4 }}>
-          <button
-            className="sidebar-button"
-            aria-label="Open folder"
-            data-tip="Open this instance's folder"
-            style={iconStyle}
-            onClick={() => window.instanceAPI.openFolder(instanceName).catch(() => {})}
-          >
-            <Folder size={18} aria-hidden="true" />
-          </button>
-
-          <button
-            className="sidebar-button"
-            aria-label="Repair"
-            data-tip={busy === "repair" ? "Repairing..." : "Repair: download anything this instance is missing, and fix broken files"}
-            aria-disabled={busy === "repair" || undefined}
-            style={iconStyle}
-            onClick={() => busy !== "repair" && run("repair", () => window.instanceAPI.repair(instanceName))}
-          >
-            <Hammer size={18} aria-hidden="true" />
-          </button>
-
-          <button
-            className="sidebar-button"
-            aria-label="Back up to cloud"
-            data-tip={busy === "cloud" ? "Backing up..." : "Back up this instance to your cloud folder"}
-            aria-disabled={busy === "cloud" || undefined}
-            style={iconStyle}
-            onClick={() =>
-            busy !== "cloud" &&
-            run("cloud", async () => {
-              setProgress(null);
-              const result = await window.instanceAPI.cloudExport(instanceName);
-              setNotice(
-                `Backed up ${result.files.toLocaleString()} files (${formatBytes(result.bytes)}) to your cloud folder. ` +
-                "It reaches your other devices once your cloud service has synced it."
-              );
-              await loadLastBackup();
-            })
-            }
-          >
-            <Cloud size={18} aria-hidden="true" />
-          </button>
-
-          <button
-            className="sidebar-button"
-            data-testid="optimise"
-            aria-label="Optimise"
-            data-tip="Optimise: find what's slowing this instance down, and fix it"
-            style={iconStyle}
-            onClick={() => setOptimising(true)}
-          >
-            <Gauge size={18} aria-hidden="true" />
-          </button>
-
-          {instance.running && (
-            <button className="sidebar-button" style={{ ...actionStyle, background: "var(--color-danger-solid)", color: "var(--color-on-danger)" }} onClick={() => run("stop", () => window.instanceAPI.stop(instanceName))}>
-              <Square size={14} fill="currentColor" aria-hidden="true" />
-              Stop
-            </button>
-          )}
-
-          <button
-            className="sidebar-button"
-            data-testid="play"
-            style={{ ...actionStyle, background: "var(--color-accent)", color: "var(--color-on-accent)", padding: "8px 18px" }}
-            disabled={busy === "launch" || instance.running}
-            onClick={() => launch()}
-          >
-            <Play size={16} fill="currentColor" aria-hidden="true" />
-            {instance.running ? (instance.playingAs ? `Running as ${instance.playingAs.name}` : "Running") : busy === "launch" ? "Starting..." : "Play"}
-          </button>
-          {!instance.running && busy !== "launch" && <PlayAsMenu choice={choice} instance={instanceName} onPlayAs={(id) => launch(id)} />}
-
-          <button
-            className="sidebar-button"
-            aria-label="Settings"
-            title="This instance's settings"
-            aria-pressed={tab === "settings"}
-            onClick={() => setTab("settings")}
-            style={{ ...iconStyle, background: tab === "settings" ? "var(--color-accent-subtle)" : undefined, borderColor: tab === "settings" ? "var(--color-accent-line)" : undefined }}
-          >
-            <Settings size={18} aria-hidden="true" />
-          </button>
-        </div>
       </div>
 
       {/* ---------------- CONTENT ---------------- */}
@@ -750,6 +752,26 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 </button>
               )}
             </div>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "14px 0 8px" }} id="instance-java-flags">
+              Java flags: {(instance.javaTuning || globalTuning) === "performance"
+                ? "Performance. Tuned memory clean-up and a bigger code cache, for fewer stutters. Picture quality doesn't change."
+                : "Standard, the Minecraft Launcher's own settings."}
+            </p>
+            <Segmented
+              label="Java flags for this instance"
+              value={instance.javaTuning || "settings"}
+              onChange={(value) =>
+                run("java", async () => {
+                  await window.instanceAPI.update(instanceName, { javaTuning: value === "settings" ? "" : value });
+                  setNotice(value === "settings" ? `${instance.name} follows the Java flags in Settings.` : `${instance.name} uses the ${value === "performance" ? "Performance" : "Standard"} Java flags from its next launch.`);
+                })
+              }
+              options={[
+                { value: "settings", label: `As in Settings (${globalTuning === "performance" ? "Performance" : "Standard"})` },
+                { value: "performance", label: "Performance" },
+                { value: "standard", label: "Standard" },
+              ]}
+            />
           </div>
 
           <div style={card}>
@@ -786,7 +808,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               JVM arguments for this instance
             </p>
             <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginBottom: 10 }}>
-              The Minecraft Launcher's garbage collection settings are used for fewer stutters, unless you choose a garbage collector here (such as -XX:+UseZGC).
+              Added after the Java flags above, so yours win. Choose a garbage collector here (such as -XX:+UseZGC) to use it instead of either.
             </p>
 
             <input
