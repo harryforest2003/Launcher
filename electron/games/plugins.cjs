@@ -2,8 +2,8 @@ const fs = require("fs");
 const path = require("path");
 
 /*
- * Skyrim's and Fallout 4's load order: plugins.txt, one plugin a line, "*" in front of the
- * ones turned on. It's kept in AppData\Local\<game> on Windows; for a game run through
+ * The Bethesda games' load order: plugins.txt, one plugin a line, "*" in front of the ones
+ * turned on (older games list only those, see read). It's kept in AppData\Local\<game> on Windows; for a game run through
  * CrossOver or Whisky, in the same place inside its bottle.
  */
 
@@ -36,32 +36,101 @@ function need(game, loc) {
     return file;
 }
 
-/* [{ name, active, line }] in order; comments and blank lines are kept as lines without a name. */
-function read(game, loc) {
-    const file = need(game, loc);
-    let text = "";
+const lower = (name) => name.toLowerCase();
+const unique = (names) => {
+    const seen = new Set();
+    return names.filter((name) => !seen.has(lower(name)) && seen.add(lower(name)));
+};
+function linesOf(file) {
     try {
-        text = fs.readFileSync(file, "utf8");
+        return fs.readFileSync(file, "utf8").split(/\r?\n/);
     } catch {
         return [];
     }
-    const lines = text.split(/\r?\n/);
+}
+function writeLines(file, lines) {
+    const text = lines.join("\r\n").replace(/(\r\n)+$/, "");
+    fs.writeFileSync(file, `${text}\r\n`);
+}
+function mtime(file) {
+    try {
+        return fs.statSync(file).mtimeMs;
+    } catch {
+        return Infinity;
+    }
+}
+/* The plugin files in the game's Data folder. */
+function dataPlugins(loc) {
+    try {
+        return fs.readdirSync(path.join(loc.gameDir, "Data")).filter((name) => PLUGIN.test(name));
+    } catch {
+        return [];
+    }
+}
+
+/* [{ name, active, line }] in order; comments and blank lines are kept as lines without a name. */
+function read(game, loc) {
+    const file = need(game, loc);
+    const lines = linesOf(file);
     while (lines.length && !lines.at(-1).trim()) lines.pop(); // The file ends with a line break.
-    return lines.map((line) => {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith("#")) return { name: null, active: false, line };
-        return { name: trimmed.replace(/^\*/, ""), active: trimmed.startsWith("*"), line };
-    });
+    const format = game.bethesda.format ?? "star";
+    if (format === "star") {
+        return lines.map((line) => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith("#")) return { name: null, active: false, line };
+            return { name: trimmed.replace(/^\*/, ""), active: trimmed.startsWith("*"), line };
+        });
+    }
+    // Older games list only the plugins that are on, without "*". The rest of the order is in
+    // loadorder.txt beside it (Skyrim before Special Edition), or the plugin files' dates
+    // (Oblivion, Fallout 3, New Vegas).
+    const comments = lines.filter((line) => line.trim().startsWith("#")).map((line) => ({ name: null, active: false, line }));
+    const on = unique(lines.map((line) => line.trim()).filter((line) => line && !line.startsWith("#")));
+    const onSet = new Set(on.map(lower));
+    let full;
+    if (format === "plain") {
+        full = unique([...linesOf(path.join(path.dirname(file), "loadorder.txt")).map((line) => line.trim()).filter((line) => line && !line.startsWith("#")), ...on]);
+    } else {
+        const data = path.join(loc.gameDir, "Data");
+        const dated = dataPlugins(loc).map((name) => ({ name, at: mtime(path.join(data, name)) }));
+        dated.sort((a, b) => a.at - b.at || (lower(a.name) < lower(b.name) ? -1 : 1));
+        full = unique([...dated.map((entry) => entry.name), ...on]);
+    }
+    // The game goes by the on list's order for the plugins that are on.
+    let next = 0;
+    const names = full.map((name) => (onSet.has(lower(name)) ? on[next++] : name));
+    return [...comments, ...names.map((name) => ({ name, active: onSet.has(lower(name)) }))];
 }
 
 function write(game, loc, lines) {
     const file = need(game, loc);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const text = lines
-        .map((entry) => (entry.name ? `${entry.active ? "*" : ""}${entry.name}` : entry.line))
-        .join("\r\n")
-        .replace(/(\r\n)+$/, "");
-    fs.writeFileSync(file, `${text}\r\n`);
+    const format = game.bethesda.format ?? "star";
+    if (format === "star") {
+        writeLines(file, lines.map((entry) => (entry.name ? `${entry.active ? "*" : ""}${entry.name}` : entry.line)));
+        return;
+    }
+    // The game's own plugins first, then the rest as given.
+    const present = new Map(dataPlugins(loc).map((name) => [lower(name), name]));
+    const fixed = fixedPlugins(game, loc, new Set(present.keys())).map((name) => present.get(name));
+    const fixedSet = new Set(fixed.map(lower));
+    const order = [...fixed.map((name) => ({ name, active: true })), ...lines.filter((entry) => entry.name && !fixedSet.has(lower(entry.name)))];
+    const comments = lines.filter((entry) => !entry.name && entry.line?.trim()).map((entry) => entry.line);
+    // Skyrim loads its own masters without them listed; the older games need theirs listed.
+    const listed = order.filter((entry) => entry.active && (format === "dates" || !fixedSet.has(lower(entry.name))));
+    writeLines(file, [...comments, ...listed.map((entry) => entry.name)]);
+    if (format === "plain") {
+        writeLines(path.join(path.dirname(file), "loadorder.txt"), order.map((entry) => entry.name));
+        return;
+    }
+    // Each plugin a minute after the one before it, from the earliest date they have now.
+    const data = path.join(loc.gameDir, "Data");
+    const files = order.map((entry) => path.join(data, entry.name)).filter((full) => fs.existsSync(full));
+    const start = Math.min(...files.map(mtime), Date.UTC(2010, 0, 1));
+    files.forEach((full, i) => {
+        const at = new Date(start + i * 60 * 1000);
+        fs.utimesSync(full, at, at);
+    });
 }
 
 /* Turns plugins on or off; ones not listed yet are added at the end. */
@@ -124,8 +193,9 @@ function fixedPlugins(game, loc, present) {
     const fixed = game.bethesda.official.filter((name) => present.has(name));
     let cc = [];
     try {
-        const listFile = path.join(loc.gameDir, game.id === "fallout4" ? "Fallout4.ccc" : "Skyrim.ccc");
-        cc = fs.readFileSync(listFile, "utf8").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        // Creation Club's list; games without one have null.
+        const ccc = game.bethesda.ccc !== undefined ? game.bethesda.ccc : game.id === "fallout4" ? "Fallout4.ccc" : "Skyrim.ccc";
+        if (ccc) cc = fs.readFileSync(path.join(loc.gameDir, ccc), "utf8").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     } catch {
         // No Creation Club list.
     }
@@ -308,4 +378,4 @@ function fixPlan(game, loc) {
     return { turnOn, turnOff, moved, get, order: order.map((p) => ({ name: p.name, active: active.get(p.name.toLowerCase()) })) };
 }
 
-module.exports = { read, activate, remove, fileFor, header, loadOrder, setOrder, sorted, fixPlan };
+module.exports = { read, activate, remove, fileFor, appDataLocal, header, loadOrder, setOrder, sorted, fixPlan };

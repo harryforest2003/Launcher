@@ -134,11 +134,10 @@ function epicManifestDir() {
     return null;
 }
 
-function scanEpic() {
+/* Every game the Epic Games Launcher installed: [{ name, installPath }]. */
+function epicInstalls() {
     const dir = epicManifestDir();
     if (!dir || !fs.existsSync(dir)) return [];
-
-    const found = [];
 
     let files;
     try {
@@ -147,16 +146,27 @@ function scanEpic() {
         return [];
     }
 
+    const installs = [];
     for (const file of files) {
         try {
-            const data = JSON.parse(
-                fs.readFileSync(path.join(dir, file), "utf8")
-            );
+            const data = JSON.parse(fs.readFileSync(path.join(dir, file), "utf8"));
+            if (data.DisplayName && data.InstallLocation && fs.existsSync(data.InstallLocation)) {
+                installs.push({ name: data.DisplayName, installPath: data.InstallLocation });
+            }
+        } catch {
+            // skip malformed manifest
+        }
+    }
+    return installs;
+}
 
-            const name = (data.DisplayName || "").toLowerCase();
-            const installPath = data.InstallLocation;
+function scanEpic() {
+    const found = [];
 
-            if (!name || !installPath || !fs.existsSync(installPath)) continue;
+    for (const install of epicInstalls()) {
+        try {
+            const name = install.name.toLowerCase();
+            const installPath = install.installPath;
 
             // The exact name first, then the longest name it contains, so
             // "Red Dead Redemption 2" is never taken for "Red Dead Redemption".
@@ -295,4 +305,5 @@ module.exports = {
     getGame,
     steamLibraries,
     steamRoots,
+    epicInstalls,
 };

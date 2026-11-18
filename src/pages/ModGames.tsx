@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Gamepad2, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Download, ExternalLink, RefreshCw } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
 import LauncherSidebar from "../components/LauncherSidebar";
-import { Badge, Button, Notice, Panel, SearchField, Skeleton } from "../components/ui";
+import { Badge, Button, Notice, SearchField, Segmented, Select, Skeleton } from "../components/ui";
 import ModManager from "./ModManager";
-import { ART } from "./gameArt";
+import Pagination from "../components/Pagination";
+import { useGameArt } from "./gameArt";
 import "./homeScreens.css";
 import "./moreGames.css";
 
@@ -15,9 +16,6 @@ type Props = {
   onGame: (id: GameId) => void;
   onSettings: () => void;
 };
-
-/* Games with a full workspace of their own (electron/games/registry.cjs). */
-const OWN_SECTIONS = new Set(["sims4", "gtav", "skyrimse", "fallout4", "cyberpunk2077", "stardew"]);
 
 const isMac = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
 
@@ -30,15 +28,12 @@ function hintFor(game: CatalogGame): string {
   return files ? `${where} · ${files} files` : where;
 }
 
-/* A supported game that isn't on this computer: either a workspace to set up, or one to install. */
-type Missing =
-  | { kind: "workspace"; id: GameId; name: string; windowsOnly: boolean }
-  | { kind: "catalog"; id: string; name: string; game: CatalogGame };
-
-/* A game's own picture (its store header), or its initials when offline or unknown. */
-function GameTileArt({ id, name }: { id: string; name: string }) {
-  const [failed, setFailed] = useState(false);
-  const src = ART[id];
+/* A game's picture: its own, else one from where it's sold, else the result's; initials offline. */
+function GameTileArt({ id, name, src: given, alt }: { id?: string; name: string; src?: string | null; alt?: string | null }) {
+  const artOf = useGameArt([id]);
+  const [tries, setTries] = useState(0);
+  const options = [artOf(id, given), alt].filter((url, i, all): url is string => Boolean(url) && all.indexOf(url) === i);
+  const src = options[tries];
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -47,8 +42,8 @@ function GameTileArt({ id, name }: { id: string; name: string }) {
     .join("");
   return (
     <span className="mg-game__art" aria-hidden="true">
-      {src && !failed ? (
-        <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" draggable={false} onError={() => setFailed(true)} />
+      {src ? (
+        <img key={src} src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" draggable={false} onError={() => setTries((n) => n + 1)} />
       ) : (
         <span className="mg-game__mark">{initials}</span>
       )}
@@ -56,69 +51,202 @@ function GameTileArt({ id, name }: { id: string; name: string }) {
   );
 }
 
+const PAGE_SIZE = 12;
+
+const SOURCES: { value: GameFindSource; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "steam", label: "Steam" },
+  { value: "nexus", label: "Nexus Mods" },
+  { value: "curseforge", label: "CurseForge" },
+];
+const SOURCE_NOTE: Record<GameFindSource, string> = {
+  all: "Games on this computer, then the most modded",
+  steam: "Steam's store, most played first",
+  nexus: "Every game with mods on Nexus Mods",
+  curseforge: "Every game CurseForge hosts mods for",
+};
+const STEAM_SORTS = [
+  { value: "popular", label: "Most played" },
+  { value: "new", label: "Newest" },
+  { value: "rated", label: "Top rated" },
+  { value: "price-asc", label: "Price: low to high" },
+  { value: "price-desc", label: "Price: high to low" },
+];
+const NEXUS_SORTS = [
+  { value: "popular", label: "Most modded" },
+  { value: "name", label: "Name" },
+];
+type Filters = { price: string; sort: string; mac: boolean };
+const NO_FILTERS: Filters = { price: "any", sort: "popular", mac: false };
+
+/* What a game costs on Steam, for the corner of its card: "Free", or the sale price with the old one struck. */
+function PriceTag({ price }: { price?: GamePrice | null }) {
+  if (!price) return null;
+  if (price.free) return <span className="mg-price mg-price--free">Free</span>;
+  return (
+    <span className="mg-price" aria-label={price.was ? `${price.text}, down ${price.discount}% from ${price.was}` : price.text}>
+      {price.discount > 0 && <span className="mg-price__off" aria-hidden="true">-{price.discount}%</span>}
+      {price.was && <s className="mg-price__was" aria-hidden="true">{price.was}</s>}
+      <span className="mg-price__now" aria-hidden={price.was ? true : undefined}>{price.text}</span>
+    </span>
+  );
+}
+
+const keyOf = (game: GameFound) => game.steamAppId ?? game.nexus ?? (game.curseforge ? `cf${game.curseforge}` : game.name);
+
 export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onSettings }: Props) {
-  const [games, setGames] = useState<DetectedGame[]>([]);
-  const [catalog, setCatalog] = useState<CatalogGame[]>([]);
   const [sections, setSections] = useState<GameSummary[]>([]);
+  const [catalog, setCatalog] = useState<CatalogGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DetectedGame | null>(initialGame ?? null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+
+  // Adding a game from Steam, Nexus Mods or CurseForge.
+  const [found, setFound] = useState<GameFindResult | null>(null);
+  const [findPage, setFindPage] = useState(1);
+  const [source, setSource] = useState<GameFindSource>("all");
+  const [finding, setFinding] = useState(true);
+  const [findError, setFindError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [steps, setSteps] = useState<{ value: string; label: string }[]>([]);
+  const [opening, setOpening] = useState<string | null>(null);
 
   // A Nexus Mods key is added in the launcher's Settings; this only says whether there is one.
   const [hasNexusKey, setHasNexusKey] = useState(true);
 
-  // Reads the games (rescanning first when asked) and shows them; state is only set once
-  // the answer is in.
-  const read = useCallback((refresh: boolean) => {
-    const work = (refresh ? window.modAPI.refreshGames() : Promise.resolve())
-      .then(() =>
-        Promise.all([
-          window.modAPI.getGames(refresh ? { refresh: true } : undefined),
-          window.modAPI.getSettings(),
-          window.modAPI.catalog(),
-          window.gamesAPI.list(),
-        ])
-      )
-      .then(([list, settings, supported, workspaces]) => {
-        // Games with their own workspace are on Home when found, so leave them out here.
-        setGames(list.filter((game) => !OWN_SECTIONS.has(game.id)));
-        setCatalog(supported);
+  // Every game the launcher has a workspace for, and whether each is on this computer.
+  const read = useCallback(() => {
+    return Promise.all([window.gamesAPI.list(), window.modAPI.catalog(), window.modAPI.getSettings()])
+      .then(([workspaces, supported, settings]) => {
         setSections(workspaces);
+        setCatalog(supported);
         setHasNexusKey(settings.hasNexusKey);
         setError(null);
       })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : String(err));
-        setGames([]);
-      });
-    return work.finally(() => setLoading(false));
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
-    read(false);
+    void read();
   }, [read]);
 
-  const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
-  const found = games.filter((game) => matches(game.name));
-  const missing: Missing[] = [
-    ...sections
-      .filter((game) => !game.found)
-      .map((game): Missing => ({ kind: "workspace", id: game.id, name: game.name, windowsOnly: game.windowsOnly })),
-    ...catalog
-      .filter((game) => !game.notOnPC && !OWN_SECTIONS.has(game.id) && !games.some((g) => g.id === game.id))
-      .map((game): Missing => ({ kind: "catalog", id: game.id, name: game.name, game })),
-  ]
-    .filter((game) => matches(game.name))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const notOnPC = catalog.filter((game) => game.notOnPC && matches(game.name));
-  const shown = found.length + missing.length + notOnPC.length;
+  // The stores are asked once typing pauses.
+  useEffect(() => {
+    let live = true;
+    const timer = window.setTimeout(() => {
+      // Nexus Mods and CurseForge only sort; price and Mac are Steam's.
+      const asked = source === "nexus" || source === "curseforge" ? { sort: filters.sort } : filters;
+      window.gamesAPI
+        .findGames(query.trim(), findPage - 1, source, asked)
+        .then((result) => {
+          if (!live) return;
+          setFound(result);
+          if (result.priceSteps?.length) setSteps(result.priceSteps);
+          setFindError(result.warnings.length && !result.total ? result.warnings.join(" ") : null);
+        })
+        .catch((err) => live && setFindError(err instanceof Error ? err.message : String(err)))
+        .finally(() => live && setFinding(false));
+    }, query.trim() ? 350 : 0);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, findPage, source, filters]);
 
-  function rescan() {
-    setLoading(true);
-    setError(null);
-    read(true);
+  function search(text: string) {
+    setQuery(text);
+    setPage(1);
+    setFindPage(1);
+    setFinding(true);
   }
+
+  function browse(next: GameFindSource) {
+    if (next === source) return;
+    setSource(next);
+    // Each place sorts its own way; keep the sort only where it means something.
+    const sorts = next === "nexus" ? NEXUS_SORTS : next === "curseforge" ? [] : STEAM_SORTS;
+    setFilters((was) => ({ ...was, sort: sorts.some((s) => s.value === was.sort) ? was.sort : "popular" }));
+    setFindPage(1);
+    setFinding(true);
+  }
+
+  function findPageTo(next: number) {
+    if (next === findPage) return;
+    setFindPage(next);
+    setFinding(true);
+  }
+
+  function filter(change: Partial<Filters>) {
+    setFilters((was) => ({ ...was, ...change }));
+    setFindPage(1);
+    setFinding(true);
+  }
+
+  // Any game opens straight to its page; nothing to add first.
+  async function open(game: GameFound) {
+    if (game.existing) return onGame(game.existing);
+    const key = keyOf(game);
+    setOpening(key);
+    setFindError(null);
+    try {
+      onGame(await window.gamesAPI.openGame(game));
+    } catch (err) {
+      setFindError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  // Where to get a game that isn't here yet: its Steam page (in Steam when it's installed).
+  function getLink(game: GameFound) {
+    if (game.installed) {
+      return (
+        <span className="mg-get mg-get--here">
+          <Check size={13} aria-hidden="true" /> On this computer
+        </span>
+      );
+    }
+    if (game.steamAppId) {
+      const id = game.steamAppId;
+      return (
+        <button type="button" className="mg-get" onClick={() => void window.gamesAPI.getOnSteam(id)}>
+          <Download size={13} aria-hidden="true" /> Get on Steam
+        </button>
+      );
+    }
+    if (game.nexus) {
+      const url = `https://www.nexusmods.com/games/${game.nexus}`;
+      return (
+        <button type="button" className="mg-get" onClick={() => void window.gamesAPI.openUrl(url)}>
+          <ExternalLink size={13} aria-hidden="true" /> On Nexus Mods
+        </button>
+      );
+    }
+    return <span />;
+  }
+
+  const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
+  const here = sections.filter((game) => game.found);
+  // Games wait here until they're on this computer; then they're on Home and in the sidebar.
+  const waiting = sections.filter((game) => !game.found && !game.notOnPC && matches(game.name)).sort((a, b) => a.name.localeCompare(b.name));
+  const notOnPC = sections.filter((game) => game.notOnPC && matches(game.name));
+  const pageCount = Math.max(1, Math.ceil(waiting.length / PAGE_SIZE));
+  const shownPage = Math.min(page, pageCount);
+  const pageGames = waiting.slice((shownPage - 1) * PAGE_SIZE, shownPage * PAGE_SIZE);
+  const catalogOf = (id: string) => catalog.find((game) => game.id === id);
+  const hintOf = (game: GameSummary) => {
+    if (game.windowsOnly && isMac) return "Windows game: runs through CrossOver or Whisky";
+    const known = catalogOf(game.id);
+    if (known) return hintFor(known);
+    if (game.custom) return game.tagline;
+    return "Installed somewhere else? Choose its folder.";
+  };
+  const steamish = source === "all" || source === "steam";
+  const sorts = source === "nexus" ? NEXUS_SORTS : source === "curseforge" ? [] : STEAM_SORTS;
+  const filtered = filters.price !== "any" || filters.mac || (steamish && filters.sort !== "popular");
 
   return (
     <div className="app-screen">
@@ -143,15 +271,15 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
                 <p className="mg-head__lead" aria-live="polite">
                   {loading
                     ? "Looking for games…"
-                    : `${games.length} found on this computer · ${missing.length + notOnPC.length} more supported. Games found on this computer also show on Home.`}
+                    : `${waiting.length + notOnPC.length} games waiting to be installed · ${here.length} on this computer, on Home and in the sidebar.`}
                 </p>
               </div>
               <SearchField
                 wrapperClassName="mg-search"
-                label="Search supported games"
-                placeholder="Search supported games…"
+                label="Search games"
+                placeholder="Search any game…"
                 value={query}
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => search(event.target.value)}
               />
             </header>
 
@@ -162,7 +290,7 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
             )}
 
             {loading ? (
-              <div className="mg-grid" role="status" aria-label="Scanning for installed games">
+              <div className="mg-grid" role="status" aria-label="Looking for games">
                 {[0, 1, 2, 3, 4, 5].map((i) => (
                   <div key={i} className="mg-skel" aria-hidden="true">
                     <Skeleton shape="block" className="mg-skel__art" />
@@ -173,118 +301,148 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
               </div>
             ) : (
               <>
-                {query.trim() && shown === 0 && (
-                  <p className="mg-none" role="status">No supported games match “{query.trim()}”.</p>
-                )}
-
-                {games.length === 0 && !query.trim() ? (
-                  <Panel title="No other games found yet" className="mg-empty">
-                    <span className="mg-empty__icon" aria-hidden="true"><Gamepad2 size={28} /></span>
-                    <p>
-                      The scan looks through Steam libraries, Epic manifests, and the standard install and mod folders for
-                      every game listed below.
-                    </p>
-                    <p>
-                      If a game is installed somewhere unusual, set <code>UNITY_STEAM_ROOTS</code> to its Steam folder and rescan.
-                    </p>
-                    <Button size="sm" icon={<RefreshCw size={16} aria-hidden="true" />} onClick={rescan}>
-                      Rescan for games
-                    </Button>
-                  </Panel>
-                ) : found.length > 0 && (
-                  <section className="mg-section" aria-labelledby="mg-found">
-                    <div className="mg-section__head">
-                      <h2 className="mh-section-title" id="mg-found">Found on this computer</h2>
-                      <span className="mg-section__count">{found.length}</span>
-                    </div>
-                    <div className="mg-grid">
-                      {found.map((game) => (
-                        <button
-                          key={game.id}
-                          type="button"
-                          className="mg-game"
-                          title={game.modDir ? `${game.name}: ${game.modDir}` : game.name}
-                          onClick={() => (game.managedByInstances ? onMinecraft() : setSelected(game))}
-                        >
-                          <GameTileArt id={game.id} name={game.name} />
-                          <span className="mg-game__body">
-                            <span className="mg-game__name">{game.name}</span>
-                            <span className="mg-game__source">Found via {game.source}</span>
-                            <span className="mg-tags">
-                              {game.managedByInstances ? (
-                                <Badge tone="accent">Instances</Badge>
-                              ) : game.availableProviders.length > 0 ? (
-                                game.availableProviders.map((p) => (
-                                  <Badge key={p.id} tone={p.ready ? "success" : "neutral"} data-tip={p.ready ? undefined : "Needs an API key"}>
-                                    {p.ready ? p.label : `${p.label}: needs a key`}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <Badge>Local only</Badge>
-                              )}
-                              {!game.modDirExists && !game.managedByInstances && game.modDir && <Badge tone="warning">No mods folder yet</Badge>}
-                            </span>
-                            <span className="mg-game__go">
-                              {game.managedByInstances ? "Open instances" : "Manage mods"}
-                              <ArrowRight size={14} aria-hidden="true" />
-                            </span>
-                          </span>
-                        </button>
-                      ))}
-                      {!query.trim() && (
-                        <button type="button" className="mg-game mg-game--rescan" onClick={rescan}>
-                          <span className="mg-rescan__icon" aria-hidden="true"><RefreshCw size={20} /></span>
-                          <span className="mg-game__name">Rescan for games</span>
-                          <span className="mg-game__source">Installed something new? Look again.</span>
-                        </button>
-                      )}
-                    </div>
-                  </section>
-                )}
-
-                {missing.length > 0 && (
+                {waiting.length > 0 && (
                   <section className="mg-section" aria-labelledby="mg-supported">
                     <div className="mg-section__head">
                       <h2 className="mh-section-title" id="mg-supported">Not on this computer</h2>
-                      <span className="mg-section__count">{missing.length}</span>
+                      <span className="mg-section__count">{waiting.length}</span>
+                      <button type="button" className="mg-section__action" onClick={() => void read()}>
+                        <RefreshCw size={13} aria-hidden="true" /> Look again
+                      </button>
                     </div>
                     <ul className="mg-grid mg-grid--quiet">
-                      {missing.map((game) =>
-                        game.kind === "workspace" ? (
-                          <li key={game.id}>
-                            <button type="button" className="mg-game mg-game--setup" onClick={() => onGame(game.id)}>
-                              <GameTileArt id={game.id} name={game.name} />
-                              <span className="mg-game__body">
-                                <span className="mg-game__name">{game.name}</span>
-                                <span className="mg-game__source">
-                                  {game.windowsOnly && isMac ? "Windows game: runs through CrossOver or Whisky" : "Installed somewhere else? Choose its folder."}
-                                </span>
-                                <span className="mg-tags"><Badge tone="accent">Full workspace</Badge></span>
-                                <span className="mg-game__go">
-                                  Set it up
-                                  <ArrowRight size={14} aria-hidden="true" />
-                                </span>
-                              </span>
-                            </button>
-                          </li>
-                        ) : (
-                          <li key={game.id} className="mg-game mg-game--off">
-                            <GameTileArt id={game.id} name={game.name} />
+                      {pageGames.map((game) => (
+                        <li key={game.id}>
+                          <button type="button" className="mg-game mg-game--setup" onClick={() => onGame(game.id)}>
+                            <GameTileArt id={game.id} name={game.name} src={game.art} />
                             <span className="mg-game__body">
                               <span className="mg-game__name">{game.name}</span>
-                              <span className="mg-game__source">{hintFor(game.game)}</span>
+                              <span className="mg-game__source">{hintOf(game)}</span>
                               <span className="mg-tags">
-                                <Badge>Not found</Badge>
-                                {game.game.windowsOnly && isMac && <Badge data-tip="Runs on a Mac through CrossOver or Whisky">Windows game</Badge>}
+                                {game.custom ? <Badge>Added by you</Badge> : !game.generic && <Badge tone="accent">Full workspace</Badge>}
+                                {game.nexus && <Badge>Nexus Mods</Badge>}
+                                {game.curseforge && <Badge>CurseForge</Badge>}
                               </span>
-                              <span className="mg-game__go mg-game__go--muted">Install it, then rescan</span>
+                              <span className="mg-game__go">
+                                Set it up
+                                <ArrowRight size={14} aria-hidden="true" />
+                              </span>
                             </span>
-                          </li>
-                        ),
-                      )}
+                          </button>
+                        </li>
+                      ))}
                     </ul>
+                    {pageCount > 1 && (
+                      <div className="mg-pages">
+                        <Pagination page={shownPage} pageCount={pageCount} onChange={setPage} />
+                      </div>
+                    )}
                   </section>
                 )}
+
+                <section className="mg-section" aria-labelledby="mg-add">
+                  <div className="mg-section__head">
+                    <h2 className="mh-section-title" id="mg-add">{query.trim() ? `Results for “${query.trim()}”` : "Every game"}</h2>
+                    {found && <span className="mg-section__count">{found.total.toLocaleString()}</span>}
+                  </div>
+                  <p className="mg-section__lead">
+                    Every game on Steam, Nexus Mods and CurseForge. Open one to see its page, news and mods; once it's on this computer it moves to
+                    Home and the sidebar by itself.
+                  </p>
+                  <div className="mg-sources">
+                    <Segmented label="Where to look" value={source} options={SOURCES} onChange={browse} />
+                    <span className="mg-sources__note">{found?.via === "steam" && source === "all" ? "Filters search Steam's store" : SOURCE_NOTE[source]}</span>
+                  </div>
+                  {(steamish || sorts.length > 0) && (
+                    <div className="mg-filters">
+                      {steamish && (
+                        <Select size="sm" aria-label="Price" value={filters.price} onChange={(event) => filter({ price: event.target.value })}>
+                          <option value="any">Any price</option>
+                          <option value="free">Free</option>
+                          {steps.map((step) => (
+                            <option key={step.value} value={step.value}>{step.label}</option>
+                          ))}
+                          <option value="sale">On sale</option>
+                        </Select>
+                      )}
+                      {sorts.length > 0 && (
+                        <Select size="sm" aria-label="Sort by" value={filters.sort} onChange={(event) => filter({ sort: event.target.value })}>
+                          {sorts.map((sort) => (
+                            <option key={sort.value} value={sort.value}>{sort.label}</option>
+                          ))}
+                        </Select>
+                      )}
+                      {steamish && (
+                        <Select size="sm" aria-label="Platform" value={filters.mac ? "mac" : "any"} onChange={(event) => filter({ mac: event.target.value === "mac" })}>
+                          <option value="any">Any platform</option>
+                          <option value="mac">Runs on Mac</option>
+                        </Select>
+                      )}
+                      {filtered && (
+                        <button type="button" className="mg-section__action mg-filters__clear" onClick={() => filter(NO_FILTERS)}>
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {findError && <Notice tone="warning">{findError}</Notice>}
+                  {finding && !found ? (
+                    <div className="mg-grid" role="status" aria-label="Searching Steam, Nexus Mods and CurseForge">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="mg-skel" aria-hidden="true">
+                          <Skeleton shape="block" className="mg-skel__art" />
+                          <Skeleton width="70%" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : found && found.results.length === 0 ? (
+                    <p className="mg-none" role="status">
+                      {query.trim()
+                        ? `Nothing on ${SOURCES.find((s) => s.value === source)?.label ?? "Steam, Nexus Mods or CurseForge"} matches “${query.trim()}”.`
+                        : "Nothing to show here. Type a game's name to find it."}
+                    </p>
+                  ) : (
+                    found && (
+                      <ul className={`mg-grid${finding ? " mg-grid--busy" : ""}`} aria-busy={finding}>
+                        {found.results.map((game) => {
+                          const key = keyOf(game);
+                          return (
+                            <li key={key} className="mg-game mg-game--result">
+                              <button
+                                type="button"
+                                className="mg-game__open"
+                                aria-label={`Open ${game.name}`}
+                                disabled={opening !== null}
+                                onClick={() => void open(game)}
+                              >
+                                <GameTileArt name={game.name} src={game.art} alt={game.artAlt} />
+                                <span className="mg-game__body">
+                                  <span className="mg-game__name">{game.name}</span>
+                                  <span className="mg-tags">
+                                    {game.installed && <Badge tone="success">Installed</Badge>}
+                                    {game.steamAppId && <Badge>Steam</Badge>}
+                                    {game.nexus && <Badge>{game.nexusMods ? `Nexus Mods · ${game.nexusMods.toLocaleString()}` : "Nexus Mods"}</Badge>}
+                                    {game.curseforge && <Badge>CurseForge</Badge>}
+                                    {game.mac && <Badge>Mac</Badge>}
+                                  </span>
+                                </span>
+                              </button>
+                              <span className="mg-game__foot">
+                                {opening === key ? <span className="mg-get mg-get--here">Opening…</span> : getLink(game)}
+                                <PriceTag price={game.price} />
+                              </span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )
+                  )}
+                  {found && found.pageCount > 1 && (
+                    <div className="mg-pages">
+                      <Pagination page={found.page + 1} pageCount={found.pageCount} disabled={finding} onChange={findPageTo} />
+                    </div>
+                  )}
+                </section>
 
                 {notOnPC.length > 0 && (
                   <section className="mg-section" aria-labelledby="mg-console">
@@ -295,7 +453,7 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
                     <ul className="mg-grid mg-grid--quiet">
                       {notOnPC.map((game) => (
                         <li key={game.id} className="mg-game mg-game--off">
-                          <GameTileArt id={game.id} name={game.name} />
+                          <GameTileArt id={game.id} name={game.name} src={game.art} />
                           <span className="mg-game__body">
                             <span className="mg-game__name">{game.name}</span>
                             <span className="mg-game__source">{game.notOnPC}</span>
@@ -311,11 +469,10 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
             )}
 
             <p className="mg-foot">
-              Games with a full workspace (The Sims 4, GTA V, Skyrim, Fallout 4, Cyberpunk 2077 and Stardew Valley) open from Home once
-              they're found. Open any other game here to manage its mods.
+              Minecraft has its own instances; <button type="button" className="mg-foot__link" onClick={onMinecraft}>open Minecraft</button>.
               {!hasNexusKey && (
                 <>
-                  {" "}To browse Nexus Mods, add your Nexus API key in{" "}
+                  {" "}To install from Nexus Mods, add your Nexus API key in{" "}
                   <button type="button" className="mg-foot__link" onClick={onSettings}>Settings</button>.
                 </>
               )}

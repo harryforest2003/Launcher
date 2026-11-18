@@ -15,6 +15,8 @@ type Props = {
   detail: GameDetail;
   reload: () => Promise<void>;
   goLauncherSettings: () => void;
+  /** After an added game is taken off the launcher. */
+  onRemoved?: () => void;
 };
 
 /* A folder path as a one-line, read-only value: cut in the middle, the whole path as its tooltip. */
@@ -159,6 +161,7 @@ export default function GameSettings({
   detail,
   reload,
   goLauncherSettings,
+  onRemoved,
 }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [account, setAccount] = useState<
@@ -239,6 +242,61 @@ export default function GameSettings({
               )}
             </div>
           </div>
+          {detail.generic && (
+            <>
+              <div className="set-frow set-frow--path">
+                <div className="set-frow-text">
+                  <h4 className="set-row-name">Mods folder</h4>
+                  <p className="set-help">
+                    {detail.modsDir
+                      ? detail.modsChosen
+                        ? "Chosen by you: mods that don't name a folder of the game's own go here."
+                        : "The usual place for this game. Choose another if its mod loader uses one."
+                      : "Not needed for most mods: each file goes where it belongs in the game's folder (Paks, BepInEx, scripts, REFramework…). Choose one for anything else."}
+                  </p>
+                </div>
+                <div className="set-frow-ctl">
+                  <PathValue path={detail.modsDir ?? null} testId="mods-folder" />
+                  {detail.modsDir && (
+                    <Button size="sm" icon={<FolderOpen size={14} aria-hidden="true" />} onClick={() => act(() => window.gamesAPI.openFolder(detail.id, "mods"))}>
+                      Open
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={() => act(() => window.gamesAPI.chooseModsDir(detail.id))}>
+                    Choose...
+                  </Button>
+                  {detail.modsChosen && (
+                    <Button size="sm" variant="ghost" onClick={() => act(() => window.gamesAPI.forgetModsDir(detail.id))}>
+                      Use the usual one
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="set-frow set-frow--path">
+                <div className="set-frow-text">
+                  <h4 className="set-row-name">Starts with</h4>
+                  <p className="set-help">
+                    {detail.launchExe
+                      ? "Play starts this."
+                      : detail.steamAppId
+                        ? "Play starts it through Steam. Choose its app or .exe to start it another way (a mod loader's, say)."
+                        : "Choose the game's app or .exe, so Play can start it."}
+                  </p>
+                </div>
+                <div className="set-frow-ctl">
+                  <PathValue path={detail.launchExe ?? null} testId="launch-target" />
+                  <Button size="sm" onClick={() => act(() => window.gamesAPI.chooseLaunch(detail.id))}>
+                    Choose...
+                  </Button>
+                  {detail.launchExe && (
+                    <Button size="sm" variant="ghost" onClick={() => act(() => window.gamesAPI.forgetLaunch(detail.id))}>
+                      {detail.steamAppId ? "Use Steam" : "Forget it"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
           {detail.id === "sims4" && (
             <div className="set-frow set-frow--path">
               <div className="set-frow-text">
@@ -263,6 +321,32 @@ export default function GameSettings({
               {detail.name} only runs on Windows. On a Mac it can be played through CrossOver or Whisky: the launcher looks for it in their bottles, puts mods in
               the bottle's copy, and starts it through CrossOver.
             </Notice>
+          )}
+          {detail.custom && (
+            <div className="set-frow">
+              <div className="set-frow-text">
+                <h4 className="set-row-name">Remove from the launcher</h4>
+                <p className="set-help">Takes {detail.name} off the launcher. The game and the mods in its folder stay as they are.</p>
+              </div>
+              <div className="set-frow-ctl">
+                <Button
+                  size="sm"
+                  variant="danger"
+                  onClick={async () => {
+                    if (!window.confirm(`Take ${detail.name} off the launcher? Its mods stay in its folder.`)) return;
+                    setError(null);
+                    try {
+                      await window.gamesAPI.removeGame(detail.id);
+                      onRemoved?.();
+                    } catch (err) {
+                      setError(errorText(err));
+                    }
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
           )}
         </section>
       ),

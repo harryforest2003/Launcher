@@ -21,14 +21,17 @@ const DAY = 24 * 60 * 60 * 1000;
 
 const parsed = new Map();
 
+/* Which of LOOT's masterlists a game uses (VR ones share the flat game's). */
+const repoFor = (game) => game?.bethesda?.loot ?? REPOS[game?.id] ?? null;
+
 /* LOOT's masterlist for a game, downloaded at most once a day: { groups, entries, fetchedAt }. */
-async function masterlist(gameId) {
-    const repo = REPOS[gameId];
+async function masterlist(game) {
+    const repo = typeof game === "string" ? REPOS[game] ?? game : repoFor(game);
     if (!repo) throw new Error("LOOT has no masterlist for this game.");
     const dir = path.join(dataDir(), "loot");
     fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `${gameId}.yaml`);
-    const metaFile = path.join(dir, `${gameId}.json`);
+    const file = path.join(dir, `${repo}.yaml`);
+    const metaFile = path.join(dir, `${repo}.json`);
     let meta = {};
     try {
         meta = JSON.parse(fs.readFileSync(metaFile, "utf8"));
@@ -55,11 +58,11 @@ async function masterlist(gameId) {
         }
     }
     const mtime = fs.statSync(file).mtimeMs;
-    const cached = parsed.get(gameId);
+    const cached = parsed.get(repo);
     if (cached?.mtime === mtime) return cached.list;
     const doc = yaml.load(fs.readFileSync(file, "utf8"));
     const list = { groups: doc.groups ?? [], entries: (doc.plugins ?? []).filter((p) => p?.name), fetchedAt: meta.at ?? mtime };
-    parsed.set(gameId, { mtime, list });
+    parsed.set(repo, { mtime, list });
     return list;
 }
 
@@ -184,7 +187,7 @@ function keptInPlace(sequence) {
  * { order: [{ name, active }], moved: [{ name, group, after }], fetchedAt, loops }
  */
 async function plan(game, loc) {
-    const list = await masterlist(game.id);
+    const list = await masterlist(game);
     const { plugins: current } = plugins.loadOrder(game, loc);
     const data = path.join(loc.gameDir, "Data");
     const lower = (name) => name.toLowerCase();
@@ -283,4 +286,4 @@ async function plan(game, loc) {
     return { order: order.map((p) => ({ name: p.name, active: p.active })), moved, fetchedAt: list.fetchedAt, loops };
 }
 
-module.exports = { plan, masterlist, evaluate };
+module.exports = { plan, masterlist, evaluate, repoFor };

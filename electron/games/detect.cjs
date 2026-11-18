@@ -1,7 +1,8 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { GAMES, getGame } = require("./registry.cjs");
+const { allGames, getGame } = require("./registry.cjs");
+const custom = require("./custom.cjs");
 const { readSettings, writeSettings } = require("./storage.cjs");
 const { steamLibraries } = require("../mods/gameDetector.cjs");
 
@@ -97,6 +98,7 @@ function docsDir(game) {
 function locate(id) {
     const game = getGame(id);
     if (!game) throw new Error(`Unknown game "${id}".`);
+    if (game.generic) return custom.locate(game);
     const chosen = readSettings().gameDirs?.[id];
     const docs = docsDir(game);
 
@@ -112,10 +114,15 @@ function locate(id) {
 function chooseFolder(id, dir) {
     const game = getGame(id);
     if (!game) throw new Error(`Unknown game "${id}".`);
+    // A game opened from the search stays on the launcher once its folder is chosen.
+    if (game.generic && dir !== null) custom.keep(id);
     const settings = readSettings();
     settings.gameDirs ??= {};
     if (dir === null) {
         delete settings.gameDirs[id];
+    } else if (game.generic) {
+        // Any folder will do: these games have no files to check for.
+        settings.gameDirs[id] = dir;
     } else {
         dir = gameFolderOf(game, dir);
         // Picking a game's .app on a Mac, or the folder with its exe.
@@ -139,6 +146,6 @@ function chooseDocsFolder(id, dir) {
     return locate(id);
 }
 
-const locateAll = () => GAMES.map((game) => locate(game.id));
+const locateAll = () => allGames().map((game) => locate(game.id));
 
 module.exports = { locate, locateAll, chooseFolder, chooseDocsFolder, looksLikeGame };

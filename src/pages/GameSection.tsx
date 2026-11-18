@@ -7,11 +7,14 @@ import CollectionPage from "./games/CollectionPage";
 import GameMods from "./games/GameMods";
 import GameSettings from "./games/GameSettings";
 import LoadOrderPage from "./games/LoadOrderPage";
+import ModOrderPage from "./games/ModOrderPage";
 import CCBrowser from "./games/CCBrowser";
 import PlayPrompt from "./games/PlayPrompt";
-import { CircleAlert, CircleCheck, Play, TriangleAlert } from "lucide-react";
+import GameStore, { PriceText } from "./games/GameStore";
+import { useStoreInfo } from "./games/useStoreInfo";
+import { CircleAlert, CircleCheck, Download, Play, TriangleAlert } from "lucide-react";
 import { Button, Notice, ProgressBar } from "../components/ui";
-import { ART } from "./gameArt";
+import { useGameArt } from "./gameArt";
 import { timeAgo } from "./playedAgo";
 import "./dashboard/dashboard.css";
 import { errorText, installSummary } from "./games/shared";
@@ -33,6 +36,9 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
   const [openCollection, setOpenCollection] = useState<string | null>(null);
   const deeper = Boolean(openMod || openCollection);
   const [detail, setDetail] = useState<GameDetail | null>(null);
+  const heroArt = useGameArt([gameId])(gameId, detail?.art);
+  // Its Steam price, news and DLC, for Home.
+  const store = useStoreInfo(gameId);
   const [mods, setMods] = useState<GameMod[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
@@ -403,13 +409,19 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
               {page === "home" && (
                 <div className="game-overview">
                   <section className={`game-hero${detail.found ? "" : " game-hero--missing"}`} style={{ "--game-colour": detail.colour } as React.CSSProperties}>
-                    {ART[detail.id] && <img className="game-hero__backdrop" src={ART[detail.id]} alt="" aria-hidden="true" referrerPolicy="no-referrer" draggable={false} />}
+                    {heroArt && <img className="game-hero__backdrop" src={heroArt} alt="" aria-hidden="true" referrerPolicy="no-referrer" draggable={false} />}
                     <div className="game-hero__body">
                       <h1 className="game-hero__title">{detail.name}</h1>
                       <p className="game-hero__lead">{detail.tagline}</p>
                       <div className="game-hero__actions">
+                        {!detail.found && store?.steamAppId && (
+                          <Button variant="primary" size="lg" icon={<Download size={16} aria-hidden="true" />} onClick={() => void window.gamesAPI.getOnSteam(store.steamAppId!)}>
+                            Get on Steam
+                          </Button>
+                        )}
+                        {!detail.found && store?.price && <PriceText price={store.price} />}
                         {!detail.found
-                          ? <Button variant="primary" size="lg" onClick={() => go("settings")}>Choose game folder</Button>
+                          ? <Button variant={store?.steamAppId ? "secondary" : "primary"} size="lg" onClick={() => go("settings")}>{store?.steamAppId ? "Already have it?" : "Choose game folder"}</Button>
                           : detail.cantRun
                             ? <>
                                 <Button variant="primary" size="lg" onClick={() => go("discover")}>Discover mods</Button>
@@ -441,6 +453,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                     );
                   })()}
                   {detail.found && <GameChecks status={status} failed={statusFailed} detail={detail} modCount={mods.length} go={go} />}
+                  <GameStore name={detail.name} info={store} />
                 </div>
               )}
 
@@ -503,9 +516,14 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
 
               {page === "cc" && !openMod && <CCBrowser detail={detail} reload={reload} />}
 
-              {page === "loadorder" && !openMod && <LoadOrderPage detail={detail} onGetRequirements={(entries) => getRequirements(entries)} />}
+              {page === "loadorder" && !openMod &&
+                (detail.loadOrder === "plugins" ? (
+                  <LoadOrderPage detail={detail} onGetRequirements={(entries) => getRequirements(entries)} />
+                ) : (
+                  <ModOrderPage detail={detail} />
+                ))}
 
-              {page === "settings" && !openMod && <GameSettings detail={detail} reload={reload} goLauncherSettings={onLauncherSettings} />}
+              {page === "settings" && !openMod && <GameSettings detail={detail} reload={reload} goLauncherSettings={onLauncherSettings} onRemoved={onLauncher} />}
             </>
           )}
         </div>
@@ -532,7 +550,7 @@ function GameChecks({ status, failed, detail, modCount, go }: {
   const found: (Check | null)[] = !status ? [] : [
     status.crashes ? { tone: "danger", label: status.crashes === 1 ? "The game crashed since you last played" : `${status.crashes} crash reports since you last played`, page: "mods", action: "See why" } : null,
     status.clashes ? { tone: "danger", label: plural(status.clashes, "mod conflict", "mod conflicts"), page: "mods", action: "Resolve" } : null,
-    status.loadOrder ? { tone: "danger", label: "A plugin loads before something it needs", page: "loadorder", action: "Fix load order" } : null,
+    status.loadOrder ? { tone: "danger", label: detail.loadOrder === "plugins" ? "A plugin loads before something it needs" : "A mod loads before something it needs", page: "loadorder", action: "Fix load order" } : null,
     status.requirements ? { tone: "danger", label: `${plural(status.requirements, "required mod is", "required mods are")} missing`, page: "mods", action: "Get them" } : null,
     status.health ? { tone: "warning", label: plural(status.health, "mod folder problem", "mod folder problems"), page: "mods", action: "Review" } : null,
     detail.updated ? { tone: "warning", label: "The game updated since you last played: some mods may need updates too", page: "mods", action: "Check mods" } : null,

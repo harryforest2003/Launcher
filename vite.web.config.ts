@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import { createRequire } from 'node:module'
+import path from 'node:path'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -18,6 +21,72 @@ function injectMockBridge(): Plugin {
   }
 }
 
+// More Games in the preview asks the same Steam, Nexus Mods and CurseForge search as the
+// app (electron/games/custom.cjs), run by this dev server, so it pages through real games.
+// Its caches go in node_modules/.cache, away from the app's own.
+function gamesSearch(): Plugin {
+  return {
+    name: 'unity-web-preview-games',
+    configureServer(server) {
+      const root = process.cwd()
+      const data = path.join(root, 'node_modules', '.cache', 'unity-web-games')
+      fs.mkdirSync(data, { recursive: true })
+      process.env.UNITY_GAMES_DATA = data
+      const load = createRequire(path.join(root, 'package.json'))
+      // Node keeps required files across preview restarts; drop the app's own so edits show.
+      const backend = path.join(root, 'electron') + path.sep
+      const forget = () => {
+        for (const key of Object.keys(load.cache)) if (key.startsWith(backend)) delete load.cache[key]
+      }
+      forget()
+      server.watcher.on('change', (file) => {
+        if (file.startsWith(backend)) forget()
+      })
+      server.middlewares.use('/__games/find', (req, res) => {
+        const url = new URL(req.url ?? '', 'http://localhost')
+        const custom = load('./electron/games/custom.cjs')
+        const { GAMES } = load('./electron/games/registry.cjs')
+        custom
+          .search(url.searchParams.get('q') ?? '', {
+            page: Number(url.searchParams.get('page')) || 0,
+            source: url.searchParams.get('source') ?? 'all',
+            price: url.searchParams.get('price') ?? undefined,
+            sort: url.searchParams.get('sort') ?? undefined,
+            mac: url.searchParams.get('mac') === '1',
+            own: GAMES,
+          })
+          .then((result: unknown) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+          })
+          .catch((err: unknown) => {
+            res.statusCode = 502
+            res.end(JSON.stringify({ error: String(err) }))
+          })
+      })
+      // A game page's Steam news and DLC offers, from the same code as the app.
+      server.middlewares.use('/__games/store', (req, res) => {
+        const appId = new URL(req.url ?? '', 'http://localhost').searchParams.get('appid') ?? ''
+        if (!/^\d{1,10}$/.test(appId)) {
+          res.statusCode = 400
+          res.end('{}')
+          return
+        }
+        load('./electron/games/custom.cjs')
+          .storeInfo({ steamAppIds: [appId] })
+          .then((result: unknown) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+          })
+          .catch((err: unknown) => {
+            res.statusCode = 502
+            res.end(JSON.stringify({ error: String(err) }))
+          })
+      })
+    },
+  }
+}
+
 export default defineConfig(({ mode }) => {
   // CurseForge needs a key, and the browser must never see one. So when a key is
   // set, in the environment or in .env.local (which git ignores), this dev server
@@ -26,7 +95,7 @@ export default defineConfig(({ mode }) => {
     process.env.CURSEFORGE_API_KEY ?? loadEnv(mode, process.cwd(), 'CURSEFORGE_').CURSEFORGE_API_KEY
 
   return {
-    plugins: [react(), injectMockBridge()],
+    plugins: [react(), injectMockBridge(), gamesSearch()],
     cacheDir: 'node_modules/.vite-web',
     // blockbench/ is the model editor's own page, built on its own.
     optimizeDeps: { entries: ['index.html'] },

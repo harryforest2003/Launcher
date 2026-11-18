@@ -312,6 +312,16 @@ const listen = (channel) => (callback) => {
 
 expose("gamesAPI", {
     list: () => ipcRenderer.invoke("games:list"),
+    findGames: (query, page, source, filters) => ipcRenderer.invoke("games:findGames", query, page, source, filters),
+    openGame: (entry) => ipcRenderer.invoke("games:openGame", entry),
+    getOnSteam: (steamAppId) => ipcRenderer.invoke("games:getOnSteam", steamAppId),
+    storeInfo: (id) => ipcRenderer.invoke("games:storeInfo", id),
+    removeGame: (id) => ipcRenderer.invoke("games:removeGame", id),
+    chooseModsDir: (id) => ipcRenderer.invoke("games:chooseModsDir", id),
+    forgetModsDir: (id) => ipcRenderer.invoke("games:forgetModsDir", id),
+    chooseLaunch: (id) => ipcRenderer.invoke("games:chooseLaunch", id),
+    forgetLaunch: (id) => ipcRenderer.invoke("games:forgetLaunch", id),
+    art: (ids) => ipcRenderer.invoke("games:art", ids),
     status: (id) => ipcRenderer.invoke("games:status", id),
     get: (id) => ipcRenderer.invoke("games:get", id),
 
@@ -362,6 +372,9 @@ expose("gamesAPI", {
     fixLoadOrder: (id) => ipcRenderer.invoke("games:fixLoadOrder", id),
     lootPlan: (id) => ipcRenderer.invoke("games:lootPlan", id),
     lootSort: (id) => ipcRenderer.invoke("games:lootSort", id),
+    modOrder: (id) => ipcRenderer.invoke("games:modOrder", id),
+    setModOrder: (id, entries) => ipcRenderer.invoke("games:setModOrder", id, entries),
+    fixModOrder: (id) => ipcRenderer.invoke("games:fixModOrder", id),
 
     requirements: (id) => ipcRenderer.invoke("games:requirements", id),
     requirementsBefore: (id, modId) => ipcRenderer.invoke("games:requirementsBefore", id, modId),

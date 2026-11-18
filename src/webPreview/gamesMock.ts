@@ -6,6 +6,50 @@
 const now = Date.now();
 const daysAgo = (days: number) => new Date(now - days * 86400000).toISOString();
 
+// RimWorld's and Baldur's Gate 3's mod lists, for their Load Order pages.
+type MockOrderMod = { id: string; name: string; note: string | null; active: boolean; fixed: boolean; needs?: string[]; after?: string[] };
+const modOrders: Partial<Record<GameId, MockOrderMod[]>> = {
+  rimworld: [
+    { id: "ludeon.rimworld", name: "Core", note: "ludeon.rimworld", active: true, fixed: true },
+    { id: "ludeon.rimworld.royalty", name: "Royalty", note: "ludeon.rimworld.royalty", active: true, fixed: false },
+    { id: "vanillaexpanded.vfecore", name: "Vanilla Expanded Framework", note: "oskarpotocki.vanillafactionsexpanded.core", active: true, fixed: false, needs: ["brrainz.harmony"] },
+    { id: "brrainz.harmony", name: "Harmony", note: "brrainz.harmony", active: true, fixed: false },
+    { id: "jecrell.doorsexpanded", name: "Doors Expanded", note: "jecrell.doorsexpanded", active: true, fixed: false, needs: ["unlimitedhugs.hugslib"] },
+    { id: "unlimitedhugs.hugslib", name: "HugsLib", note: "unlimitedhugs.hugslib", active: false, fixed: false, needs: ["brrainz.harmony"] },
+    { id: "fluffy.modmanager", name: "Mod Manager", note: "fluffy.modmanager", active: false, fixed: false },
+  ],
+  bg3: [
+    { id: "28ac9ce2-2aba-8cda-b3b5-6e922f71b6b8", name: "GustavDev", note: "GustavDev", active: true, fixed: true },
+    { id: "f1fcd3c5-2b9d-4b9a-9a58-1a3d6a0e6e07", name: "ImprovedUI", note: "ImprovedUI", active: true, fixed: false },
+    { id: "a7f1cd52-6f3e-4c47-8c5f-26b7d9f5f2b1", name: "Mod Configuration Menu", note: "BG3MCM", active: true, fixed: false },
+    { id: "3f2c9e6b-2a44-4d4f-9b31-8e2f6e5d0a17", name: "5e Spells", note: "5eSpells", active: true, fixed: false },
+  ],
+};
+const modOrderNow = (id: GameId): GameModOrder => {
+  const list = modOrders[id] ?? [];
+  const on = list.filter((m) => m.active).map((m) => m.id);
+  const name = (other: string) => list.find((m) => m.id === other)?.name ?? other;
+  const entries = list.map(({ needs = [], after = [], ...m }) => ({
+    ...m,
+    problems: !m.active
+      ? []
+      : [
+          ...needs.filter((n) => !on.includes(n)).map((n) => `Needs ${name(n)}, which is turned off`),
+          ...needs.filter((n) => on.indexOf(n) > on.indexOf(m.id)).map((n) => `Needs ${name(n)}, which loads after it`),
+          ...after.filter((n) => on.indexOf(n) > on.indexOf(m.id)).map((n) => `Should load after ${name(n)}`),
+        ],
+  }));
+  const rim = id === "rimworld";
+  const bad = entries.some((e) => e.problems.length);
+  return {
+    kind: rim ? "rimworld" : "bg3",
+    file: rim ? "~/Library/Application Support/RimWorld/Config/ModsConfig.xml" : "~/Documents/Larian Studios/Baldur's Gate 3/PlayerProfiles/Public/modsettings.lsx",
+    toggles: rim,
+    entries,
+    fix: rim && bad ? { turnOn: list.some((m) => m.id === "unlimitedhugs.hugslib" && !m.active) ? ["HugsLib"] : [], moved: 2 } : { turnOn: [], moved: 0 },
+  };
+};
+
 // Preview-only fixture for checking launch errors without starting a real game.
 const launchListeners = new Set<(event: GameLaunchProgress) => void>();
 let failNextPreviewLaunch = new URLSearchParams(window.location.search).get("launchPreview") === "fail-once";
@@ -15,12 +59,28 @@ const launchStage = async (gameId: GameId, stage: GameLaunchProgress["stage"]) =
 };
 
 const GAMES: GameSummary[] = [
-  { id: "sims4", name: "The Sims 4", tagline: "Custom content, script mods and Gallery downloads", colour: "#22c55e", found: true, gameDir: "/Applications/The Sims 4.app", docsDir: "~/Documents/Electronic Arts/The Sims 4", source: "the EA app (sample)", chosen: false, windowsOnly: false, nexus: "thesims4", curseforge: 78062, modCount: 0, updated: null },
-  { id: "gtav", name: "Grand Theft Auto V", tagline: "Script mods, trainers and add-on vehicles", colour: "#16a34a", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "gta5", curseforge: null, modCount: 0, updated: null },
-  { id: "skyrimse", name: "Skyrim Special Edition", tagline: "Plugins, textures and SKSE mods", colour: "#94a3b8", found: true, gameDir: "C:/Steam/steamapps/common/Skyrim Special Edition", docsDir: null, source: "a CrossOver bottle (sample)", chosen: false, windowsOnly: true, nexus: "skyrimspecialedition", curseforge: null, modCount: 0, updated: null, loadOrder: true },
-  { id: "fallout4", name: "Fallout 4", tagline: "Plugins, settlements and F4SE mods", colour: "#eab308", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "fallout4", curseforge: null, modCount: 0, updated: null, loadOrder: true },
-  { id: "cyberpunk2077", name: "Cyberpunk 2077", tagline: "redscript mods, and archive mods through archive-loader", colour: "#facc15", found: true, gameDir: "~/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077", docsDir: null, source: "Steam (sample)", chosen: false, windowsOnly: false, cantRun: "Cyberpunk 2077's Mac version only runs on Apple silicon (M1 or later), and this Mac has an Intel processor.", nexus: "cyberpunk2077", curseforge: null, modCount: 0, updated: null },
-  { id: "stardew", name: "Stardew Valley", tagline: "SMAPI mods", colour: "#4ade80", found: true, gameDir: "~/Library/Application Support/Steam/steamapps/common/Stardew Valley", docsDir: null, source: "Steam (sample)", chosen: false, windowsOnly: false, nexus: "stardewvalley", curseforge: 669, modCount: 0, updated: null },
+  { id: "sims4", name: "The Sims 4", steamAppId: "1222670", tagline: "Custom content, script mods and Gallery downloads", colour: "#22c55e", found: true, gameDir: "/Applications/The Sims 4.app", docsDir: "~/Documents/Electronic Arts/The Sims 4", source: "the EA app (sample)", chosen: false, windowsOnly: false, nexus: "thesims4", curseforge: 78062, modCount: 0, updated: null },
+  { id: "gtav", name: "Grand Theft Auto V", steamAppId: "271590", tagline: "Script mods, trainers and add-on vehicles", colour: "#16a34a", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "gta5", curseforge: null, modCount: 0, updated: null },
+  { id: "skyrimse", name: "Skyrim Special Edition", steamAppId: "489830", tagline: "Plugins, textures and SKSE mods", colour: "#94a3b8", found: true, gameDir: "C:/Steam/steamapps/common/Skyrim Special Edition", docsDir: null, source: "a CrossOver bottle (sample)", chosen: false, windowsOnly: true, nexus: "skyrimspecialedition", curseforge: null, modCount: 0, updated: null, loadOrder: "plugins" },
+  { id: "fallout4", name: "Fallout 4", steamAppId: "377160", tagline: "Plugins, settlements and F4SE mods", colour: "#eab308", found: false, gameDir: null, docsDir: null, source: null, chosen: false, windowsOnly: true, nexus: "fallout4", curseforge: null, modCount: 0, updated: null, loadOrder: "plugins" },
+  { id: "cyberpunk2077", name: "Cyberpunk 2077", steamAppId: "1091500", tagline: "redscript mods, and archive mods through archive-loader", colour: "#facc15", found: true, gameDir: "~/Library/Application Support/Steam/steamapps/common/Cyberpunk 2077", docsDir: null, source: "Steam (sample)", chosen: false, windowsOnly: false, cantRun: "Cyberpunk 2077's Mac version only runs on Apple silicon (M1 or later), and this Mac has an Intel processor.", nexus: "cyberpunk2077", curseforge: null, modCount: 0, updated: null },
+  { id: "stardew", name: "Stardew Valley", steamAppId: "413150", tagline: "SMAPI mods", colour: "#4ade80", found: true, gameDir: "~/Library/Application Support/Steam/steamapps/common/Stardew Valley", docsDir: null, source: "Steam (sample)", chosen: false, windowsOnly: false, nexus: "stardewvalley", curseforge: 669, modCount: 0, updated: null },
+  // Games every launcher store sells: a mods folder and a way to start, no workspace of their own.
+  ...([
+    ["eldenring", "ELDEN RING", "#c9a227", "eldenring", null, "1245620", true],
+    ["bg3", "Baldur's Gate 3", "#7c3aed", "baldursgate3", 84299, "1086940", true],
+    ["valheim", "Valheim", "#0ea5e9", "valheim", null, "892970", false],
+    ["terraria", "Terraria", "#22c55e", "terraria", 431, "105600", true],
+    ["rimworld", "RimWorld", "#f97316", "rimworld", null, "294100", true],
+    ["witcher3", "The Witcher 3: Wild Hunt", "#dc2626", "witcher3", null, "292030", false],
+  ] as const).map(([id, name, colour, nexus, curseforge, steamAppId, found]): GameSummary => ({
+    id, name, colour, nexus, curseforge, steamAppId, found,
+    tagline: "Mods from Nexus Mods" + (curseforge ? " and CurseForge" : ""),
+    gameDir: found ? `~/Library/Application Support/Steam/steamapps/common/${name}` : null,
+    docsDir: null, source: found ? "Steam (sample)" : null, chosen: false, windowsOnly: false, modCount: 0, updated: null,
+    generic: true, modsDir: found ? `~/Library/Application Support/Steam/steamapps/common/${name}/mods` : null, modsChosen: false, launchExe: null,
+    loadOrder: id === "bg3" || id === "rimworld" ? id : null,
+  })),
 ];
 
 const mod = (key: string, name: string, extra: Partial<GameMod> = {}): GameMod => ({
@@ -207,6 +267,45 @@ let simsOptions = { mods: true, scripts: true };
 let adultOn = false;
 let simsUpdated: GameSummary["updated"] = { from: "1.111.102.1030", to: "1.112.519.1020" };
 
+/* The rest of the sample catalog gets a workspace too, as in the app: found when the sample
+   mod scan found it, otherwise waiting in More Games. */
+export function addSampleWorkspaces(catalog: CatalogGame[], detected: { id: string; installPath?: string | null; modDir?: string | null }[]) {
+  for (const game of catalog) {
+    if (game.id === "minecraft" || GAMES.some((g) => g.id === game.id)) continue;
+    const seen = detected.find((d) => d.id === game.id);
+    GAMES.push({
+      id: game.id, name: game.name, colour: "#64748b", tagline: game.notOnPC ? "Not on PC yet" : "Mods from Nexus Mods", found: Boolean(seen) && !game.notOnPC,
+      gameDir: seen?.installPath ?? null, docsDir: null, source: seen ? "Mods folder (sample)" : null, chosen: false, windowsOnly: game.windowsOnly,
+      nexus: game.providers.includes("nexus") ? game.id : null, curseforge: null, steamAppId: game.steamAppId, notOnPC: game.notOnPC,
+      modCount: 0, updated: null, generic: true, modsDir: seen?.modDir ?? null, modsChosen: false, launchExe: null,
+    });
+  }
+}
+
+const steamHeader = (appId: string) => `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/header.jpg`;
+/* What the stores return for a search: invented paging over real store names. */
+const FOUND_SAMPLE: Omit<GameFound, "existing">[] = (
+  [
+    ["ELDEN RING", "1245620", "eldenring", 9800, null],
+    ["Baldur's Gate 3", "1086940", "baldursgate3", 14000, 84299],
+    ["Valheim", "892970", "valheim", 6200, null],
+    ["Terraria", "105600", "terraria", 2100, 431],
+    ["RimWorld", "294100", "rimworld", 3600, null],
+    ["The Witcher 3: Wild Hunt", "292030", "witcher3", 7400, null],
+    ["Mount & Blade II: Bannerlord", "261550", "mountandblade2bannerlord", 8100, null],
+    ["Hollow Knight", "367520", "hollowknight", 900, null],
+    ["Dark Souls III", "374320", "darksouls3", 2800, null],
+    ["Monster Hunter: World", "582010", "monsterhunterworld", 11000, null],
+    ["Euro Truck Simulator 2", "227300", "eurotrucksimulator2", 700, null],
+    ["Kerbal Space Program", "220200", "kerbalspaceprogram", 1500, 4401],
+    ["Darkest Dungeon", "262060", "darkestdungeon", 1300, null],
+    ["Slay the Spire", "646570", "slaythespire", 600, null],
+    ["Subnautica", "264710", "subnautica", 1900, null],
+  ] as const
+).map(([name, steamAppId, nexus, nexusMods, curseforge], i) => ({
+  name, steamAppId, nexus, nexusGameId: null, nexusMods, curseforge, installed: i === 7, art: steamHeader(steamAppId), artAlt: null,
+}));
+
 const summary = (game: GameSummary): GameSummary => ({
   ...game,
   modCount: (MODS[game.id] ?? []).filter((m) => m.enabled).length,
@@ -292,7 +391,7 @@ export const gamesBridge = {
   }),
   installCollection: async (_id: GameId, _slug: string, fileIds: string[]) => ({ added: fileIds.length, external: [] }),
   status: async (id: GameId): Promise<GameStatus> =>
-    id === "sims4" ? { updates: 2, requirements: 1, loadOrder: 0, crashes: 1, health: 0, clashes: clashesFor(id).filter((c) => c.severity === "error" && !c.hidden).length } : id === "skyrimse" ? { updates: 0, requirements: 2, loadOrder: 2, crashes: 0, health: 1 } : { updates: 0, requirements: 0, loadOrder: 0, crashes: 0, health: 0 },
+    id === "sims4" ? { updates: 2, requirements: 1, loadOrder: 0, crashes: 1, health: 0, clashes: clashesFor(id).filter((c) => c.severity === "error" && !c.hidden).length } : id === "skyrimse" ? { updates: 0, requirements: 2, loadOrder: 2, crashes: 0, health: 1 } : { updates: 0, requirements: 0, loadOrder: id === "rimworld" ? modOrderNow(id).entries.filter((e) => e.problems.length).length : 0, crashes: 0, health: 0 },
   health: async (id: GameId): Promise<GameHealthIssue[]> =>
     id === "skyrimse" ? [{ id: "orphan-archives", severity: "warn", title: "1 archive won't load", detail: "The game only loads an archive when a plugin of the same name does.", files: ["Data/LonelyTextures.bsa"], fix: null }] : [],
   healthFix: async () => ({ done: "Fixed." }),
@@ -354,6 +453,71 @@ export const gamesBridge = {
   },
   chooseFolder: async () => null,
   forgetFolder: async () => null,
+  // The real search, run by the preview's dev server (vite.web.config.ts); offline, the samples.
+  findGames: async (query: string, page = 0, source: GameFindSource = "all", filters: GameFindFilters = {}): Promise<GameFindResult> => {
+    const here = (game: Omit<GameFound, "existing"> & { existing?: string | null }) =>
+      GAMES.find((g) => g.name === game.name || (g.steamAppId && g.steamAppId === game.steamAppId))?.id ??
+      (game.existing && GAMES.some((g) => g.id === game.existing) ? game.existing : null);
+    try {
+      const response = await fetch(`/__games/find?${new URLSearchParams({
+        q: query,
+        page: String(page),
+        source,
+        ...(filters.price ? { price: filters.price } : {}),
+        ...(filters.sort ? { sort: filters.sort } : {}),
+        ...(filters.mac ? { mac: "1" } : {}),
+      })}`);
+      if (!response.ok) throw new Error(String(response.status));
+      const result = (await response.json()) as GameFindResult;
+      return { ...result, results: result.results.map((game) => ({ ...game, existing: here(game) })) };
+    } catch {
+      const words = query.trim().toLowerCase();
+      const all = FOUND_SAMPLE.filter((game) => !words || game.name.toLowerCase().includes(words)).map((game) => ({ ...game, existing: here(game) }));
+      const pageCount = Math.max(1, Math.ceil(all.length / 12));
+      const at = Math.min(page, pageCount - 1);
+      return { results: all.slice(at * 12, at * 12 + 12), page: at, pageCount, total: all.length, warnings: [], source };
+    }
+  },
+  // Any game opens straight to a page of its own; it's kept once its folder is set.
+  openGame: async (entry: Partial<GameFound>) => {
+    const name = entry.name ?? "Game";
+    const already = GAMES.find((g) => g.name === name || (entry.steamAppId && g.steamAppId === entry.steamAppId));
+    if (already) return already.id;
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const id = entry.steamAppId ? `steam-${entry.steamAppId}` : entry.nexus ? `nexus-${entry.nexus}` : `custom-${slug}`;
+    GAMES.push({
+      id, name, colour: "#64748b", tagline: "Mods from Steam Workshop, Nexus Mods and CurseForge", found: Boolean(entry.installed), gameDir: null, docsDir: null,
+      source: entry.installed ? "Steam (sample)" : null, chosen: false, windowsOnly: false, nexus: entry.nexus ?? null,
+      curseforge: entry.curseforge ?? null, steamAppId: entry.steamAppId ?? null, modCount: 0, updated: null,
+      generic: true, visiting: true, modsDir: null, modsChosen: false, launchExe: null, art: entry.art ?? null,
+    });
+    return id;
+  },
+  getOnSteam: async (steamAppId: string) => {
+    window.open(`https://store.steampowered.com/app/${steamAppId}/`, "_blank", "noopener");
+  },
+  // Real news and DLC through the preview's dev server; nothing offline.
+  storeInfo: async (id: GameId): Promise<GameStoreInfo> => {
+    const appId = GAMES.find((g) => g.id === id)?.steamAppId ?? null;
+    const none: GameStoreInfo = { steamAppId: appId, price: null, news: [], dlc: [], dlcCount: 0, storeUrl: null };
+    if (!appId) return none;
+    try {
+      const response = await fetch(`/__games/store?${new URLSearchParams({ appid: appId })}`);
+      return response.ok ? ((await response.json()) as GameStoreInfo) : none;
+    } catch {
+      return none;
+    }
+  },
+  removeGame: async (id: GameId) => {
+    const at = GAMES.findIndex((g) => g.id === id && g.custom);
+    if (at >= 0) GAMES.splice(at, 1);
+  },
+  chooseModsDir: async () => null,
+  forgetModsDir: async () => null,
+  chooseLaunch: async () => null,
+  forgetLaunch: async () => null,
+  art: async (ids: GameId[]) =>
+    Object.fromEntries(ids.map((id) => [id, GAMES.find((g) => g.id === id)?.steamAppId ? steamHeader(GAMES.find((g) => g.id === id)!.steamAppId!) : null])),
   chooseDocs: async () => null,
   openFolder: async () => {},
   onLaunchProgress: (callback: (event: GameLaunchProgress) => void) => {
@@ -468,6 +632,20 @@ export const gamesBridge = {
   openSaves: async () => {},
 
   loadOrder: async (): Promise<GameLoadOrder> => orderNow(),
+  modOrder: async (id: GameId) => modOrderNow(id),
+  setModOrder: async (id: GameId, entries: { id: string; active: boolean }[]) => {
+    modOrders[id] = entries.map((e) => ({ ...modOrders[id]!.find((m) => m.id === e.id)!, active: e.active }));
+    return modOrderNow(id);
+  },
+  fixModOrder: async (id: GameId) => {
+    const before = modOrderNow(id).fix;
+    const list = modOrders[id]!.map((m) => (m.id === "unlimitedhugs.hugslib" ? { ...m, active: true } : m));
+    const harmony = list.find((m) => m.id === "brrainz.harmony")!;
+    const hugs = list.find((m) => m.id === "unlimitedhugs.hugslib")!;
+    const rest = list.filter((m) => m !== harmony && m !== hugs);
+    modOrders[id] = [rest[0], harmony, hugs, ...rest.slice(1).filter((m) => m.active), ...rest.slice(1).filter((m) => !m.active)];
+    return { ...modOrderNow(id), done: before };
+  },
   setLoadOrder: async (_id: GameId, entries: { name: string; active: boolean }[]): Promise<GameLoadOrder> => {
     skyrimOrder = entries.map((e) => ({ ...skyrimOrder.find((p) => p.name === e.name)!, active: e.active }));
     return orderNow();

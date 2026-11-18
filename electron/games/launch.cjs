@@ -56,11 +56,74 @@ const inBottle = (dir) => Boolean(dir && dir.includes(`${path.sep}drive_c${path.
 /* The first of a game's exes that's there. */
 const exeIn = (loc, names) => names.map((name) => path.join(loc.gameDir ?? "", name)).find((file) => loc.gameDir && fs.existsSync(file)) ?? null;
 
+/* A Windows game's own exe: the only one at the top of its folder that isn't an installer. */
+function onlyExe(dir) {
+    if (!dir || process.platform !== "win32") return null;
+    let names = [];
+    try {
+        names = fs.readdirSync(dir).filter((name) => /\.exe$/i.test(name) && !/^(unins|setup|install|crash|vc_?redist|dxsetup|ue4prereq|launcherpatcher)/i.test(name));
+    } catch {
+        return null;
+    }
+    return names.length === 1 ? path.join(dir, names[0]) : null;
+}
+
+/* A Mac game's app: the only one in its folder. */
+function onlyApp(dir) {
+    try {
+        const apps = fs.readdirSync(dir).filter((name) => name.endsWith(".app"));
+        return apps.length === 1 ? path.join(dir, apps[0]) : null;
+    } catch {
+        return null;
+    }
+}
+
+/*
+ * Every other game: what its Settings chose to start it with (an app, an exe, a CrossOver
+ * bottle's exe), else Steam when that's where it is, else the app or exe in its folder.
+ */
+async function launchGeneric(game, loc, open) {
+    const steamId = game.steamAppIds?.[0];
+    const target = loc.launchChosen ? loc.launchExe : null;
+    const macApp = process.platform === "darwin" && loc.gameDir && !inBottle(loc.gameDir) ? mac.appFor(game, loc) ?? onlyApp(loc.gameDir) : null;
+    const exe = onlyExe(loc.gameDir);
+    let how;
+    let start;
+    if (target) {
+        how = path.basename(target);
+        if (process.platform === "darwin" && target.endsWith(".app")) start = () => startDetached("open", ["-a", target]);
+        else if (inBottle(target)) start = () => startInBottle(target);
+        else if (process.platform === "darwin" && /\.(exe|bat|cmd)$/i.test(target)) {
+            throw new Error("A Windows game needs CrossOver or Whisky on a Mac: choose its .exe inside a CrossOver bottle, or start it from there.");
+        } else start = () => startDetached(target, [], path.dirname(target));
+    } else if (steamId && loc.source === "Steam" && !inBottle(loc.gameDir)) {
+        how = "Steam";
+        start = () => open(`steam://rungameid/${steamId}`);
+    } else if (macApp) {
+        const problem = mac.runProblem(game, loc);
+        if (problem) throw new Error(problem);
+        how = path.basename(macApp);
+        start = () => startDetached("open", ["-a", macApp]);
+    } else if (exe) {
+        how = path.basename(exe);
+        start = () => startDetached(exe, [], path.dirname(exe));
+    } else if (steamId && loc.source !== "Mods folder") {
+        how = "Steam";
+        start = () => open(`steam://rungameid/${steamId}`);
+    } else {
+        throw new Error(`Choose how ${game.name} starts in its Settings (Starts with), or start it as you usually do.`);
+    }
+    await start();
+    protect.rememberPlay(game, loc);
+    return { how, safe: false };
+}
+
 /*
  * Starts the game. open(url) opens a link (Steam's), so this works without Electron in tests.
  * -> { how } describing what was started.
  */
 async function launch(game, loc, { safe = false, open }) {
+    if (game.generic) return launchGeneric(game, loc, open);
     const steamId = () => {
         // GTA V Enhanced has its own Steam app.
         if (game.id === "gtav" && loc.gameDir && fs.existsSync(path.join(loc.gameDir, "GTA5_Enhanced.exe"))) return "3240220";

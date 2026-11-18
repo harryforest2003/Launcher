@@ -455,7 +455,199 @@ function smapi(files, ctx) {
     return result;
 }
 
-const PLANNERS = { sims4, gtav, bethesda, cyberpunk, smapi };
+/* ---------------- every other game ---------------- */
+
+// Folders a mod loader puts beside the game's program, so a download holding one belongs in
+// the game's own folder even before the loader is there (installing BepInEx itself, say).
+const LOADER_ROOTS = new Set(["bepinex", "melonloader", "userlibs", "reframework", "ue4ss"]);
+// DLLs a game loads by name from beside its program: mod loaders and ASI loaders.
+const PROXY_DLLS = new Set(["dinput8.dll", "dwmapi.dll", "xinput1_3.dll", "version.dll", "winhttp.dll", "winmm.dll", "dxgi.dll", "d3d9.dll", "d3d11.dll", "dsound.dll", "xinput1_4.dll", "vorbisfile.dll"]);
+const PAK_PARTS = new Set([".pak", ".utoc", ".ucas", ".sig"]);
+
+/*
+ * What the game's folder holds that tells where mods go: an Unreal game's Paks, a Unity
+ * game's BepInEx or MelonLoader, RE Engine's REFramework, a Source game's custom folder, an
+ * ASI loader's scripts folder. Read once per install from the game's own folder.
+ */
+function shapeOf(ctx) {
+    const has = (rel) => Boolean(ctx.gameHas?.(rel));
+    const list = (rel) => (ctx.listGame ? ctx.listGame(rel) : []);
+    const root = list("");
+    const dirs = root.filter((entry) => entry.dir).map((entry) => entry.name);
+    const project = dirs.find((dir) => has(`${dir}/Content/Paks`)) ?? null;
+    const win64 = project && has(`${project}/Binaries/Win64`) ? `${project}/Binaries/Win64` : null;
+    // An Unreal game's real program is in Binaries/Win64; the one at the top only starts it.
+    const exeDir = win64 && list(win64).some((entry) => !entry.dir && /\.exe$/i.test(entry.name)) ? win64 : "";
+    const paks = project ? `${project}/Content/Paks` : null;
+    const ue4ss = win64 ? [`${win64}/ue4ss/Mods`, `${win64}/Mods`].find(has) ?? null : null;
+    const bepinex = ["BepInEx/plugins", exeDir && `${exeDir}/BepInEx/plugins`].filter(Boolean).find(has) ?? null;
+    const melon = has("MelonLoader") ? "Mods" : null;
+    const autorun = has("reframework/autorun") ? "reframework/autorun" : null;
+    const source = dirs.find((dir) => has(`${dir}/gameinfo.txt`)) ?? null;
+    const scripts = has("scripts") ? "scripts" : null;
+    const data = has("Data") ? "Data" : null;
+    // Folder names a download may carry partway down its paths, and where each is in this game.
+    const deep = new Map();
+    if (paks) {
+        deep.set("paks", paks);
+        deep.set("~mods", `${paks}/~mods`);
+        deep.set("logicmods", `${paks}/LogicMods`);
+    }
+    if (win64) deep.set("win64", win64);
+    if (autorun) deep.set("autorun", autorun);
+    return { has, dirs: new Set(dirs.map(lower)), exeDir, paks, ue4ss, bepinex, melon, autorun, source, scripts, data, deep };
+}
+
+/*
+ * The folder above one the game's folder has ("BepInEx", "Content", "scripts"...), taken from
+ * the first few levels of each path; the one most files agree on wins. -> { prefix, into }:
+ * prefix "" is the download's top; into is where it goes in the game, "" for its folder, or
+ * beside the program for a new loader (UE4SS goes in an Unreal game's Binaries/Win64).
+ * null when nothing in the download looks like part of the game's folder.
+ */
+function gameRootIn(files, shape) {
+    const votes = new Map();
+    for (const file of files) {
+        const parts = file.split("/").slice(0, -1);
+        const at = parts.slice(0, 3).findIndex((part) => LOADER_ROOTS.has(lower(part)) || shape.dirs.has(lower(part)));
+        if (at < 0) continue;
+        const prefix = parts.slice(0, at).join("/");
+        const into = shape.dirs.has(lower(parts[at])) ? "" : shape.exeDir;
+        const key = `${prefix}\n${into}`;
+        votes.set(key, (votes.get(key) ?? 0) + 1);
+    }
+    let best = null;
+    for (const [key, count] of votes) if (best === null || count > votes.get(best)) best = key;
+    if (best === null) return null;
+    const [prefix, into] = best.split("\n");
+    return { prefix, into };
+}
+
+/* Where one loose file goes in the game's folder by what it is, or null to leave it to the mods folder. */
+function routeByKind(file, shape, modFolder, loose) {
+    const kind = ext(file);
+    const name = base(file);
+    const parts = file.split("/");
+    // A UE4SS mod ("<Name>/Scripts/main.lua") goes in whole, its enabled.txt too.
+    if (shape.ue4ss) {
+        const root = loose.ue4ssRoots.find((dir) => under(file, dir) !== null);
+        if (root !== undefined) return `${shape.ue4ss}/${safeFolder(root ? base(root) : modFolder)}/${under(file, root)}`;
+    }
+    // An .asi's own settings file goes beside it.
+    if (kind === ".ini" && loose.asiStems.has(lower(path.posix.basename(name, kind)))) {
+        return shape.scripts ? `${shape.scripts}/${name}` : shape.exeDir ? `${shape.exeDir}/${name}` : name;
+    }
+    // A folder partway down that this game has ("Paks", "~mods", "Win64"...): from there down.
+    for (let i = parts.length - 2; i >= 0; i--) {
+        const target = shape.deep.get(lower(parts[i]));
+        if (target) return `${target}/${parts.slice(i + 1).join("/")}`;
+    }
+    if (PAK_PARTS.has(kind) && shape.paks) return `${shape.paks}/~mods/${name}`;
+    if (kind === ".dll" && PROXY_DLLS.has(lower(name))) return shape.exeDir ? `${shape.exeDir}/${name}` : name;
+    if (kind === ".asi") return shape.scripts ? `${shape.scripts}/${name}` : shape.exeDir ? `${shape.exeDir}/${name}` : name;
+    if (kind === ".lua" && shape.autorun) return `${shape.autorun}/${name}`;
+    if (kind === ".lua" && shape.ue4ss) return `${shape.ue4ss}/${modFolder}/Scripts/${name}`;
+    if (kind === ".vpk" && shape.source) return `${shape.source}/custom/${name}`;
+    if ([".esp", ".esm", ".esl", ".bsa", ".ba2"].includes(kind) && shape.data) return `${shape.data}/${name}`;
+    return null;
+}
+
+/*
+ * Every other game. Where each file goes is worked out from the download and the game's own
+ * folder, so a game with mods in several places (an ASI loader's scripts, Unreal's Paks,
+ * BepInEx's plugins) needs nothing set first:
+ *
+ *  1. A download that carries the mods folder chosen in Settings goes in from inside it.
+ *  2. One shaped like the game's folder (BepInEx/..., Content/Paks/..., scripts/...) goes into
+ *     the game's folder as it is, with anything beside those folders.
+ *  3. Loose files go where their kind belongs in this game: .pak into Paks/~mods, a BepInEx
+ *     plugin into BepInEx/plugins, .asi beside the program or in scripts, .lua into
+ *     REFramework or UE4SS, .vpk into a Source game's custom folder.
+ *  4. The rest goes into the mods folder: one wrapped in a single folder keeps that folder,
+ *     unless it's just one file.
+ * A mods folder chosen in Settings takes loose files over step 3.
+ */
+function generic(files, ctx) {
+    const result = { placements: [], skipped: [], notes: [], plugins: [] };
+    const wanted = files.filter((file) => !isDoc(file));
+    const use = wanted.length ? wanted : files;
+    const folderName = ctx.modsDir ? lower(path.basename(ctx.modsDir)) : null;
+    const inside = (file) => {
+        const parts = file.split("/");
+        const at = folderName ? parts.slice(0, -1).findIndex((part) => lower(part) === folderName) : -1;
+        return at >= 0 ? parts.slice(at + 1).join("/") : null;
+    };
+    if (use.some((file) => inside(file) !== null)) {
+        for (const file of use) {
+            const rel = inside(file);
+            if (rel !== null) result.placements.push({ from: file, base: "mods", to: rel });
+            else result.skipped.push({ file, reason: `outside the ${path.basename(ctx.modsDir)} folder in this download` });
+        }
+        return result;
+    }
+
+    let loose = use;
+    const modFolder = safeFolder(ctx.modName || "Mod");
+    if (ctx.hasGameDir) {
+        const shape = shapeOf(ctx);
+        const shaped = gameRootIn(use, shape);
+        if (shaped) {
+            loose = [];
+            for (const file of use) {
+                const rel = under(file, shaped.prefix);
+                if (rel === null) loose.push(file);
+                // Thunderstore's package details, for mod managers, not the game.
+                else if (lower(rel) === "manifest.json") result.skipped.push({ file, reason: "package details for mod managers" });
+                else result.placements.push({ from: file, base: "game", to: shaped.into ? `${shaped.into}/${rel}` : rel });
+            }
+        }
+        if (!ctx.modsChosen) {
+            const rest = [];
+            // A BepInEx or MelonLoader plugin keeps what came with it (its configs, assets) beside it.
+            const plugin = loose.some((file) => ext(file) === ".dll" && !PROXY_DLLS.has(lower(base(file))));
+            const pluginDir = plugin ? (shape.bepinex ? `${shape.bepinex}/${modFolder}` : shape.melon) : null;
+            const top = wrapper(loose);
+            const found = {
+                // Folders holding "Scripts/*.lua": UE4SS mods.
+                ue4ssRoots: [...new Set(loose.map((file) => file.match(/^(?:(.*)\/)?scripts\/[^/]+\.lua$/i)).filter(Boolean).map((m) => m[1] ?? ""))],
+                asiStems: new Set(loose.filter((file) => ext(file) === ".asi").map((file) => lower(path.posix.basename(file, path.posix.extname(file))))),
+            };
+            for (const file of loose) {
+                const to = routeByKind(file, shape, modFolder, found);
+                if (to) result.placements.push({ from: file, base: "game", to });
+                else if (pluginDir) result.placements.push({ from: file, base: "game", to: `${pluginDir}/${under(file, top) ?? base(file)}` });
+                else rest.push(file);
+            }
+            loose = rest;
+            if (result.placements.some((p) => p.to.startsWith(`${shape.ue4ss}/`)) && shape.ue4ss) {
+                result.notes.push("UE4SS mods load once they're listed in ue4ss's mods.txt (or have an enabled.txt).");
+            }
+            if (result.placements.some((p) => ext(p.to) === ".asi") && !result.placements.some((p) => PROXY_DLLS.has(lower(base(p.to)))) && !shape.has(shape.exeDir ? `${shape.exeDir}/dinput8.dll` : "dinput8.dll")) {
+                result.notes.push(".asi mods need an ASI Loader (dinput8.dll) beside the game's program.");
+            }
+        }
+    }
+
+    if (loose.length) {
+        if (!ctx.modsDir) {
+            for (const file of loose) result.skipped.push({ file, reason: "no place in the game's folder for it; choose a Mods folder in this game's Settings" });
+        } else {
+            const prefix = wrapper(loose);
+            if (prefix) {
+                const rest = loose.map((file) => ({ file, rel: under(file, prefix) }));
+                const single = rest.length === 1 && !rest[0].rel.includes("/");
+                const folder = safeFolder(base(prefix));
+                for (const { file, rel } of rest) result.placements.push({ from: file, base: "mods", to: single ? rel : `${folder}/${rel}` });
+            } else {
+                for (const file of loose) result.placements.push({ from: file, base: "mods", to: file });
+            }
+        }
+    }
+    if (!result.placements.length && !result.skipped.length) result.notes.push("There was nothing in this download to put in the game.");
+    return result;
+}
+
+const PLANNERS = { sims4, gtav, bethesda, cyberpunk, smapi, generic };
 
 /* Where a mod's files go. ctx: { game, modName, dir (unpacked folder), gameHas(rel) } */
 function plan(game, files, ctx) {

@@ -146,6 +146,9 @@ const GAMES = [
     },
 ];
 
-const getGame = (id) => GAMES.find((game) => game.id === id) ?? null;
+/* The six above, then every other game (More Games' and the ones added), which share one set of rules. */
+const others = () => require("./custom.cjs");
+const getGame = (id) => GAMES.find((game) => game.id === id) ?? others().find(id);
+const allGames = () => [...GAMES, ...others().all()];
 
-module.exports = { GAMES, getGame };
+module.exports = { GAMES, getGame, allGames };

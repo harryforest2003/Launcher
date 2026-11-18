@@ -1,7 +1,8 @@
 export {};
 
 declare global {
-    type GameId = "sims4" | "gtav" | "skyrimse" | "fallout4" | "cyberpunk2077" | "stardew";
+    /** The six with rules of their own ("sims4", "gtav", "skyrimse", "fallout4", "cyberpunk2077", "stardew"), More Games' ("eldenring"...) and added ones ("custom-..."). */
+    type GameId = string;
 
     /** What a pending Play is doing, sent while it runs. */
     type GameLaunchProgress = { gameId: GameId; stage: "checking" | "backup" | "starting" };
@@ -35,9 +36,70 @@ declare global {
         lastPlayed?: string | null;
         /* Set when the game has updated since it was last played from here. */
         updated: { from: string | null; to: string | null } | null;
-        /* Skyrim and Fallout 4: plugins load in an order that matters. */
-        loadOrder?: boolean;
+        /**
+         * How the game's mods load in an order that matters, if they do: Bethesda plugins
+         * (plugins.txt), Cyberpunk's modlist.txt, RimWorld's mod list or Baldur's Gate 3's.
+         */
+        loadOrder?: GameOrderKind | null;
+        /** Every other game: mods go in one folder, chosen in its Settings. */
+        generic?: boolean;
+        /** Kept from a search, so it can be taken off again. */
+        custom?: boolean;
+        /** Found on this computer (Steam, Epic) with no page of its own: built from what's here. */
+        detected?: boolean;
+        /** Opened from the search and not kept yet. */
+        visiting?: boolean;
+        modsDir?: string | null;
+        modsChosen?: boolean;
+        /** What its Settings chose to start it with. */
+        launchExe?: string | null;
+        steamAppId?: string | null;
+        /** A game that isn't out on PC (GTA 6): why. */
+        notOnPC?: string | null;
+        art?: string | null;
     };
+
+    /* A game's price on Steam, in the player's own currency. */
+    type GamePrice = { text: string; cents: number | null; was: string | null; discount: number; free: boolean };
+
+    /* A game from Steam's store, the Steam games here, Nexus Mods and CurseForge. */
+    type GameFound = {
+        name: string;
+        steamAppId: string | null;
+        nexus: string | null;
+        nexusGameId: number | null;
+        nexusMods: number;
+        curseforge: number | null;
+        installed: boolean;
+        art: string | null;
+        artAlt: string | null;
+        /** Its price on Steam; null when Steam doesn't sell it (or it isn't out). */
+        price?: GamePrice | null;
+        /** Whether Steam has it for Mac (null: not known). */
+        mac?: boolean | null;
+        /** The launcher's own game for it, when it already has one. */
+        existing: string | null;
+    };
+    type GameFindSource = "all" | "steam" | "nexus" | "curseforge";
+    /** price: "any", "free", "sale" or one of priceSteps' values; sort: popular, new, rated, price-asc, price-desc, or mods/name on a mod site's list. */
+    type GameFindFilters = { price?: string; sort?: string; mac?: boolean };
+    type GameFindResult = {
+        results: GameFound[];
+        page: number;
+        pageCount: number;
+        total: number;
+        warnings: string[];
+        source?: GameFindSource;
+        /** "steam" when a filter took the search to Steam's store. */
+        via?: GameFindSource;
+        /** Steam's price steps in the player's currency ("Under £4.00"). */
+        priceSteps?: { value: string; label: string }[];
+    };
+
+    type GameNews = { id: string; title: string; date: string; summary: string; url: string };
+    type GameDlc = { id: string; name: string; art: string | null; price: GamePrice | null; mac: boolean; released: string | null; url: string };
+    /** A game's news and add-ons from Steam (empty without a Steam app number). */
+    type GameStoreInfo = { steamAppId: string | null; price: GamePrice | null; news: GameNews[]; dlc: GameDlc[]; dlcCount: number; storeUrl: string | null };
 
     type GameStatus = { updates: number; requirements: number; loadOrder: number; crashes: number; health: number; clashes?: number };
 
@@ -157,6 +219,21 @@ declare global {
     /* A plugin LOOT's rules move: its LOOT group, and the plugins its rules say it loads after. */
     type GameLootMove = { name: string; group: string; after: string[] };
     type GameLoadOrder = { fixed: string[]; plugins: GamePlugin[]; fix: GameLoadOrderFix };
+
+    type GameOrderKind = "plugins" | "modlist" | "rimworld" | "bg3";
+    /** One mod in a game's mod order. fixed: stays where it is (the game's own). */
+    type GameOrderEntry = { id: string; name: string; note: string | null; active: boolean; fixed: boolean; problems: string[] };
+    /**
+     * The order for games other than Bethesda's. file: null until the game has made it.
+     * toggles: mods can be turned on and off here. fix: what Fix would turn on and how many it'd move.
+     */
+    type GameModOrder = {
+        kind: Exclude<GameOrderKind, "plugins">;
+        file: string | null;
+        toggles: boolean;
+        entries: GameOrderEntry[];
+        fix: { turnOn: string[]; moved: number };
+    };
 
     type GameRequirement = {
         key: string;
@@ -308,6 +385,21 @@ declare global {
     interface Window {
         gamesAPI: {
             list: () => Promise<GameSummary[]>;
+            /** source: every game with mods (all), Steam's whole store, or one mod site's list. */
+            findGames: (query: string, page?: number, source?: GameFindSource, filters?: GameFindFilters) => Promise<GameFindResult>;
+            /** Opens any game's page, built on the spot when it has none. -> the game's id. */
+            openGame: (entry: Partial<GameFound>) => Promise<string>;
+            /** Opens a game's Steam store page (in Steam when it's installed). */
+            getOnSteam: (steamAppId: string) => Promise<void>;
+            /** Steam news and add-ons (with today's prices) for a game. */
+            storeInfo: (id: GameId) => Promise<GameStoreInfo>;
+            removeGame: (id: GameId) => Promise<void>;
+            chooseModsDir: (id: GameId) => Promise<unknown>;
+            forgetModsDir: (id: GameId) => Promise<unknown>;
+            chooseLaunch: (id: GameId) => Promise<unknown>;
+            forgetLaunch: (id: GameId) => Promise<unknown>;
+            /** Pictures for games without one built in: { id: url | null }. */
+            art: (ids: GameId[]) => Promise<Record<string, string | null>>;
             /* For Home: what needs looking at. */
             status: (id: GameId) => Promise<GameStatus>;
             get: (id: GameId) => Promise<GameDetail>;
@@ -323,7 +415,7 @@ declare global {
             chooseFolder: (id: GameId) => Promise<unknown>;
             forgetFolder: (id: GameId) => Promise<unknown>;
             chooseDocs: (id: GameId) => Promise<unknown>;
-            openFolder: (id: GameId, which: "game" | "docs") => Promise<void>;
+            openFolder: (id: GameId, which: "game" | "docs" | "mods") => Promise<void>;
 
             onLaunchProgress?: (callback: (progress: GameLaunchProgress) => void) => () => void;
             launch: (id: GameId, options?: { safe?: boolean }) => Promise<{ how: string; safe: boolean; backedUp: GameSaveBackup | null; backupError: string | null }>;
@@ -366,6 +458,9 @@ declare global {
             lootPlan: (id: GameId) => Promise<{ moved: GameLootMove[]; fetchedAt: number; loops: string[] }>;
             /* previous: the order before, for Undo. */
             lootSort: (id: GameId) => Promise<GameLoadOrder & { previous: { name: string; active: boolean }[]; moved: GameLootMove[] }>;
+            modOrder: (id: GameId) => Promise<GameModOrder>;
+            setModOrder: (id: GameId, entries: { id: string; active: boolean }[]) => Promise<GameModOrder>;
+            fixModOrder: (id: GameId) => Promise<GameModOrder & { done?: { turnOn: string[]; moved: number } }>;
 
             requirements: (id: GameId) => Promise<GameRequirement[]>;
             requirementsBefore: (id: GameId, modId: string) => Promise<GameRequirement[]>;

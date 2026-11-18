@@ -18,6 +18,8 @@ const GET_ROUTES = [
   { path: /^\/v1\/mods\/\d+$/, cache: 600 },
   { path: /^\/v1\/mods\/\d+\/files$/, cache: 600 },
   { path: /^\/v1\/mods\/\d+\/description$/, cache: 3600 },
+  // Every game CurseForge hosts mods for, for "Add a game".
+  { path: /^\/v1\/games$/, cache: 86400 },
 ];
 
 // Batch lookups, used when installing a modpack. Each takes one list of numbers.

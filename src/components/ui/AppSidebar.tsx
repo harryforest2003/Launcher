@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import logoMark from "../../assets/logo-mark.png";
 import AccountSwitcher from "../AccountSwitcher";
-import { ART } from "../../pages/gameArt";
+import { useGameArt } from "../../pages/gameArt";
 import Monogram from "./Monogram";
 import { useDownloads } from "./downloadsContext";
 import type { GamePageKey, McPage, PageNav } from "./shellContext";
@@ -67,7 +67,7 @@ const gameNames = new Map<string, string>();
 /* A game's picture, cropped square; its initials if there's no picture or it can't load. */
 function GameThumb({ id, name, large = false }: { id: string | null; name: string; large?: boolean }) {
   const [failed, setFailed] = useState(false);
-  const src = id ? ART[id] : undefined;
+  const src = useGameArt([id])(id);
   return (
     <span className={`ui-shell__thumb${large ? " ui-shell__thumb--lg" : ""}`} aria-hidden="true">
       {src && !failed ? (
@@ -106,9 +106,10 @@ function useFoundGames(refresh: unknown) {
 
 export default function AppSidebar({ current, nav, openGame, collapsed, onToggle, go }: Props) {
   const downloads = useDownloads();
-  const allGames = useFoundGames(current === "home");
+  // Read again on every page change, so a game added in More Games shows up at once.
+  const allGames = useFoundGames(`${current}:${openGame ?? ""}`);
+  // Only what's on this computer: the rest wait in More Games until they're installed.
   const games = allGames.filter((game) => game.found);
-  const others = allGames.filter((game) => !game.found);
   const scroller = useRef<HTMLDivElement>(null);
   const [mark, setMark] = useState<{ top: number; height: number } | null>(null);
   const bar = useRef<HTMLSpanElement>(null);
@@ -232,14 +233,6 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
                   game: true,
                   meta: game.modCount ? `${game.modCount} ${game.modCount === 1 ? "mod" : "mods"}` : "No mods yet",
                 }),
-              )}
-              {others.length > 0 && (
-                <div className="ui-shell__heading">
-                  <span className="ui-shell__label">Not on this computer</span>
-                </div>
-              )}
-              {others.map((game) =>
-                item(`play:${game.id}`, game.name, <GameThumb key={game.id} id={game.id} name={game.name} />, () => go({ kind: "game", id: game.id }), { game: true, dim: true }),
               )}
             </>
           )}

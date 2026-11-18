@@ -19,7 +19,7 @@ import PlayStats from "./dashboard/PlayStats";
 import { defaultRange, type Range } from "./dashboard/range";
 import { useDashboard } from "./dashboard/useDashboard";
 import { useInstances } from "./dashboard/useInstances";
-import { ART } from "./gameArt";
+import { artOf, useGameArt } from "./gameArt";
 import { initials, timeAgo } from "./playedAgo";
 import { useScrollMemory } from "./useScrollMemory";
 import "./dashboard/dashboard.css";
@@ -118,7 +118,7 @@ function listNames(names: string[]) {
 
 function GameArt({ id, name }: { id: string; name: string }) {
   const [failed, setFailed] = useState(false);
-  const src = ART[id];
+  const src = useGameArt([id])(id);
   return (
     <span className="db-game__art" aria-hidden="true">
       {src && !failed ? (
@@ -250,7 +250,7 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
   // A few covers of games that aren't here, for the More games card.
   const FEATURED = ["rdr2", "eldenring", "witcher3", "hogwartslegacy", "gtav", "starfield", "bg3", "palworld"];
   const covers = [...FEATURED.filter((id) => notHere.includes(id)), ...notHere.filter((id) => !FEATURED.includes(id))]
-    .filter((id) => ART[id])
+    .filter((id) => artOf(id))
     .slice(0, 4);
   const nameOf = (id: string) => catalog.find((g) => g.id === id)?.name ?? games.find((g) => g.id === id)?.name ?? id;
   const previewNames = ["hytale", ...FEATURED, ...notHere].filter((id, i, all) => notHere.includes(id) && all.indexOf(id) === i).slice(0, 2).map(nameOf);
@@ -402,7 +402,7 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                     <li>
                       <button type="button" className="db-game db-more" data-testid="home-more-games" onClick={onModManager}>
                         <span className="db-game__art db-more__art" aria-hidden="true">
-                          {covers.map((id) => <img key={id} src={ART[id]} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" draggable={false} />)}
+                          {covers.map((id) => <img key={id} src={artOf(id)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" draggable={false} />)}
                           <span className="db-more__plus"><Plus size={22} /></span>
                         </span>
                         <span className="db-game__text">

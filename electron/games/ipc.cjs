@@ -1,8 +1,11 @@
 const { BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { assertGranted, grantPaths, openExternalChecked, openExternalSafely } = require("../security.cjs");
-const { GAMES, getGame } = require("./registry.cjs");
+const fs = require("fs");
+const { GAMES, getGame, allGames } = require("./registry.cjs");
+const custom = require("./custom.cjs");
 const { readSettings, writeSettings } = require("./storage.cjs");
 const detect = require("./detect.cjs");
+const { steamRoots } = require("../mods/gameDetector.cjs");
 const mac = require("./mac.cjs");
 const gameAccount = require("./account.cjs");
 const store = require("./store.cjs");
@@ -18,6 +21,7 @@ const requirements = require("./requirements.cjs");
 const sets = require("./sets.cjs");
 const finder = require("./finder.cjs");
 const loot = require("./loot.cjs");
+const modorder = require("./modorder.cjs");
 const queue = require("./queue.cjs");
 const crashes = require("./crashes.cjs");
 const health = require("./health.cjs");
@@ -76,9 +80,24 @@ function summary(game) {
         curseforge: game.curseforge ?? null,
         modCount: mods,
         updated: protect.updatedSince(game, loc),
-        loadOrder: Boolean(game.bethesda),
+        loadOrder: modorder.kindOf(game, loc),
+        generic: Boolean(game.generic),
+        custom: Boolean(game.custom),
+        modsDir: loc.modsDir ?? null,
+        modsChosen: Boolean(loc.modsChosen),
+        launchExe: loc.launchChosen ? loc.launchExe : null,
+        steamAppId: game.steamAppIds?.[0] ?? null,
+        notOnPC: game.notOnPC ?? null,
+        art: game.art ?? null,
     };
 }
+
+/* A game that runs on the shared rules (Settings choose its mods folder and how it starts). */
+const needGeneric = (id) => {
+    const game = need(id);
+    if (!game.generic) throw new Error(`${game.name} has its own install rules.`);
+    return game;
+};
 
 /*
  * After an install, what the mod needs that isn't there yet, sure enough to fetch
@@ -153,7 +172,7 @@ function remember(gameId, entries) {
 async function handleNxm(link) {
     const parsed = nexus.parseNxm(link);
     if (!parsed) return;
-    const game = GAMES.find((g) => g.nexus === parsed.domain);
+    const game = allGames().find((g) => g.nexus === parsed.domain);
     if (!game) {
         send("games:nxm", { status: "failed", error: `Unity Launcher doesn't have a section for that game (${parsed.domain}) yet.` });
         return;
@@ -267,7 +286,74 @@ function registerGamesIpc() {
     ipcMain.handle("games:health", (_e, id) => health.check(need(id).id));
     ipcMain.handle("games:healthFix", (_e, id, issueId) => health.fix(need(id).id, String(issueId)));
 
-    ipcMain.handle("games:list", () => GAMES.map(summary));
+    ipcMain.handle("games:list", () => allGames().map(summary));
+
+    // Every game on Steam, Nexus Mods and CurseForge: finding one, opening its page, taking a kept one off.
+    ipcMain.handle("games:findGames", (_e, query, page, source, filters) => {
+        const f = filters && typeof filters === "object" ? filters : {};
+        return custom.search(String(query ?? ""), {
+            page: Number(page) || 0,
+            own: GAMES,
+            source: typeof source === "string" ? source : "all",
+            price: typeof f.price === "string" ? f.price : "any",
+            sort: typeof f.sort === "string" ? f.sort : "popular",
+            mac: f.mac === true,
+        });
+    });
+    ipcMain.handle("games:openGame", (_e, entry) => custom.open(entry && typeof entry === "object" ? entry : {}, GAMES));
+    // A game's store page: in Steam when it's on this computer, else on the web.
+    ipcMain.handle("games:getOnSteam", (_e, appId) => {
+        const id = String(appId ?? "");
+        if (!/^\d{1,10}$/.test(id)) throw new Error("That isn't a game on Steam.");
+        const hasSteam = steamRoots().some((root) => fs.existsSync(root));
+        if (hasSteam && openExternalSafely(`steam://store/${id}`, { steam: true })) return;
+        if (!openExternalSafely(`https://store.steampowered.com/app/${id}/`)) throw new Error("Couldn't open Steam's store.");
+    });
+    // News and add-ons (with today's prices) for a game sold on Steam.
+    ipcMain.handle("games:storeInfo", (_e, id) => custom.storeInfo(need(id)));
+    ipcMain.handle("games:removeGame", (_e, id) => custom.remove(needGeneric(id).id));
+
+    // Where a game's mods go, and what starts it.
+    ipcMain.handle("games:chooseModsDir", async (event, id) => {
+        const game = needGeneric(id);
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: `Where ${game.name}'s mods go`,
+            message: process.platform === "darwin" ? `Choose the folder ${game.name} loads its mods from.` : undefined,
+            properties: ["openDirectory", "createDirectory"],
+        });
+        if (picked.canceled || !picked.filePaths.length) return null;
+        custom.chooseModsDir(game.id, picked.filePaths[0]);
+        return detect.locate(game.id);
+    });
+    ipcMain.handle("games:forgetModsDir", (_e, id) => {
+        custom.chooseModsDir(needGeneric(id).id, null);
+        return detect.locate(id);
+    });
+    ipcMain.handle("games:chooseLaunch", async (event, id) => {
+        const game = needGeneric(id);
+        const onMac = process.platform === "darwin";
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: `What starts ${game.name}?`,
+            message: onMac ? `Choose ${game.name}'s app, or its .exe in a CrossOver bottle.` : undefined,
+            defaultPath: detect.locate(game.id).gameDir ?? undefined,
+            properties: ["openFile"],
+            filters: onMac ? [{ name: "Apps and games", extensions: ["app", "exe", "sh", "command"] }, { name: "All files", extensions: ["*"] }] : [{ name: "Programs", extensions: ["exe", "bat", "cmd", "lnk"] }, { name: "All files", extensions: ["*"] }],
+        });
+        if (picked.canceled || !picked.filePaths.length) return null;
+        custom.chooseLaunch(game.id, picked.filePaths[0]);
+        return detect.locate(game.id);
+    });
+    ipcMain.handle("games:forgetLaunch", (_e, id) => {
+        custom.chooseLaunch(needGeneric(id).id, null);
+        return detect.locate(id);
+    });
+
+    // Pictures for games without one built in: from Steam's store, the Xbox store or Nexus Mods.
+    ipcMain.handle("games:art", async (_e, ids) => {
+        const wanted = (Array.isArray(ids) ? ids : []).slice(0, 80).map((id) => getGame(String(id))).filter((game) => game?.generic);
+        const found = await Promise.all(wanted.map((game) => custom.artFor(game).catch(() => null)));
+        return Object.fromEntries(wanted.map((game, i) => [game.id, found[i]]));
+    });
 
     // For the Home cards: how many updates, missing requirements, load order, crash and health problems.
     ipcMain.handle("games:status", async (_e, id) => {
@@ -283,7 +369,10 @@ function registerGamesIpc() {
             hasMods && updates.check(id).then((r) => (value.updates = r.updates.length)).catch(() => {}),
             requirements.missing(id).then((r) => (value.requirements = r.length)).catch(() => {}),
             (async () => {
-                if (!game.bethesda) return;
+                if (!game.bethesda) {
+                    value.loadOrder = modorder.problems(game, loc);
+                    return;
+                }
                 const plan = plugins.fixPlan(game, loc);
                 value.loadOrder = plan.turnOn.length + plan.turnOff.length + plan.moved.length + plan.get.length;
             })().catch(() => {}),
@@ -372,7 +461,7 @@ function registerGamesIpc() {
             const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
                 title: `Install a mod for ${game.name}`,
                 properties: ["openFile"],
-                filters: [{ name: "Mods", extensions: ["zip", "7z", "rar", "package", "ts4script", "asi", "dll", "oiv", "esp", "esm", "esl", "archive", "reds"] }, { name: "All files", extensions: ["*"] }],
+                filters: [{ name: "Mods", extensions: ["zip", "7z", "rar", "package", "ts4script", "asi", "dll", "oiv", "esp", "esm", "esl", "archive", "reds", "jar", "pak", "scs", "tmod", "mod", "lua", "ucas", "utoc", "bundle"] }, { name: "All files", extensions: ["*"] }],
             });
             if (picked.canceled || !picked.filePaths.length) return null;
             file = picked.filePaths[0];
@@ -406,8 +495,9 @@ function registerGamesIpc() {
 
     ipcMain.handle("games:openFolder", async (_e, id, which) => {
         const loc = detect.locate(need(id).id);
-        const dir = which === "docs" ? loc.docsDir : loc.gameDir;
-        if (!dir) throw new Error("That folder wasn't found.");
+        const dir = which === "docs" ? loc.docsDir : which === "mods" ? loc.modsDir : loc.gameDir;
+        if (!dir) throw new Error(which === "mods" ? "Choose where this game's mods go first." : "That folder wasn't found.");
+        if (which === "mods") fs.mkdirSync(dir, { recursive: true });
         const failed = await shell.openPath(dir);
         if (failed) throw new Error(failed);
     });
@@ -546,6 +636,24 @@ function registerGamesIpc() {
         plugins.setOrder(game, loc, planned.order);
         store.touch(id);
         return { ...(await withFix(game, loc)), previous, moved: planned.moved };
+    });
+
+    // The other games whose mod order matters (Cyberpunk's modlist.txt, RimWorld, Baldur's Gate 3).
+    ipcMain.handle("games:modOrder", (_e, id) => {
+        const game = need(id);
+        return modorder.read(game, detect.locate(id));
+    });
+    ipcMain.handle("games:setModOrder", (_e, id, entries) => {
+        const game = need(id);
+        const result = modorder.write(game, detect.locate(id), entries);
+        store.touch(id);
+        return result;
+    });
+    ipcMain.handle("games:fixModOrder", (_e, id) => {
+        const game = need(id);
+        const result = modorder.fix(game, detect.locate(id));
+        store.touch(id);
+        return result;
     });
 
     // What mods need that isn't installed, and getting it.
@@ -777,7 +885,7 @@ function registerGamesIpc() {
     });
 
     ipcMain.handle("games:openUrl", (_e, url) => {
-        const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com)\//i;
+        const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|store\.steampowered\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com)\//i;
         // Script Hook V's own site, and Script Hook V .NET's releases (requirements of GTA V mods).
         const frameworks = /^(http:\/\/www\.dev-c\.com\/gtav\/|https:\/\/github\.com\/scripthookvdotnet\/)/i;
         if ((allowed.test(String(url)) || frameworks.test(String(url))) && openExternalSafely(String(url))) return;

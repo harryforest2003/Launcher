@@ -4,7 +4,7 @@ const path = require("path");
 const { getGame } = require("./registry.cjs");
 const { locate } = require("./detect.cjs");
 const { dataDir } = require("./storage.cjs");
-const { unpack, listFiles, isArchive } = require("./archive.cjs");
+const { unpack, listFiles, isArchive, contents } = require("./archive.cjs");
 const layouts = require("./layouts.cjs");
 const plugins = require("./plugins.cjs");
 const { hooksIntoGame } = require("./protect.cjs");
@@ -51,9 +51,30 @@ function touch(gameId) {
 
 /* The real folder for "game" or "docs". */
 function baseDir(loc, base) {
+    if (base === "mods") {
+        if (!loc.modsDir) throw new Error("Choose where this game's mods go in its Settings (Mods folder).");
+        fs.mkdirSync(loc.modsDir, { recursive: true });
+        return loc.modsDir;
+    }
     const dir = base === "docs" ? loc.docsDir : loc.gameDir;
     if (!dir) throw new Error(base === "docs" ? "The game's Documents folder wasn't found." : "The game's folder wasn't found. Choose it in this game's Settings.");
     return dir;
+}
+
+/*
+ * For a game whose mods are .zip files themselves (Factorio, Hytale), whether this download
+ * is one: true unless it holds that game's other mod files (an .scs inside a .zip).
+ */
+async function keptWhole(game, filePath) {
+    const kind = path.extname(filePath).toLowerCase();
+    const kinds = game.modExtensions ?? [];
+    if (!game.generic || !kinds.includes(kind) || !isArchive(filePath)) return false;
+    try {
+        const inside = await contents(filePath);
+        return !inside.some((file) => kinds.includes(path.extname(file).toLowerCase()) && path.extname(file).toLowerCase() !== kind);
+    } catch {
+        return true;
+    }
 }
 
 /* A path under a folder, refusing anything that would land outside it. */
@@ -273,12 +294,29 @@ async function install(gameId, filePath, meta = {}) {
     if (!fs.existsSync(filePath)) throw new Error(`${path.basename(filePath)} isn't there any more.`);
     const modName = meta.name || layouts.nameFromFile(filePath);
 
-    const unpacked = await unpack(filePath);
+    const whole = await keptWhole(game, filePath);
+    const unpacked = await unpack(filePath, { whole });
     try {
-        const broken = await unpackNested(unpacked.dir);
+        const broken = whole ? [] : await unpackNested(unpacked.dir);
         const files = listFiles(unpacked.dir).filter((rel) => !broken.includes(path.posix.basename(rel)));
         const gameHas = (rel) => Boolean(loc.gameDir) && fs.existsSync(path.join(loc.gameDir, rel));
-        const planned = layouts.plan(game, files, { modName, dir: unpacked.dir, gameHas });
+        const listGame = (rel) => {
+            if (!loc.gameDir) return [];
+            try {
+                return fs.readdirSync(path.join(loc.gameDir, rel), { withFileTypes: true }).map((entry) => ({ name: entry.name, dir: entry.isDirectory() }));
+            } catch {
+                return [];
+            }
+        };
+        const planned = layouts.plan(game, files, {
+            modName,
+            dir: unpacked.dir,
+            gameHas,
+            listGame,
+            hasGameDir: Boolean(loc.gameDir),
+            modsDir: loc.modsDir,
+            modsChosen: Boolean(loc.modsChosen),
+        });
 
         if (!planned.placements.length) {
             const why = planned.skipped.length ? planned.skipped.slice(0, 3).map((s) => `${path.posix.basename(s.file)} (${s.reason})`).join("; ") : "it had no files for this game";
@@ -381,6 +419,12 @@ async function install(gameId, filePath, meta = {}) {
 function areaOf(game, file) {
     const parts = file.to.split("/");
     if (game.layout === "sims4") return parts[0];
+    if (game.layout === "generic") {
+        if (file.base === "mods") return parts.length === 1 ? "mods folder" : parts[0];
+        // In the game's folder: down to the folder that tells what it is ("Content/Paks/~mods", "BepInEx/plugins").
+        const known = file.to.match(/^(.*?(?:Paks\/~mods|Paks\/LogicMods|Paks|BepInEx\/plugins|reframework\/autorun|ue4ss\/Mods|custom|scripts|Mods))\//i);
+        return known ? known[1] : parts.length === 1 ? "game folder" : parts[0];
+    }
     if (game.layout === "bethesda") return parts[0] === "Data" ? (parts.length > 2 ? `Data/${parts[1]}` : "Data") : "game folder";
     if (game.layout === "gtav") return parts.length === 1 ? "game folder" : parts[0] === "mods" ? "mods (add-ons)" : parts[0];
     if (game.layout === "cyberpunk") {
@@ -517,6 +561,11 @@ function handAdded(game, loc, owned) {
     if (game.layout === "sims4" && loc.docsDir) {
         walk(loc.docsDir, "Mods", 0, (rel) => /\.(package|ts4script)$/i.test(rel) && add("docs", rel, "file"));
     }
+    if (game.layout === "generic") {
+        // Whatever sits in the mods folder: each file or folder is one mod.
+        if (loc.modsDir) for (const entry of entries(loc.modsDir)) add("mods", entry.name, entry.isDirectory() ? "folder" : "file");
+        return found;
+    }
     if (!loc.gameDir) return found;
     const root = loc.gameDir;
     if (game.layout === "gtav") {
@@ -554,7 +603,7 @@ function handAdded(game, loc, owned) {
 function parkedHandAdded(gameId) {
     const found = [];
     const root = path.join(gameData(gameId), "parked", "_hand");
-    for (const base of ["game", "docs"]) {
+    for (const base of ["game", "docs", "mods"]) {
         const index = path.join(root, base);
         const walk = (rel, depth) => {
             let entries = [];
@@ -695,7 +744,7 @@ function list(gameId) {
                 name: item.name,
                 enabled: item.enabled,
                 source: { provider: "hand" },
-                where: path.posix.dirname(item.rel) === "." ? (item.base === "docs" ? "Documents" : "game folder") : path.posix.dirname(item.rel),
+                where: path.posix.dirname(item.rel) === "." ? ({ docs: "Documents", mods: "mods folder" }[item.base] ?? "game folder") : path.posix.dirname(item.rel),
                 kind: item.kind,
                 fileCount: 1,
                 areas: [],

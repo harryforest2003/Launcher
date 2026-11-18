@@ -81,11 +81,16 @@ function removeLinks(dir) {
  * Unpacks a mod into a new temporary folder and returns it, with what to remove after.
  * -> { dir, cleanup, single: true when the file wasn't an archive }
  */
-async function unpack(file) {
+async function unpack(file, { whole = false } = {}) {
     const dir = tempDir();
     const cleanup = () => fs.rmSync(dir, { recursive: true, force: true });
     try {
         const ext = path.extname(file).toLowerCase();
+        if (whole) {
+            // A game whose mods are themselves .zip files (Factorio, Hytale): copied as it is.
+            fs.copyFileSync(file, path.join(dir, path.basename(file)));
+            return { dir, cleanup, single: true };
+        }
         if (ext === ".zip") await unzip(file, dir);
         else if (ext === ".7z" || ext === ".rar") await untar(file, dir);
         else {

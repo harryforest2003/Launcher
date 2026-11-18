@@ -72,3 +72,63 @@
 .mh-offers .mh-offers__link .mh-link__lead { display: none; }
 .mh-offers .mh-offers__note { margin: var(--space-2) 0 0; max-width: none; }
 @media (min-width: 900px) { .mh-offers .mh-offers__link .mh-link__lead { display: block; } }
+
+/* Paging, and adding a game from Steam, Nexus Mods or CurseForge. */
+.mg-pages { display: flex; justify-content: center; margin-top: var(--space-4); }
+.mg-section__lead { margin: calc(var(--space-2) * -1) 0 var(--space-3); max-width: 70ch; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.mg-section__action {
+  margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: 0 var(--space-2); height: var(--control-sm, 28px); border: 0; border-radius: var(--radius-md);
+  background: transparent; color: var(--color-text-secondary); font-size: var(--font-size-xs); cursor: pointer;
+}
+.mg-section__action:hover { background: var(--color-surface-raised); color: var(--color-text); }
+.mg-grid--busy { opacity: 0.6; transition: opacity 120ms ease; }
+/* A result card: the picture and name open the game's page; the foot holds where to get it and its price. */
+.mg-game--result { cursor: default; }
+.mg-game--result:hover { transform: none; }
+.mg-game__open {
+  display: flex; flex: 1; flex-direction: column; min-width: 0; padding: 0; border: 0; border-radius: var(--radius-lg);
+  font: inherit; text-align: start; color: inherit; background: transparent; cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.mg-game__open:hover:not(:disabled) { transform: translateY(-2px); }
+.mg-game__open:hover:not(:disabled) .mg-game__art { box-shadow: var(--edge-highlight), var(--shadow-lg, var(--shadow-md)); }
+.mg-game__open:hover:not(:disabled) .mg-game__art img { transform: scale(1.04); }
+.mg-game__open:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+.mg-game__open:disabled { cursor: progress; }
+.mg-game__open .mg-game__body { flex: 1; }
+.mg-game__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  min-height: 26px; margin-top: var(--space-2); padding: var(--space-2) var(--space-1) 0;
+  border-top: 1px solid var(--color-border);
+}
+.mg-get {
+  display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding: 2px 0; border: 0;
+  background: transparent; font: inherit; font-size: var(--font-size-xs); font-weight: var(--weight-medium);
+  color: var(--color-accent-text); white-space: nowrap; cursor: pointer;
+}
+.mg-get:hover { text-decoration: underline; text-underline-offset: 2px; }
+.mg-get:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+.mg-get--here { color: var(--color-text-secondary); cursor: default; font-weight: var(--weight-regular); }
+.mg-get--here:hover { text-decoration: none; }
+.mg-price { display: inline-flex; align-items: center; gap: var(--space-1-5); margin-left: auto; font-size: var(--font-size-xs); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mg-price__now { font-weight: var(--weight-semibold); color: var(--color-text); }
+.mg-price__was { color: var(--color-text-muted); }
+.mg-price__off {
+  padding: 1px 5px; border-radius: var(--radius-sm); font-weight: var(--weight-semibold);
+  color: var(--color-success-text); background: var(--color-success-bg);
+}
+.mg-price--free .mg-price__now, .mg-price--free { font-weight: var(--weight-semibold); color: var(--color-success-text); }
+@media (prefers-reduced-motion: reduce) {
+  .mg-game__open, .mg-game__open .mg-game__art img { transition: none; }
+  .mg-game__open:hover:not(:disabled), .mg-game__open:hover:not(:disabled) .mg-game__art img { transform: none; }
+}
+
+/* Price, sort and platform, under where to look. */
+.mg-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: calc(var(--space-1) * -1) 0 var(--space-3); }
+.mg-filters__clear { margin-left: 0; }
+.mg-game__mark { display: grid; place-items: center; width: 100%; height: 100%; font-weight: var(--weight-semibold); color: var(--color-text-secondary); }
+
+/* Where "Add a game" looks: All, Steam, Nexus Mods, CurseForge. */
+.mg-sources { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-3); }
+.mg-sources__note { color: var(--color-text-muted); font-size: var(--font-size-sm); }

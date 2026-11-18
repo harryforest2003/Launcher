@@ -14,12 +14,12 @@ type Props = {
   say?: Say;
 };
 
-/* On the Mods page of Skyrim and Fallout 4: the load order's problems, and fixing them in one go. */
+/* On the Mods page of the Bethesda games: the plugin load order's problems, and fixing them in one go. */
 export default function LoadOrderNotice({ detail, mods, goLoadOrder, onGetRequirements, report, say }: Props) {
   const [order, setOrder] = useState<GameLoadOrder | null>(null);
 
   useEffect(() => {
-    if (!detail.loadOrder || !detail.found) return;
+    if (detail.loadOrder !== "plugins" || !detail.found) return;
     let active = true;
     window.gamesAPI
       .loadOrder(detail.id)
