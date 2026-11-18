@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, Download, ExternalLink } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
 import LauncherSidebar from "../components/LauncherSidebar";
 import { Badge, Button, Notice, SearchField, Segmented, Select, Skeleton } from "../components/ui";
@@ -16,17 +16,6 @@ type Props = {
   onGame: (id: GameId) => void;
   onSettings: () => void;
 };
-
-const isMac = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
-
-/* One line on how a supported game's mods are handled. */
-function hintFor(game: CatalogGame): string {
-  if (game.noModFolder) return "Mods replace game files · browse on Nexus Mods";
-  const sites = [game.providers.includes("curseforge") && "CurseForge", game.providers.includes("nexus") && "Nexus Mods"].filter(Boolean);
-  const where = sites.length ? `Browse on ${sites.join(" and ")}` : "Local mods";
-  const files = game.modExtensions.slice(0, 2).join(" and ");
-  return files ? `${where} · ${files} files` : where;
-}
 
 /* A game's picture: its own, else one from where it's sold, else the result's; initials offline. */
 function GameTileArt({ id, name, src: given, alt }: { id?: string; name: string; src?: string | null; alt?: string | null }) {
@@ -51,7 +40,6 @@ function GameTileArt({ id, name, src: given, alt }: { id?: string; name: string;
   );
 }
 
-const PAGE_SIZE = 12;
 
 const SOURCES: { value: GameFindSource; label: string }[] = [
   { value: "all", label: "All" },
@@ -60,7 +48,7 @@ const SOURCES: { value: GameFindSource; label: string }[] = [
   { value: "curseforge", label: "CurseForge" },
 ];
 const SOURCE_NOTE: Record<GameFindSource, string> = {
-  all: "Games on this computer, then the most modded",
+  all: "Steam's store, most played first; type to search the mod sites too",
   steam: "Steam's store, most played first",
   nexus: "Every game with mods on Nexus Mods",
   curseforge: "Every game CurseForge hosts mods for",
@@ -76,8 +64,9 @@ const NEXUS_SORTS = [
   { value: "popular", label: "Most modded" },
   { value: "name", label: "Name" },
 ];
-type Filters = { price: string; sort: string; mac: boolean };
-const NO_FILTERS: Filters = { price: "any", sort: "popular", mac: false };
+type Mods = "any" | "with" | "none";
+type Filters = { price: string; sort: string; mac: boolean; mods: Mods };
+const NO_FILTERS: Filters = { price: "any", sort: "popular", mac: false, mods: "any" };
 
 /* What a game costs on Steam, for the corner of its card: "Free", or the sale price with the old one struck. */
 function PriceTag({ price }: { price?: GamePrice | null }) {
@@ -96,12 +85,10 @@ const keyOf = (game: GameFound) => game.steamAppId ?? game.nexus ?? (game.cursef
 
 export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onSettings }: Props) {
   const [sections, setSections] = useState<GameSummary[]>([]);
-  const [catalog, setCatalog] = useState<CatalogGame[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<DetectedGame | null>(initialGame ?? null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
 
   // Adding a game from Steam, Nexus Mods or CurseForge.
   const [found, setFound] = useState<GameFindResult | null>(null);
@@ -112,16 +99,19 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [steps, setSteps] = useState<{ value: string; label: string }[]>([]);
   const [opening, setOpening] = useState<string | null>(null);
+  // How many games "Every game" lists with no search or filter, for the page's lead.
+  const [everyTotal, setEveryTotal] = useState<{ modded: number; steam: number } | null>(null);
+  // Where to buy or download the games on this page that Steam doesn't sell, by name.
+  const [where, setWhere] = useState<Record<string, GameWhere>>({});
 
   // A Nexus Mods key is added in the launcher's Settings; this only says whether there is one.
   const [hasNexusKey, setHasNexusKey] = useState(true);
 
   // Every game the launcher has a workspace for, and whether each is on this computer.
   const read = useCallback(() => {
-    return Promise.all([window.gamesAPI.list(), window.modAPI.catalog(), window.modAPI.getSettings()])
-      .then(([workspaces, supported, settings]) => {
+    return Promise.all([window.gamesAPI.list(), window.modAPI.getSettings()])
+      .then(([workspaces, settings]) => {
         setSections(workspaces);
-        setCatalog(supported);
         setHasNexusKey(settings.hasNexusKey);
         setError(null);
       })
@@ -139,11 +129,13 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
     const timer = window.setTimeout(() => {
       // Nexus Mods and CurseForge only sort; price and Mac are Steam's.
       const asked = source === "nexus" || source === "curseforge" ? { sort: filters.sort } : filters;
+      const everything = !query.trim() && source === "all" && filters.price === NO_FILTERS.price && filters.sort === NO_FILTERS.sort && !filters.mac && filters.mods === NO_FILTERS.mods;
       window.gamesAPI
         .findGames(query.trim(), findPage - 1, source, asked)
         .then((result) => {
           if (!live) return;
           setFound(result);
+          if (everything && result.counts) setEveryTotal(result.counts);
           if (result.priceSteps?.length) setSteps(result.priceSteps);
           setFindError(result.warnings.length && !result.total ? result.warnings.join(" ") : null);
         })
@@ -156,9 +148,28 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
     };
   }, [query, findPage, source, filters]);
 
+  // Games Steam doesn't sell may be on GOG, Epic, Battle.net or their own site; ask once the page is in.
+  useEffect(() => {
+    const names = (found?.results ?? []).filter((game) => !game.steamAppId && !game.installed).map((game) => game.name);
+    const wanted = names.filter((name) => !(name in where));
+    if (!wanted.length) return;
+    let live = true;
+    window.gamesAPI
+      .whereToGet(wanted)
+      .then((answers) => {
+        // A name left out couldn't be looked up; it's asked again with the next page.
+        if (live) setWhere((was) => ({ ...was, ...answers }));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+    // where is left out on purpose: it only grows from this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found]);
+
   function search(text: string) {
     setQuery(text);
-    setPage(1);
     setFindPage(1);
     setFinding(true);
   }
@@ -177,6 +188,14 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
     if (next === findPage) return;
     setFindPage(next);
     setFinding(true);
+  }
+
+  // What the list below is, in a few words.
+  function sourceNote() {
+    if (source === "nexus" || source === "curseforge") return SOURCE_NOTE[source];
+    if (filters.mods === "with") return found?.via === "steam" ? "Steam's store, only games with mods on Nexus Mods or CurseForge" : "Every game with mods on Nexus Mods or CurseForge, most modded first";
+    if (filters.mods === "none") return "Steam's store, only games no mod site lists yet";
+    return source === "all" && query.trim() && found?.via === "steam" ? "Filters search Steam's store" : SOURCE_NOTE[source];
   }
 
   function filter(change: Partial<Filters>) {
@@ -200,7 +219,18 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
     }
   }
 
-  // Where to get a game that isn't here yet: its Steam page (in Steam when it's installed).
+  // The store a card points to: Steam when it sells the game, else the first shop (the game's own site last).
+  function storeOf(game: GameFound) {
+    const known = game.steamAppId ? undefined : where[game.name];
+    const steamId = game.steamAppId ?? known?.steamAppId ?? null;
+    const stores = known?.stores ?? [];
+    // A console-only game's own site isn't somewhere to get it for this computer.
+    const shop = steamId ? stores.find((s) => s.store === "steam") : (stores.find((s) => s.store !== "site") ?? (known?.pc === false ? undefined : stores[0]));
+    return { known, steamId, shop, rest: stores.filter((s) => s !== shop && s.store !== "steam") };
+  }
+
+  // Where to get a game that isn't here yet: its Steam page (in Steam when it's installed),
+  // else the best other store that sells it, else a note that it isn't on PC.
   function getLink(game: GameFound) {
     if (game.installed) {
       return (
@@ -209,12 +239,33 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
         </span>
       );
     }
-    if (game.steamAppId) {
-      const id = game.steamAppId;
+    const { known, steamId, shop, rest } = storeOf(game);
+    const also = rest.length ? `Also on ${rest.map((s) => s.label).join(", ")}` : undefined;
+    if (steamId) {
       return (
-        <button type="button" className="mg-get" onClick={() => void window.gamesAPI.getOnSteam(id)}>
+        <button type="button" className="mg-get" title={also} onClick={() => void window.gamesAPI.getOnSteam(steamId)}>
           <Download size={13} aria-hidden="true" /> Get on Steam
         </button>
+      );
+    }
+    if (shop) {
+      return (
+        <button
+          type="button"
+          className="mg-get"
+          title={also}
+          onClick={() => void window.gamesAPI.openUrl(shop.url)}
+        >
+          <ExternalLink size={13} aria-hidden="true" /> {shop.store === "site" ? "Official site" : `Get on ${shop.label}`}
+        </button>
+      );
+    }
+    if (known?.pc === false) {
+      const on = known.platforms.slice(0, 2).join(", ");
+      return (
+        <span className="mg-get mg-get--here" title={known.platforms.length ? `Released on ${known.platforms.join(", ")}` : undefined}>
+          {on ? `Not on PC · ${on}` : "Not on PC"}
+        </span>
       );
     }
     if (game.nexus) {
@@ -230,23 +281,11 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
 
   const matches = (name: string) => name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
   const here = sections.filter((game) => game.found);
-  // Games wait here until they're on this computer; then they're on Home and in the sidebar.
-  const waiting = sections.filter((game) => !game.found && !game.notOnPC && matches(game.name)).sort((a, b) => a.name.localeCompare(b.name));
+  // Every other game is in "Every game", ready to open; a game that can't run here is listed apart.
   const notOnPC = sections.filter((game) => game.notOnPC && matches(game.name));
-  const pageCount = Math.max(1, Math.ceil(waiting.length / PAGE_SIZE));
-  const shownPage = Math.min(page, pageCount);
-  const pageGames = waiting.slice((shownPage - 1) * PAGE_SIZE, shownPage * PAGE_SIZE);
-  const catalogOf = (id: string) => catalog.find((game) => game.id === id);
-  const hintOf = (game: GameSummary) => {
-    if (game.windowsOnly && isMac) return "Windows game: runs through CrossOver or Whisky";
-    const known = catalogOf(game.id);
-    if (known) return hintFor(known);
-    if (game.custom) return game.tagline;
-    return "Installed somewhere else? Choose its folder.";
-  };
   const steamish = source === "all" || source === "steam";
   const sorts = source === "nexus" ? NEXUS_SORTS : source === "curseforge" ? [] : STEAM_SORTS;
-  const filtered = filters.price !== "any" || filters.mac || (steamish && filters.sort !== "popular");
+  const filtered = filters.price !== "any" || filters.mac || (steamish && (filters.sort !== "popular" || filters.mods !== "any"));
 
   return (
     <div className="app-screen">
@@ -271,7 +310,7 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
                 <p className="mg-head__lead" aria-live="polite">
                   {loading
                     ? "Looking for games…"
-                    : `${waiting.length + notOnPC.length} games waiting to be installed · ${here.length} on this computer, on Home and in the sidebar.`}
+                    : `${here.length} on this computer, on Home and in the sidebar${everyTotal ? ` · ${everyTotal.steam.toLocaleString()} games on Steam and ${everyTotal.modded.toLocaleString()} with mods to choose from` : ""}.`}
                 </p>
               </div>
               <SearchField
@@ -301,60 +340,36 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
               </div>
             ) : (
               <>
-                {waiting.length > 0 && (
-                  <section className="mg-section" aria-labelledby="mg-supported">
-                    <div className="mg-section__head">
-                      <h2 className="mh-section-title" id="mg-supported">Not on this computer</h2>
-                      <span className="mg-section__count">{waiting.length}</span>
-                      <button type="button" className="mg-section__action" onClick={() => void read()}>
-                        <RefreshCw size={13} aria-hidden="true" /> Look again
-                      </button>
-                    </div>
-                    <ul className="mg-grid mg-grid--quiet">
-                      {pageGames.map((game) => (
-                        <li key={game.id}>
-                          <button type="button" className="mg-game mg-game--setup" onClick={() => onGame(game.id)}>
-                            <GameTileArt id={game.id} name={game.name} src={game.art} />
-                            <span className="mg-game__body">
-                              <span className="mg-game__name">{game.name}</span>
-                              <span className="mg-game__source">{hintOf(game)}</span>
-                              <span className="mg-tags">
-                                {game.custom ? <Badge>Added by you</Badge> : !game.generic && <Badge tone="accent">Full workspace</Badge>}
-                                {game.nexus && <Badge>Nexus Mods</Badge>}
-                                {game.curseforge && <Badge>CurseForge</Badge>}
-                              </span>
-                              <span className="mg-game__go">
-                                Set it up
-                                <ArrowRight size={14} aria-hidden="true" />
-                              </span>
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                    {pageCount > 1 && (
-                      <div className="mg-pages">
-                        <Pagination page={shownPage} pageCount={pageCount} onChange={setPage} />
-                      </div>
-                    )}
-                  </section>
-                )}
-
                 <section className="mg-section" aria-labelledby="mg-add">
                   <div className="mg-section__head">
                     <h2 className="mh-section-title" id="mg-add">{query.trim() ? `Results for “${query.trim()}”` : "Every game"}</h2>
-                    {found && <span className="mg-section__count">{found.total.toLocaleString()}</span>}
+                    {found && (
+                      <span className="mg-section__count" title={found.approx ? "Steam's list is still being looked through as you go" : undefined}>
+                        {found.approx === "more"
+                          ? `${found.total.toLocaleString()}+`
+                          : found.approx === "about"
+                            ? `about ${found.total.toLocaleString()}`
+                            : found.total.toLocaleString()}
+                      </span>
+                    )}
                   </div>
                   <p className="mg-section__lead">
-                    Every game on Steam, Nexus Mods and CurseForge. Open one to see its page, news and mods; once it's on this computer it moves to
-                    Home and the sidebar by itself.
+                    Every game on Steam, Nexus Mods and CurseForge, most played first; type to search them all. Open one to see its page, news and mods; once it's on
+                    this computer it moves to Home and the sidebar by itself.
                   </p>
                   <div className="mg-sources">
                     <Segmented label="Where to look" value={source} options={SOURCES} onChange={browse} />
-                    <span className="mg-sources__note">{found?.via === "steam" && source === "all" ? "Filters search Steam's store" : SOURCE_NOTE[source]}</span>
+                    <span className="mg-sources__note">{sourceNote()}</span>
                   </div>
                   {(steamish || sorts.length > 0) && (
                     <div className="mg-filters">
+                      {steamish && (
+                        <Select size="sm" aria-label="Mods" value={filters.mods} onChange={(event) => filter({ mods: event.target.value as Mods })}>
+                          <option value="any">All games</option>
+                          <option value="with">Mods available</option>
+                          <option value="none">No mods available</option>
+                        </Select>
+                      )}
                       {steamish && (
                         <Select size="sm" aria-label="Price" value={filters.price} onChange={(event) => filter({ price: event.target.value })}>
                           <option value="any">Any price</option>
@@ -429,7 +444,7 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
                               </button>
                               <span className="mg-game__foot">
                                 {opening === key ? <span className="mg-get mg-get--here">Opening…</span> : getLink(game)}
-                                <PriceTag price={game.price} />
+                                <PriceTag price={game.price ?? storeOf(game).shop?.price} />
                               </span>
                             </li>
                           );

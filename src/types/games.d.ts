@@ -82,24 +82,47 @@ declare global {
     };
     type GameFindSource = "all" | "steam" | "nexus" | "curseforge";
     /** price: "any", "free", "sale" or one of priceSteps' values; sort: popular, new, rated, price-asc, price-desc, or mods/name on a mod site's list. */
-    type GameFindFilters = { price?: string; sort?: string; mac?: boolean };
+    type GameFindFilters = { price?: string; sort?: string; mac?: boolean; /** "with": games with mods on Nexus Mods or CurseForge; "none": the rest. */ mods?: "any" | "with" | "none" };
     type GameFindResult = {
         results: GameFound[];
         page: number;
         pageCount: number;
         total: number;
+        /** With the mods filter, Steam's list is still being read: the total is "about" right, or there are "more". */
+        approx?: "about" | "more" | null;
         warnings: string[];
         source?: GameFindSource;
         /** "steam" when a filter took the search to Steam's store. */
         via?: GameFindSource;
+        /** Browsing every game: how many have mods (listed first) and how many Steam sells; a game in both is counted twice. */
+        counts?: { modded: number; steam: number };
         /** Steam's price steps in the player's currency ("Under £4.00"). */
         priceSteps?: { value: string; label: string }[];
     };
 
     type GameNews = { id: string; title: string; date: string; summary: string; url: string };
     type GameDlc = { id: string; name: string; art: string | null; price: GamePrice | null; mac: boolean; released: string | null; url: string };
-    /** A game's news and add-ons from Steam (empty without a Steam app number). */
-    type GameStoreInfo = { steamAppId: string | null; price: GamePrice | null; news: GameNews[]; dlc: GameDlc[]; dlcCount: number; storeUrl: string | null };
+    /** A store that sells a game (from Wikidata, with GOG's and Steam's own prices). */
+    type GameStoreLink = {
+        store: "steam" | "gog" | "epic" | "microsoft" | "battlenet" | "itch" | "humble" | "site";
+        label: string;
+        url: string;
+        price: GamePrice | null;
+    };
+    /** Where a game can be bought or downloaded, and what it runs on. pc: false when it has no PC version; null when not known. */
+    type GameWhere = { stores: GameStoreLink[]; platforms: string[]; pc: boolean | null; steamAppId: string | null };
+    /** A game's news and add-ons from Steam (empty without a Steam app number), and every store that sells it. */
+    type GameStoreInfo = {
+        steamAppId: string | null;
+        price: GamePrice | null;
+        news: GameNews[];
+        dlc: GameDlc[];
+        dlcCount: number;
+        storeUrl: string | null;
+        stores?: GameStoreLink[];
+        platforms?: string[];
+        pc?: boolean | null;
+    };
 
     type GameStatus = { updates: number; requirements: number; loadOrder: number; crashes: number; health: number; clashes?: number };
 
@@ -137,10 +160,13 @@ declare global {
         canUndo?: boolean;
     };
 
+    /* Where a mod comes from: Nexus Mods, CurseForge, or one of the other sites (sources/index.cjs). */
+    type GameModProvider = "nexus" | "curseforge" | "thunderstore" | "modio" | "workshop" | "gamebanana" | "factorio" | "spacedock" | "beatmods";
+
     type GameModUpdate = {
         key: string;
         name: string;
-        provider: "nexus" | "curseforge";
+        provider: GameModProvider;
         modId: string;
         fromVersion: string;
         toVersion: string;
@@ -178,10 +204,14 @@ declare global {
         missing?: GameRequirement[];
         /* A requirement's page on another site, opened. */
         opened?: string;
+        /* A Workshop mod, opened in Steam to subscribe to (Steam installs it). */
+        viaSteam?: boolean;
+        /* What it needed from the same site, installed first. */
+        requirements?: string[];
     };
 
     type GameRemoteMod = {
-        provider: "nexus" | "curseforge";
+        provider: GameModProvider;
         id: string;
         name: string;
         summary: string;
@@ -319,11 +349,13 @@ declare global {
 
     type GameSearchPage = {
         total: number;
-        totals?: { nexus?: number; curseforge?: number };
+        totals?: Partial<Record<GameModProvider, number>>;
         pageCount?: number;
         mods: GameRemoteMod[];
         /* A site that couldn't be searched, while the other could. */
         warnings?: string[];
+        /* Every site with mods for the game; ready false: it needs a key not added yet. */
+        sources?: { id: GameModProvider; label: string; ready: boolean; needsKey?: string | null }[];
     };
 
     type GameCollectionSummary = {
@@ -363,6 +395,8 @@ declare global {
 
     type GameModDetails = Omit<GameRemoteMod, "adult"> & {
         html: string;
+        /* A description written in Markdown (Thunderstore, Factorio, SpaceDock, BeatMods), shown in place of html. */
+        markdown?: string;
         images: string[];
         /* Whether a Nexus key is set (always true for CurseForge). */
         hasKey: boolean;
@@ -393,6 +427,8 @@ declare global {
             getOnSteam: (steamAppId: string) => Promise<void>;
             /** Steam news and add-ons (with today's prices) for a game. */
             storeInfo: (id: GameId) => Promise<GameStoreInfo>;
+            /** Where each game can be bought or downloaded (up to 40 names; names with no answer are left out). */
+            whereToGet: (names: string[]) => Promise<Record<string, GameWhere>>;
             removeGame: (id: GameId) => Promise<void>;
             chooseModsDir: (id: GameId) => Promise<unknown>;
             forgetModsDir: (id: GameId) => Promise<unknown>;
@@ -424,14 +460,14 @@ declare global {
             /* provider "any" (or none): every site the game's on, mixed. */
             search: (
                 id: GameId,
-                options: { provider?: "any" | "nexus" | "curseforge"; query?: string; sort?: string; page?: number; adult?: boolean }
+                options: { provider?: "any" | GameModProvider; query?: string; sort?: string; page?: number; adult?: boolean }
             ) => Promise<GameSearchPage>;
-            details: (id: GameId, provider: "nexus" | "curseforge", modId: string) => Promise<GameModDetails>;
+            details: (id: GameId, provider: GameModProvider, modId: string) => Promise<GameModDetails>;
             collections: (id: GameId, options: { query?: string; sort?: string; page?: number }) => Promise<{ total: number; collections: GameCollectionSummary[] }>;
             collection: (id: GameId, slug: string) => Promise<GameCollection>;
             /* Puts the chosen files on the download queue. */
             installCollection: (id: GameId, slug: string, fileIds: string[]) => Promise<{ added: number; external: GameCollection["external"] }>;
-            installRemote: (id: GameId, provider: "nexus" | "curseforge", modId: string, fileId: string | null, name: string) => Promise<GameInstallResult>;
+            installRemote: (id: GameId, provider: GameModProvider, modId: string, fileId: string | null, name: string) => Promise<GameInstallResult>;
             checkUpdates: (id: GameId) => Promise<GameUpdateCheck>;
             update: (id: GameId, key: string) => Promise<GameInstallResult>;
             undoUpdate: (id: GameId, key: string) => Promise<{ restored: string; version: string | null }>;

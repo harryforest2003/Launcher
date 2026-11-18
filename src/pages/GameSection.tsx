@@ -12,7 +12,7 @@ import CCBrowser from "./games/CCBrowser";
 import PlayPrompt from "./games/PlayPrompt";
 import GameStore, { PriceText } from "./games/GameStore";
 import { useStoreInfo } from "./games/useStoreInfo";
-import { CircleAlert, CircleCheck, Download, Play, TriangleAlert } from "lucide-react";
+import { CircleAlert, CircleCheck, Download, ExternalLink, Play, TriangleAlert } from "lucide-react";
 import { Button, Notice, ProgressBar } from "../components/ui";
 import { useGameArt } from "./gameArt";
 import { timeAgo } from "./playedAgo";
@@ -32,7 +32,7 @@ type Props = {
  */
 export default function GameSection({ gameId, onLauncher, onLauncherSettings }: Props) {
   const [page, setPage] = useState<GamePage>("home");
-  const [openMod, setOpenMod] = useState<{ provider: "nexus" | "curseforge"; id: string } | null>(null);
+  const [openMod, setOpenMod] = useState<{ provider: GameModProvider; id: string } | null>(null);
   const [openCollection, setOpenCollection] = useState<string | null>(null);
   const deeper = Boolean(openMod || openCollection);
   const [detail, setDetail] = useState<GameDetail | null>(null);
@@ -413,15 +413,28 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                     <div className="game-hero__body">
                       <h1 className="game-hero__title">{detail.name}</h1>
                       <p className="game-hero__lead">{detail.tagline}</p>
+                      {(() => {
+                        // Steam first; a game Steam doesn't sell gets its best other store (its own site last).
+                        const stores = store?.stores ?? [];
+                        const shop = store?.steamAppId ? null : (stores.find((s) => s.store !== "site") ?? (store?.pc === false ? null : stores[0]) ?? null);
+                        const also = detail.found ? [] : stores.filter((s) => s !== shop && s.store !== "steam");
+                        const sold = Boolean(store?.steamAppId || shop);
+                        return (
+                          <>
                       <div className="game-hero__actions">
                         {!detail.found && store?.steamAppId && (
                           <Button variant="primary" size="lg" icon={<Download size={16} aria-hidden="true" />} onClick={() => void window.gamesAPI.getOnSteam(store.steamAppId!)}>
                             Get on Steam
                           </Button>
                         )}
-                        {!detail.found && store?.price && <PriceText price={store.price} />}
+                        {!detail.found && shop && (
+                          <Button variant="primary" size="lg" icon={<ExternalLink size={16} aria-hidden="true" />} onClick={() => void window.gamesAPI.openUrl(shop.url)}>
+                            {shop.store === "site" ? "Official site" : `Get on ${shop.label}`}
+                          </Button>
+                        )}
+                        {!detail.found && (store?.price ?? shop?.price) && <PriceText price={store?.price ?? shop?.price ?? null} />}
                         {!detail.found
-                          ? <Button variant={store?.steamAppId ? "secondary" : "primary"} size="lg" onClick={() => go("settings")}>{store?.steamAppId ? "Already have it?" : "Choose game folder"}</Button>
+                          ? <Button variant={sold ? "secondary" : "primary"} size="lg" onClick={() => go("settings")}>{sold ? "Already have it?" : "Choose game folder"}</Button>
                           : detail.cantRun
                             ? <>
                                 <Button variant="primary" size="lg" onClick={() => go("discover")}>Discover mods</Button>
@@ -429,8 +442,31 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                                 <span className="game-hero__source">Can't play on this Mac</span>
                               </>
                             : <Button variant="primary" size="lg" icon={<Play size={16} aria-hidden="true" />} disabled={Boolean(playing)} onClick={onPlay}>{playing ?? "Play"}</Button>}
-                        {!detail.cantRun && <span className="game-hero__source">{detail.found ? (detail.source ? `Found through ${detail.source}` : "Found on this computer") : "Not found on this computer"}</span>}
+                        {!detail.cantRun && (
+                          <span className="game-hero__source">
+                            {detail.found
+                              ? (detail.source ? `Found through ${detail.source}` : "Found on this computer")
+                              : store?.pc === false
+                                ? `Not released on PC${store.platforms?.length ? `: ${store.platforms.slice(0, 4).join(", ")}` : ""}`
+                                : "Not found on this computer"}
+                          </span>
+                        )}
                       </div>
+                      {also.length > 0 && (
+                        <p className="game-hero__stores">
+                          <span>{shop || store?.steamAppId ? "Also on" : "Get it on"}</span>
+                          {also.map((s) => (
+                            <button key={s.store} type="button" className="gs-more" onClick={() => void window.gamesAPI.openUrl(s.url)}>
+                              {s.label}
+                              {s.price && <PriceText price={s.price} />}
+                              <ExternalLink size={12} aria-hidden="true" />
+                            </button>
+                          ))}
+                        </p>
+                      )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </section>
                   {detail.cantRun && <Notice tone="warning" data-testid="game-home-cant-run">{detail.cantRun} You can still install and manage its mods here.</Notice>}

@@ -138,6 +138,8 @@ function loadState(): PreviewState {
 }
 
 const state = loadState();
+// Worlds "added" in the preview, until it reloads.
+const previewWorlds = new Map<string, InstanceWorld[]>();
 
 function persist() {
   try {
@@ -682,6 +684,9 @@ const instanceBridge = {
     nexus: { set: state.hasNexusKey, fromEnvironment: false },
     github: { set: false, fromEnvironment: false },
     modrinth: { set: false, fromEnvironment: false },
+    modio: { set: false, fromEnvironment: false },
+    steam: { set: false, fromEnvironment: false },
+    factorio: { set: false, fromEnvironment: false },
   }),
   // A browser has no keychain, so the preview never holds a key itself.
   setApiKey: async () => {
@@ -703,8 +708,45 @@ const instanceBridge = {
 
   // Files, logs, Java, updates and exports belong to the desktop app; the preview shows
   // them empty.
-  worlds: async () => [],
+  worlds: async (name: string) => previewWorlds.get(name) ?? [],
   screenshots: async () => [],
+  // Importing needs the desktop app's file access; CurseForge's worlds are searched for
+  // real through the preview server, and adding one pretends to.
+  importWorldFile: async () => {
+    throw new Error("Importing a world needs the desktop app.");
+  },
+  importWorldFolder: async () => {
+    throw new Error("Importing a world needs the desktop app.");
+  },
+  importWorldLink: async () => {
+    throw new Error("Downloading a world needs the desktop app.");
+  },
+  searchWorlds: async (name: string, options: WorldSearchOptions) => {
+    const instance = findInstance(name);
+    const params = new URLSearchParams({ q: options.query ?? "", sort: options.sort ?? "popular", page: String(options.page ?? 0) });
+    if (!options.anyVersion) params.set("version", instance.version);
+    if (options.category) params.set("category", String(options.category));
+    const res = await fetch(`/__worlds/search?${params}`);
+    if (!res.ok) throw new Error("CurseForge's worlds couldn't be reached.");
+    return res.json();
+  },
+  installWorld: async (name: string, projectId: string) => {
+    const instance = findInstance(name);
+    const world: InstanceWorld = {
+      folder: `World ${projectId}`,
+      name: `World ${projectId}`,
+      lastPlayed: new Date().toISOString(),
+      gameMode: "Survival",
+      hardcore: false,
+      cheats: false,
+      version: instance.version,
+      size: 48 * 1024 * 1024,
+      icon: null,
+    };
+    previewWorlds.set(name, [world, ...(previewWorlds.get(name) ?? [])]);
+    return [{ folder: world.folder, name: world.name, version: world.version, newer: false }];
+  },
+  onWorldProgress: () => () => {},
   fileAction: async () => {
     throw new Error("Files can only be opened in the desktop app.");
   },

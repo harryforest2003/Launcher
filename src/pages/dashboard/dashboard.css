@@ -985,6 +985,20 @@
   color: var(--color-text-muted);
 }
 
+/* The other stores that sell a game that isn't on this computer. */
+.game-hero__stores {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.game-hero__stores > span { margin-right: var(--space-1); }
+.game-hero__stores .gs-price { font-size: inherit; }
+
 .game-checks .db-card__head {
   margin-bottom: var(--space-2);
 }

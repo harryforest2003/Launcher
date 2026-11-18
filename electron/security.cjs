@@ -266,11 +266,12 @@ function limitEveryPage() {
 
 const WEB_PROTOCOLS = ["https:", "http:", "mailto:"];
 // Steam's own links the launcher opens: start a game, Steam's main window, and a game's store page.
-const STEAM_LINKS = [/^steam:\/\/rungameid\/\d+$/, /^steam:\/\/open\/main$/, /^steam:\/\/store\/\d+$/];
+const STEAM_LINKS = [/^steam:\/\/rungameid\/\d+$/, /^steam:\/\/open\/main$/, /^steam:\/\/store\/\d+$/, /^steam:\/\/url\/CommunityFilePage\/\d+$/];
 
 /*
  * What may leave the app for the system: an ordinary web or mail link (or, with steam,
- * Steam's own steam://rungameid/<id>, steam://open/main or steam://store/<id>), parsed, with no user name or password in it.
+ * Steam's own steam://rungameid/<id>, steam://open/main, steam://store/<id> or a Workshop item's
+ * steam://url/CommunityFilePage/<id>), parsed, with no user name or password in it.
  * Anything else (file:, javascript:, smb:, another app's scheme) is refused. -> the link
  * to open, or null.
  */

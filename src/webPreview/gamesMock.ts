@@ -466,6 +466,7 @@ export const gamesBridge = {
         ...(filters.price ? { price: filters.price } : {}),
         ...(filters.sort ? { sort: filters.sort } : {}),
         ...(filters.mac ? { mac: "1" } : {}),
+        ...(filters.mods && filters.mods !== "any" ? { mods: filters.mods } : {}),
       })}`);
       if (!response.ok) throw new Error(String(response.status));
       const result = (await response.json()) as GameFindResult;
@@ -498,14 +499,24 @@ export const gamesBridge = {
   },
   // Real news and DLC through the preview's dev server; nothing offline.
   storeInfo: async (id: GameId): Promise<GameStoreInfo> => {
-    const appId = GAMES.find((g) => g.id === id)?.steamAppId ?? null;
+    const game = GAMES.find((g) => g.id === id);
+    const appId = game?.steamAppId ?? null;
     const none: GameStoreInfo = { steamAppId: appId, price: null, news: [], dlc: [], dlcCount: 0, storeUrl: null };
-    if (!appId) return none;
+    if (!appId && !game?.name) return none;
     try {
-      const response = await fetch(`/__games/store?${new URLSearchParams({ appid: appId })}`);
+      const response = await fetch(`/__games/store?${new URLSearchParams(appId ? { appid: appId, name: game?.name ?? "" } : { name: game?.name ?? "" })}`);
       return response.ok ? ((await response.json()) as GameStoreInfo) : none;
     } catch {
       return none;
+    }
+  },
+  whereToGet: async (names: string[]): Promise<Record<string, GameWhere>> => {
+    if (!names.length) return {};
+    try {
+      const response = await fetch(`/__games/where?${new URLSearchParams(names.map((name) => ["name", name]))}`);
+      return response.ok ? ((await response.json()) as Record<string, GameWhere>) : {};
+    } catch {
+      return {};
     }
   },
   removeGame: async (id: GameId) => {
@@ -551,7 +562,11 @@ export const gamesBridge = {
     const lists = sources.map((source) => sampleMods(game, source, options.query ?? "", options.page ?? 0).slice(0, sources.length > 1 ? 7 : 12));
     const mods = lists[0].flatMap((first, i) => [first, ...lists.slice(1).map((list) => list[i]).filter(Boolean)]);
     const totals = Object.fromEntries(sources.map((source) => [source, options.query ? 4 : 1200]));
-    return { total: Object.values(totals).reduce((a, b) => a + b, 0), totals, pageCount: options.query ? 1 : 100, mods };
+    // The sites the picker offers: these two, as the samples have no others.
+    const offered = (game.curseforge ? (["nexus", "curseforge"] as const) : (["nexus"] as const)).map((site) => ({
+      id: site, label: site === "nexus" ? "Nexus Mods" : "CurseForge", primary: true, ready: true, needsKey: null,
+    }));
+    return { total: Object.values(totals).reduce((a, b) => a + b, 0), totals, pageCount: options.query ? 1 : 100, mods, sources: offered };
   },
   details: async (id: GameId, provider: "nexus" | "curseforge", modId: string): Promise<GameModDetails> => {
     const game = need(id);

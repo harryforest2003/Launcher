@@ -47,6 +47,46 @@ declare global {
         icon: string | null;
     };
 
+    /** A world just added to an instance. */
+    type AddedWorld = {
+        folder: string;
+        name: string;
+        /** The Minecraft version its level.dat says it was last saved in. */
+        version: string | null;
+        /** Saved in a newer Minecraft than the instance runs. */
+        newer: boolean;
+        /** From CurseForge with no file for the instance's version: the version it was made for. */
+        madeFor?: string | null;
+    };
+
+    /** A world on CurseForge. */
+    type WorldListing = {
+        id: string;
+        name: string;
+        summary: string;
+        author: string | null;
+        downloads: number;
+        updated: string | null;
+        icon: string | null;
+        url: string | null;
+        categories: string[];
+        versions: string[];
+        /** False when the author only allows downloads from CurseForge's own site. */
+        installable: boolean;
+    };
+
+    type WorldSearch = { results: WorldListing[]; total: number; page: number; pageSize: number };
+
+    type WorldSearchOptions = {
+        query?: string;
+        /** A CurseForge category id, such as 248 (Adventure). */
+        category?: number | null;
+        sort?: "popular" | "downloads" | "updated" | "newest";
+        /** Every version, not only the instance's. */
+        anyVersion?: boolean;
+        page?: number;
+    };
+
     type InstanceScreenshot = {
         fileName: string;
         taken: string;
@@ -205,7 +245,7 @@ declare global {
 
     // The player's own tokens, set in Settings. CurseForge's key is the launcher's, so
     // pages only learn whether it's there.
-    type ApiKeyName = "modrinth" | "nexus" | "github";
+    type ApiKeyName = "modrinth" | "nexus" | "github" | "modio" | "steam" | "factorio";
     type ApiKeyStatuses = Record<ApiKeyName | "curseforge", ApiKeyStatus>;
 
     type ApiKeyStatus = {
@@ -479,6 +519,19 @@ declare global {
             fileAction(name: string, request: { kind: "world" | "screenshot"; name?: string; action: "open" | "show" | "trash" | "folder" }): Promise<void>;
             /** A copy under a new name, without its logs or play history. */
             duplicate(name: string, newName: string): Promise<Instance>;
+
+            /** Picks a world .zip and adds every world in it. null if nothing was picked. */
+            importWorldFile(name: string): Promise<AddedWorld[] | null>;
+            /** Picks a world folder (or a saves folder) and copies its worlds in. null if nothing was picked. */
+            importWorldFolder(name: string): Promise<AddedWorld[] | null>;
+            /** Downloads a world .zip from an https link and adds it. */
+            importWorldLink(name: string, url: string): Promise<AddedWorld[]>;
+            /** CurseForge's worlds, for this instance's Minecraft version unless anyVersion. */
+            searchWorlds(name: string, options: WorldSearchOptions): Promise<WorldSearch>;
+            /** Downloads a CurseForge world into the instance. */
+            installWorld(name: string, projectId: string): Promise<AddedWorld[]>;
+            /** How far an import or download has got. value is 0 to 1, or null if unknown. */
+            onWorldProgress(callback: (progress: { name: string; value: number | null; detail: string }) => void): () => void;
 
 
             content(name: string): Promise<InstanceContent>;

@@ -3,6 +3,7 @@ const path = require("path");
 const { readSettings, writeSettings, dataDir } = require("./storage.cjs");
 const modsRegistry = require("../mods/gameRegistry.cjs");
 const { steamLibraries, epicInstalls } = require("../mods/gameDetector.cjs");
+const wheretoget = require("./wheretoget.cjs");
 
 /*
  * Every other game: the ones More Games knows (Hytale, Red Dead Redemption 2, Elden Ring...)
@@ -711,15 +712,62 @@ async function steamPage(query, offset, count, filters = {}) {
     const last = Math.floor((offset + count - 1) / 25);
     const blocks = await Promise.all(Array.from({ length: last - first + 1 }, (_, i) => steamBlock(query, first + i, filters)));
     const rows = blocks.flatMap((b) => b.rows).slice(offset - first * 25, offset - first * 25 + count);
-    const games = [];
-    for (const row of rows) {
-        const id = row.match(/data-ds-appid="(\d+)"/)?.[1];
-        const name = row.match(/<span class="title">([^<]*)<\/span>/)?.[1];
-        // The row's own small picture, for games whose header has moved.
-        const capsule = row.match(/<img src="([^"]+)"/)?.[1] ?? null;
-        if (id && name) games.push({ steamAppId: id, name: cleanName(name), art: steamHeader(id), capsule, price: rowPrice(row), mac: row.includes("platform_img mac") });
-    }
+    const games = rows.map(rowGame).filter(Boolean);
     return { total: blocks[0].total || games.length, games };
+}
+
+/* One row of Steam's search as a game, or null for a bundle (no app number). */
+function rowGame(row) {
+    const id = row.match(/data-ds-appid="(\d+)"/)?.[1];
+    const name = row.match(/<span class="title">([^<]*)<\/span>/)?.[1];
+    // The row's own small picture, for games whose header has moved.
+    const capsule = row.match(/<img src="([^"]+)"/)?.[1] ?? null;
+    return id && name ? { steamAppId: id, name: cleanName(name), art: steamHeader(id), capsule, price: rowPrice(row), mac: row.includes("platform_img mac") } : null;
+}
+
+/*
+ * Steam's search kept to the games with mods (or without), for the "Mods" filter. Steam can't
+ * filter that itself, so its results are read in order, 50 at a time, and the kept ones
+ * remembered; the next page carries on where the last stopped. One read is held to 400 rows,
+ * and stops early (keeping what it has) if Steam turns it away after this page has its games.
+ * -> { kept, seen, total, done }
+ */
+const scans = new Map();
+const SCAN_BLOCKS = 2;
+const SCAN_ROUNDS = 8;
+function steamScan(query, filters, keep, from, wanted, scanKey) {
+    let scan = scans.get(scanKey);
+    if (!scan || Date.now() - scan.at > 10 * 60_000) {
+        scan = { at: Date.now(), block: 0, kept: [], seen: 0, total: 0, done: false, queue: Promise.resolve() };
+        scans.delete(scanKey);
+        scans.set(scanKey, scan);
+        if (scans.size > 20) scans.delete(scans.keys().next().value);
+    }
+    // One read at a time per scan, so pages asked for quickly don't read the same rows twice.
+    const read = scan.queue.then(async () => {
+        for (let round = 0; scan.kept.length < wanted && !scan.done && round < SCAN_ROUNDS; round++) {
+            let blocks;
+            try {
+                blocks = await Promise.all(Array.from({ length: SCAN_BLOCKS }, (_, i) => steamBlock(query, scan.block + i, filters)));
+            } catch (err) {
+                if (scan.kept.length > from) break;
+                throw err;
+            }
+            scan.block += SCAN_BLOCKS;
+            scan.total = blocks[0].total || scan.total;
+            for (const block of blocks) {
+                for (const game of block.rows.map(rowGame)) {
+                    if (!game) continue;
+                    scan.seen++;
+                    if (keep(game)) scan.kept.push(game);
+                }
+            }
+            if (scan.block * 25 >= scan.total || blocks.every((b) => !b.rows.length)) scan.done = true;
+        }
+        return scan;
+    });
+    scan.queue = read.catch(() => {});
+    return read;
 }
 
 /* How well a name matches what was typed: 3 exact, 2 starts with it, 1 has every word, 0 not. */
@@ -735,23 +783,36 @@ function score(name, query) {
 const SOURCES = new Set(["all", "steam", "nexus", "curseforge"]);
 
 /*
- * Every game, one entry each. source "all" is every game with mods on Nexus Mods or
- * CurseForge plus the Steam games on this computer (and Steam's own matches when something's
- * typed); "steam" is Steam's whole store, page by page; "nexus" and "curseforge" are each
+ * Every game, one entry each. source "all" is Steam's whole store when nothing's typed (each
+ * game marked with the mod sites that have it); typed, it's every game with mods on Nexus Mods
+ * or CurseForge, the Steam games on this computer and Steam's own matches. "steam" is Steam's
+ * whole store, page by page; "nexus" and "curseforge" are each
  * site's own list. A price, sale or Mac filter, or a sort other than the usual, searches
  * Steam's store (via "steam"), since only Steam sells them.
  *
  * Each game on the page that a mod site lists and Steam sells is folded into Steam's (its
  * name, picture, price), and the mod sites a Steam game has are marked, so one card stands
- * for all three. -> { results, page, pageCount, total, warnings, source, via, priceSteps }
+ * for all three.
+ *
+ * mods "with" keeps the games with mods on Nexus Mods or CurseForge, "none" the rest. Browsing
+ * every game with mods and no Steam filter lists the mod sites' games (most modded first);
+ * otherwise Steam's results are read through for them (steamScan), and the total is an
+ * estimate until the end of Steam's list is reached: approx "about", or "more" for at least that many.
+ * -> { results, page, pageCount, total, approx, counts, warnings, source, via, priceSteps }
  */
-async function search(query, { page = 0, size = 12, own = [], source = "all", price = "any", sort = "popular", mac = false } = {}) {
+async function search(query, { page = 0, size = 12, own = [], source = "all", price = "any", sort = "popular", mac = false, mods = "any" } = {}) {
     const q = String(query ?? "").trim().slice(0, 80);
     const from = SOURCES.has(source) ? source : "all";
     size = Math.min(Math.max(1, Number(size) || 12), 48);
     page = Math.max(0, Math.floor(Number(page) || 0));
     const filters = steamFilters({ price, sort, mac: Boolean(mac) });
-    const via = from === "steam" || (from === "all" && Object.keys(filters).length) ? "steam" : from;
+    // Every game on Nexus Mods and CurseForge has mods; the filter means something on Steam's lists.
+    const modsWanted = (from === "all" || from === "steam") && (mods === "with" || mods === "none") ? mods : "any";
+    const steamFiltered = Object.keys(filters).length > 0;
+    // Browsing every game is browsing Steam's store: 190,000-odd games, most played first. Every
+    // game with mods, unfiltered, is the mod sites' own lists instead.
+    const via =
+        from === "steam" || (from === "all" && ((!q && modsWanted !== "with") || steamFiltered)) ? "steam" : from;
     const warnings = [];
     const results = new Map();
     const merge = (entry) => {
@@ -778,6 +839,8 @@ async function search(query, { page = 0, size = 12, own = [], source = "all", pr
         }),
         curseforgeGames(),
     ]);
+    // How many games the mod sites list, one count for a game on both.
+    const moddedCount = () => new Set([...nexusAll, ...cfAll].map((g) => keyFor(g.name))).size;
     const nexusByKey = new Map(nexusAll.map((g) => [keyFor(g.name), g]));
     const cfByKey = new Map(cfAll.map((g) => [keyFor(g.name), g]));
     const installed = steamApps();
@@ -788,8 +851,41 @@ async function search(query, { page = 0, size = 12, own = [], source = "all", pr
         return { nexus: n?.domain ?? null, nexusGameId: n?.id ?? null, nexusMods: n?.mods ?? 0, curseforge: c?.id ?? null };
     };
 
+    const hasMods = (r) => Boolean(r.nexus || r.curseforge);
+    const keepForMods = (r) => (modsWanted === "with" ? hasMods(r) : !hasMods(r));
+
     let total = null;
-    if (via === "steam") {
+    let approx = null;
+    let scanned = null;
+    let scanPages = null;
+    if (via === "steam" && modsWanted !== "any") {
+        // Steam can't filter by mods: its results are read through for the games wanted.
+        try {
+            const scanKey = JSON.stringify([q, filters, modsWanted]);
+            const scan = await steamScan(q, filters, (g) => keepForMods(marks(g.name)), page * size, (page + 1) * size, scanKey);
+            const pages = Math.max(1, Math.ceil(scan.kept.length / size));
+            const at = scan.done ? Math.min(page, pages - 1) : page;
+            for (const g of scan.kept.slice(at * size, at * size + size)) merge({ ...g, ...marks(g.name), installed: installed.has(g.steamAppId) });
+            // Until Steam's list is read to the end there's no exact count. Games with mods are
+            // counted as found so far ("96+"): Steam's most played games mostly have mods and its
+            // long tail mostly doesn't, so the share seen so far would overcount. Games without are
+            // nearly all of Steam: its total less the games the mod sites list ("about").
+            if (scan.done || !scan.seen) total = scan.kept.length;
+            else if (modsWanted === "with") {
+                total = scan.kept.length;
+                approx = "more";
+            } else {
+                const modded = Math.min(Math.round((1 - scan.kept.length / scan.seen) * scan.total), moddedCount());
+                total = Math.max(scan.kept.length, scan.total - modded);
+                approx = "about";
+            }
+            // Pages open as Steam's list is read: those read so far, and the next.
+            scanPages = Math.max(1, Math.ceil(scan.kept.length / size)) + (scan.done ? 0 : 1);
+            scanned = at;
+        } catch (err) {
+            warnings.push(`Steam: ${err.message}`);
+        }
+    } else if (via === "steam") {
         // Steam pages itself: one request per page.
         try {
             const got = await steamPage(q, page * size, size, filters);
@@ -826,15 +922,18 @@ async function search(query, { page = 0, size = 12, own = [], source = "all", pr
     }
 
     let list = [...results.values()];
+    if (via !== "steam" && modsWanted !== "any") list = list.filter(keepForMods);
     // Steam's own order stands; the rest: best match, games with mods, then most modded (or by name).
     if (via === "steam") list.sort((a, b) => a.order - b.order);
     else if (sort === "name" || from === "curseforge") list.sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name));
     else list.sort((a, b) => b.rank - a.rank || Number(Boolean(b.nexus || b.curseforge)) - Number(Boolean(a.nexus || a.curseforge)) || b.nexusMods - a.nexusMods || a.name.localeCompare(b.name));
 
-    let at = page;
+    let at = scanned ?? page;
     let pageCount;
+    // Browsing every game: how many Steam sells, and how many have mods (some on both).
+    const counts = from === "all" && !q && total !== null && modsWanted === "any" ? { steam: total, modded: moddedCount() } : undefined;
     if (total !== null) {
-        pageCount = Math.max(1, Math.ceil(total / size));
+        pageCount = scanPages ?? Math.max(1, Math.ceil(total / size));
     } else {
         total = list.length;
         pageCount = Math.max(1, Math.ceil(total / size));
@@ -902,6 +1001,8 @@ async function search(query, { page = 0, size = 12, own = [], source = "all", pr
         first.installed ||= r.installed;
         return false;
     });
+    // A Steam game parted from a mod site's game of the same name lost its mods; the filter holds.
+    if (modsWanted !== "any") list = list.filter(keepForMods);
     const prices = await steamPrices(list.filter((r) => r.steamAppId && r.price === undefined).map((r) => r.steamAppId)).catch(() => new Map());
 
     const games = all();
@@ -920,7 +1021,25 @@ async function search(query, { page = 0, size = 12, own = [], source = "all", pr
         mac: r.mac ?? null,
         existing: existing(r, games, own)?.id ?? null,
     }));
-    return { results: out, page: at, pageCount, total, warnings, source: from, via, priceSteps: await stepsLoading };
+    return { results: out, page: at, pageCount, total, approx, counts, warnings, source: from, via, priceSteps: await stepsLoading };
+}
+
+/* ---------------- where to get a game ---------------- */
+
+/*
+ * The stores that sell each of these games (wheretoget.cjs), with Steam's price on a Steam
+ * one: a mod site's game Steam sells under another name is found this way too.
+ * -> { [name]: { stores, platforms, pc, steamAppId } }
+ */
+async function whereToGet(names) {
+    const found = await wheretoget.lookup(names, { cc: await steamCountry() });
+    const ids = Object.values(found).map((where) => where.steamAppId).filter(Boolean);
+    const prices = ids.length ? await steamPrices(ids).catch(() => new Map()) : new Map();
+    for (const where of Object.values(found)) {
+        const steam = where.stores.find((s) => s.store === "steam");
+        if (steam && where.steamAppId) steam.price = prices.get(String(where.steamAppId)) ?? null;
+    }
+    return found;
 }
 
 /* ---------------- news and add-ons ---------------- */
@@ -947,14 +1066,18 @@ const money = (cents, currency) => {
 
 /*
  * A game's news and add-ons from Steam: its latest announcements, and its DLC at today's
- * prices (on sale first, then newest), with the game's own price. Kept an hour.
+ * prices (on sale first, then newest), with the game's own price, and every store that sells
+ * it. Kept an hour.
  */
 const infoCache = new Map();
 async function storeInfo(def) {
-    const appId = def.steamAppIds?.[0] ?? null;
-    if (!appId) return { steamAppId: null, price: null, news: [], dlc: [], dlcCount: 0, storeUrl: null };
+    const where = def.name ? (await whereToGet([def.name]).catch(() => ({})))[def.name] ?? null : null;
+    const others = { stores: where?.stores ?? [], platforms: where?.platforms ?? [], pc: where?.pc ?? null };
+    // A game Steam sells under another name than the mod sites': Wikidata knows its number.
+    const appId = def.steamAppIds?.[0] ?? where?.steamAppId ?? null;
+    if (!appId) return { steamAppId: null, price: null, news: [], dlc: [], dlcCount: 0, storeUrl: null, ...others };
     const cached = infoCache.get(appId);
-    if (cached && Date.now() - cached.at < HOUR) return cached.value;
+    if (cached && Date.now() - cached.at < HOUR) return { ...cached.value, ...others };
     const [newsJson, dlcJson, prices] = await Promise.all([
         getJson(`https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${appId}&count=6&maxlength=600&feeds=steam_community_announcements`).catch(() => null),
         ccParam().then((cc) => getJson(`https://store.steampowered.com/api/dlcforapp/?appid=${appId}&l=english${cc}`)).catch(() => null),
@@ -988,7 +1111,7 @@ async function storeInfo(def) {
     const value = { steamAppId: appId, price: prices.get(String(appId)) ?? null, news, dlc: all.slice(0, 12), dlcCount: all.length, storeUrl: storeUrl(appId) };
     // A failed answer is asked again next time.
     if (newsJson || dlcJson) infoCache.set(appId, { at: Date.now(), value });
-    return value;
+    return { ...value, ...others };
 }
 
 /* ---------------- pictures ---------------- */
@@ -1032,4 +1155,4 @@ async function xboxArt(name) {
     return `${pick.Uri.startsWith("//") ? "https:" : ""}${pick.Uri}?w=920`;
 }
 
-module.exports = { all, find, open, keep, remove, locate, chooseModsDir, chooseLaunch, search, storeInfo, artFor, steamApps, defaultModsDir, keyFor, OWN };
+module.exports = { all, find, open, keep, remove, locate, chooseModsDir, chooseLaunch, search, storeInfo, whereToGet, artFor, steamApps, defaultModsDir, keyFor, OWN };

@@ -14,6 +14,7 @@ const downloads = require("./downloads.cjs");
 const nexus = require("./nexus.cjs");
 const { launch } = require("./launch.cjs");
 const { installFromUrl } = require("./remote.cjs");
+const sources = require("./sources/index.cjs");
 const updates = require("./updates.cjs");
 const saves = require("./saves.cjs");
 const plugins = require("./plugins.cjs");
@@ -298,6 +299,7 @@ function registerGamesIpc() {
             price: typeof f.price === "string" ? f.price : "any",
             sort: typeof f.sort === "string" ? f.sort : "popular",
             mac: f.mac === true,
+            mods: f.mods === "with" || f.mods === "none" ? f.mods : "any",
         });
     });
     ipcMain.handle("games:openGame", (_e, entry) => custom.open(entry && typeof entry === "object" ? entry : {}, GAMES));
@@ -311,6 +313,10 @@ function registerGamesIpc() {
     });
     // News and add-ons (with today's prices) for a game sold on Steam.
     ipcMain.handle("games:storeInfo", (_e, id) => custom.storeInfo(need(id)));
+    // The stores that sell each of a page of games, and what they run on.
+    ipcMain.handle("games:whereToGet", (_e, names) =>
+        custom.whereToGet((Array.isArray(names) ? names : []).filter((name) => typeof name === "string").slice(0, 40))
+    );
     ipcMain.handle("games:removeGame", (_e, id) => custom.remove(needGeneric(id).id));
 
     // Where a game's mods go, and what starts it.
@@ -719,42 +725,57 @@ function registerGamesIpc() {
 
     ipcMain.handle("games:setSimsOptions", (_e, options) => protect.setSimsOptions(detect.locate("sims4"), { mods: options?.mods, scripts: options?.scripts }));
 
-    // One site, or (for a game on both) Nexus Mods and CurseForge together, as Minecraft's Discover mixes its sources.
+    // One site, or every site a game's mods are on together, as Minecraft's Discover mixes its sources.
     ipcMain.handle("games:search", async (_e, id, options) => {
         const game = need(id);
         const query = String(options?.query ?? "");
         const page = Math.max(0, Number(options?.page) || 0);
-        const wanted = options?.provider === "curseforge" || options?.provider === "nexus" ? options.provider : "any";
-        const sources = [...(game.nexus && wanted !== "curseforge" ? ["nexus"] : []), ...(game.curseforge && wanted !== "nexus" ? ["curseforge"] : [])];
-        if (!sources.length) throw new Error(`${game.name} has no mods on ${wanted === "curseforge" ? "CurseForge" : "Nexus Mods"}.`);
-        // Mixed, each gives half a page.
-        const size = sources.length > 1 ? 12 : 24;
+        // Thunderstore, mod.io, the Workshop and the rest: the ones with mods for this game.
+        const extras = await sources.forGame(game);
+        const builtIn = [...(game.nexus ? [{ id: "nexus", label: "Nexus Mods", ready: true }] : []), ...(game.curseforge ? [{ id: "curseforge", label: "CurseForge", ready: true }] : [])];
+        const offered = [...builtIn, ...extras.map(({ id: source, label, ready, needsKey }) => ({ id: source, label, ready, needsKey }))];
+        const asked = String(options?.provider ?? "any");
+        const wanted = offered.some((source) => source.id === asked) ? asked : "any";
+        let picked = wanted !== "any" ? [wanted] : [...builtIn.map((source) => source.id), ...extras.filter((source) => source.ready && source.primary).map((source) => source.id)];
+        // GameBanana joins "Any site" only for a game with nothing else.
+        if (!picked.length) picked = extras.filter((source) => source.ready).map((source) => source.id);
+        if (!picked.length) {
+            const locked = extras.find((source) => !source.ready);
+            throw new Error(locked ? `Add your ${locked.id === "workshop" ? "Steam Web API" : locked.label} key in Settings → API keys to find ${game.name} mods on ${locked.label}.` : `None of the mod sites the launcher searches has mods for ${game.name}.`);
+        }
+        // Mixed, each gives part of a page.
+        const size = picked.length > 1 ? 12 : 24;
+        // Adult mods only for a Nexus Mods account that's age-verified and has them on.
+        const adult = picked.some((source) => source !== "curseforge") ? (await adultStatus()).on : false;
         const run = (source) =>
             source === "curseforge"
                 ? searchCurseForge(game, { query, sort: options?.sort, page, size })
-                : nexus.search(game.nexus, { query, sort: options?.sort, page, count: size, adult });
-        const adult = sources.includes("nexus") ? (await adultStatus()).on : false;
-        const answers = await Promise.allSettled(sources.map(run));
+                : source === "nexus"
+                  ? nexus.search(game.nexus, { query, sort: options?.sort, page, count: size, adult })
+                  : sources.search(game, source, { query, sort: options?.sort, page, size, adult });
+        const answers = await Promise.allSettled(picked.map(run));
         const totals = {};
+        const perPage = {};
         const lists = [];
         const warnings = [];
         answers.forEach((answer, i) => {
-            const label = sources[i] === "curseforge" ? "CurseForge" : "Nexus Mods";
+            const label = offered.find((source) => source.id === picked[i])?.label ?? picked[i];
             if (answer.status === "fulfilled") {
-                totals[sources[i]] = answer.value.total;
+                totals[picked[i]] = answer.value.total;
+                perPage[picked[i]] = answer.value.perPage ?? size;
                 lists.push(answer.value.mods);
             } else {
-                totals[sources[i]] = 0;
+                totals[picked[i]] = 0;
                 warnings.push(`${label}: ${answer.reason?.message ?? "couldn't be searched"}`);
             }
         });
-        if (warnings.length === sources.length) throw new Error(warnings.join(" "));
-        // Taking turns, so both sites' best results are near the top.
+        if (warnings.length === picked.length) throw new Error(warnings.join(" "));
+        // Taking turns, so every site's best results are near the top.
         const mods = [];
         for (let i = 0; lists.some((list) => i < list.length); i++) for (const list of lists) if (i < list.length) mods.push(list[i]);
         const capped = (source) => (source === "curseforge" ? Math.min(totals[source], 10000) : totals[source]);
-        const pageCount = Math.max(1, ...sources.map((source) => Math.ceil(capped(source) / size)));
-        return { total: sources.reduce((sum, source) => sum + totals[source], 0), totals, pageCount, mods, warnings };
+        const pageCount = Math.max(1, ...picked.map((source) => Math.ceil(capped(source) / (perPage[source] ?? size))));
+        return { total: picked.reduce((sum, source) => sum + totals[source], 0), totals, pageCount, mods, warnings, sources: offered };
     });
 
     // Nexus collections: whole curated lists of mods, installed through the download queue.
@@ -791,6 +812,7 @@ function registerGamesIpc() {
 
     ipcMain.handle("games:details", async (_e, id, provider, modId) => {
         const game = need(id);
+        if (sources.isSource(provider)) return sources.details(game, provider, String(modId));
         if (provider === "curseforge") {
             const [projectRes, descriptionRes, files] = await Promise.all([
                 curseforgeFetch(`/mods/${encodeURIComponent(modId)}`),
@@ -828,6 +850,10 @@ function registerGamesIpc() {
         const game = need(id);
         const progress = (detail) => event.sender.send("games:progress", { gameId: id, detail });
         try {
+            if (sources.isSource(provider)) {
+                const result = await sources.install(game, provider, String(modId), fileId ? String(fileId) : null, name ? String(name) : "", progress);
+                return result.viaSteam ? result : queueMissing(id, await withMissing(id, result));
+            }
             if (provider === "curseforge") {
                 const file = await curseforge.resolveDownload(String(modId), fileId ? String(fileId) : null);
                 return queueMissing(id, await withMissing(id, await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress, { sha1: file.sha1 })));
@@ -835,6 +861,8 @@ function registerGamesIpc() {
             const url = await nexus.downloadUrl(game.nexus, String(modId), String(fileId));
             return queueMissing(id, await withMissing(id, await installFromUrl(game, url, { name: String(name || `Nexus mod ${modId}`), source: { provider: "nexus", modId: String(modId), fileId: String(fileId) } }, progress)));
         } catch (err) {
+            // A file the site only hands out on its own page (or with a key not added yet).
+            if (err.code === "WEBSITE_ONLY") return { needsWebsite: err.page ?? null, reason: err.message };
             if (err.code === "PREMIUM_REQUIRED" || err.code === "DISTRIBUTION_DENIED") {
                 const page = provider === "curseforge" ? null : `https://www.nexusmods.com/${game.nexus}/mods/${modId}?tab=files&file_id=${fileId}&nmm=1`;
                 return { needsWebsite: page, reason: err.message };
@@ -885,7 +913,7 @@ function registerGamesIpc() {
     });
 
     ipcMain.handle("games:openUrl", (_e, url) => {
-        const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|store\.steampowered\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com)\//i;
+        const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|store\.steampowered\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com|thunderstore\.io|mod\.io|gamebanana\.com|mods\.factorio\.com|spacedock\.info|beatmods\.com|steamcommunity\.com)\//i;
         // Script Hook V's own site, and Script Hook V .NET's releases (requirements of GTA V mods).
         const frameworks = /^(http:\/\/www\.dev-c\.com\/gtav\/|https:\/\/github\.com\/scripthookvdotnet\/)/i;
         if ((allowed.test(String(url)) || frameworks.test(String(url))) && openExternalSafely(String(url))) return;

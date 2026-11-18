@@ -5,6 +5,7 @@ const { app, ipcMain, shell, dialog, BrowserWindow } = require("electron");
 const instanceManager = require("../instanceManager.cjs");
 const instanceMods = require("./instanceMods.cjs");
 const instanceFiles = require("./instanceFiles.cjs");
+const worlds = require("./worlds.cjs");
 const javaRuntime = require("./javaRuntime.cjs");
 const modUpdates = require("./modUpdates.cjs");
 const loaderUpdates = require("./loaderUpdates.cjs");
@@ -55,20 +56,30 @@ const KEY_CHECKS = {
     modrinth: (key) => ["https://api.modrinth.com/v2/user", { Authorization: key }],
     nexus: (key) => ["https://api.nexusmods.com/v1/users/validate.json", { apikey: key }],
     github: (key) => ["https://api.github.com/rate_limit", { Authorization: `Bearer ${key}` }],
+    modio: (key) => [`https://api.mod.io/v1/games?${new URLSearchParams({ api_key: key, _limit: "1" })}`, {}],
+    steam: (key) => [`https://api.steampowered.com/ISteamWebAPIUtil/GetSupportedAPIList/v1/?${new URLSearchParams({ key })}`, {}],
+    // Saved as "username:token"; the portal checks both together.
+    factorio: (key) => {
+        const at = key.indexOf(":");
+        if (at <= 0 || at === key.length - 1) throw new Error("Enter your Factorio username, a colon, then your token (both are on factorio.com/profile).");
+        const body = JSON.stringify({ username: key.slice(0, at).trim(), token: key.slice(at + 1).trim(), query: "", page_size: 1 });
+        return ["https://mods.factorio.com/api/search", { "Content-Type": "application/json" }, { method: "POST", body }];
+    },
 };
 
-const KEY_LABELS = { modrinth: "Modrinth", nexus: "Nexus Mods", github: "GitHub" };
+const KEY_LABELS = { modrinth: "Modrinth", nexus: "Nexus Mods", github: "GitHub", modio: "mod.io", steam: "Steam", factorio: "Factorio" };
 
 async function checkKey(name, key) {
     const check = KEY_CHECKS[name];
     if (!check) throw new Error(`"${name}" is not an API key this app uses.`);
 
     const label = KEY_LABELS[name];
-    const [url, headers] = check(key);
+    const [url, headers, init] = check(key);
 
     let res;
     try {
         res = await fetch(url, {
+            ...init,
             headers: { ...headers, Accept: "application/json", "User-Agent": "UnityLauncher/1.0" },
             signal: AbortSignal.timeout(15 * 1000),
         });
@@ -94,6 +105,8 @@ function withCurseForge(statuses) {
 function keyChanged(name) {
     modSearch.resetCatalog();
     if (name === "nexus") require("../mods/providers/nexus.cjs").setApiKey(getSecret("nexus"));
+    // Which games mod.io and the Workshop have was asked with the old key.
+    require("../games/sources/http.cjs").forget(`${name === "steam" ? "workshop" : name}:`);
 }
 
 /*
@@ -367,6 +380,59 @@ function registerInstanceIpc() {
 
     ipcMain.handle("instance:duplicate", (_e, name, newName) =>
         instanceManager.duplicateInstance(name, newName)
+    );
+
+    /* ---------------- adding worlds ---------------- */
+
+    // How far an import has got, at most ten times a second (unpacking reports every chunk).
+    const worldProgress = (event, name) => {
+        let last = 0;
+        return (value, detail) => {
+            const now = Date.now();
+            if (now - last < 100 && value !== 1) return;
+            last = now;
+            send(event, "worlds:progress", { name, value, detail });
+        };
+    };
+
+    ipcMain.handle("worlds:importFile", async (event, name) => {
+        const instance = instanceManager.getInstance(name);
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: "Choose a world .zip",
+            properties: ["openFile"],
+            filters: [{ name: "Minecraft world", extensions: ["zip"] }],
+        });
+        if (picked.canceled || !picked.filePaths[0]) return null;
+        return worlds.importZip(instance, picked.filePaths[0], { onProgress: worldProgress(event, name) });
+    });
+
+    ipcMain.handle("worlds:importFolder", async (event, name) => {
+        const instance = instanceManager.getInstance(name);
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: "Choose a world folder, or a saves folder",
+            properties: ["openDirectory"],
+        });
+        if (picked.canceled || !picked.filePaths[0]) return null;
+        return worlds.importFolder(instance, picked.filePaths[0], { onProgress: worldProgress(event, name) });
+    });
+
+    ipcMain.handle("worlds:importLink", (event, name, url) =>
+        worlds.importLink(instanceManager.getInstance(name), String(url ?? ""), { onProgress: worldProgress(event, name) })
+    );
+
+    ipcMain.handle("worlds:search", (_e, name, options = {}) => {
+        const instance = instanceManager.getInstance(name);
+        return worlds.search({
+            query: String(options.query ?? ""),
+            mcVersion: options.anyVersion ? null : instance.version,
+            category: options.category ?? null,
+            sort: options.sort,
+            page: Number(options.page) || 0,
+        });
+    });
+
+    ipcMain.handle("worlds:install", (event, name, projectId) =>
+        worlds.installCurseForge(instanceManager.getInstance(name), projectId, { onProgress: worldProgress(event, name) })
     );
 
 

@@ -23,6 +23,11 @@ const SECRETS = {
     nexus: { env: "NEXUS_API_KEY", label: "Nexus Mods", personal: true },
     github: { env: "GITHUB_TOKEN", label: "GitHub", personal: true },
     modrinth: { env: "MODRINTH_TOKEN", label: "Modrinth", personal: true },
+    // Other mod sites, each optional: a player's own read-only key unlocks the site.
+    modio: { env: "MODIO_API_KEY", label: "mod.io", personal: true },
+    steam: { env: "STEAM_WEB_API_KEY", label: "Steam Web API", personal: true },
+    // "username:token", from factorio.com/profile.
+    factorio: { env: "FACTORIO_TOKEN", label: "Factorio", personal: true },
 };
 
 function isPersonal(name) {

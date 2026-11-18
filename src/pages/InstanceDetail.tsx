@@ -612,7 +612,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         />
       )}
 
-      {tab === "worlds" && <InstanceWorlds instanceName={instanceName} />}
+      {tab === "worlds" && <InstanceWorlds instanceName={instanceName} mcVersion={instance.version} />}
 
       {tab === "screenshots" && <InstanceScreenshots instanceName={instanceName} />}
 

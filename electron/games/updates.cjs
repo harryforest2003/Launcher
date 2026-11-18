@@ -6,6 +6,7 @@ const store = require("./store.cjs");
 const nexus = require("./nexus.cjs");
 const { installFromUrl } = require("./remote.cjs");
 const curseforge = require("../mods/providers/curseforge.cjs");
+const sources = require("./sources/index.cjs");
 
 /*
  * Newer versions of installed mods, as for Minecraft: which mods have one, and updating
@@ -144,6 +145,19 @@ async function check(gameId) {
         const key = `m:${mod.id}`;
         const source = mod.source ?? {};
         try {
+            // Thunderstore, mod.io and the other sites: their newest file against the one installed.
+            if (sources.isSource(source.provider) && source.modId) {
+                const newest = await sources.latest(game, source.provider, source.modId).catch(() => undefined);
+                if (newest === undefined) {
+                    out.unknown += 1;
+                    return;
+                }
+                out.checked += 1;
+                if (newest && String(newest.fileId) !== String(source.fileId ?? "")) {
+                    out.updates.push({ key, name: mod.name, provider: source.provider, modId: String(source.modId), fromVersion: source.version ?? "", toVersion: newest.version, toFileId: String(newest.fileId), toName: newest.version, date: newest.date ?? "", size: newest.size ?? 0 });
+                }
+                return;
+            }
             if (source.provider === "curseforge" && source.modId) {
                 const files = await curseforge.getFiles(String(source.modId));
                 const newest = files[0];
@@ -208,6 +222,18 @@ async function update(gameId, key, progress) {
     if (!found) throw new Error("That mod has no newer version.");
     const mod = store.readState(gameId).mods.find((m) => `m:${m.id}` === key);
     if (!mod) throw new Error("That mod isn't installed any more.");
+
+    if (sources.isSource(found.provider)) {
+        try {
+            // The same site and mod, so the old copy is the one replaced (and kept for Undo).
+            const result = await sources.install(game, found.provider, found.modId, found.toFileId, mod.name, progress);
+            forget(gameId, key);
+            return result;
+        } catch (err) {
+            if (err.code === "WEBSITE_ONLY") return { needsWebsite: err.page ?? null, reason: err.message };
+            throw err;
+        }
+    }
 
     if (found.provider === "curseforge") {
         if (found.website) return { needsWebsite: null, reason: "Its author only allows downloads from CurseForge's website." };

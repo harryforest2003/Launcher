@@ -10,7 +10,7 @@ import { Badge, Button, EmptyState, Monogram, Notice, SearchField, Select, Skele
 
 type Props = {
   detail: GameDetail;
-  openMod: (provider: "nexus" | "curseforge", id: string) => void;
+  openMod: (provider: GameModProvider, id: string) => void;
   afterInstall: (result: GameInstallResult) => void;
   /* A free Nexus account installs through the website; what the mod needs follows it. */
   openOnNexus: (item: { modId: string; name: string; page: string }) => Promise<void>;
@@ -37,14 +37,24 @@ function ago(iso: string) {
   return `${Math.round(days / 365)}y ago`;
 }
 
-const BADGE: Record<string, { label: string; colour: string }> = {
-  nexus: { label: "Nexus", colour: "var(--color-warning-solid)" },
-  curseforge: { label: "CurseForge", colour: "var(--color-warning-solid)" },
+const BADGE: Record<string, { label: string }> = {
+  nexus: { label: "Nexus" },
+  curseforge: { label: "CurseForge" },
+  thunderstore: { label: "Thunderstore" },
+  modio: { label: "mod.io" },
+  workshop: { label: "Workshop" },
+  gamebanana: { label: "GameBanana" },
+  factorio: { label: "Factorio" },
+  spacedock: { label: "SpaceDock" },
+  beatmods: { label: "BeatMods" },
 };
 
+type Offered = NonNullable<GameSearchPage["sources"]>;
+
 /*
- * Finding mods for a game, laid out as Minecraft's Discover page: Nexus Mods for every
- * game, and CurseForge too for the games it carries (The Sims 4, Stardew Valley).
+ * Finding mods for a game, laid out as Minecraft's Discover page: Nexus Mods and CurseForge
+ * for the games they carry, and Thunderstore, mod.io, the Steam Workshop and the rest for
+ * theirs, mixed under "Any site".
  * Clicking a card opens the mod's page; the download button installs its main file.
  */
 export default function GameDiscover({ detail, openMod, afterInstall, openOnNexus, goLauncherSettings, goMods, openCollection }: Props) {
@@ -52,8 +62,10 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
   const [showing, setShowing] = useState<"mods" | "collections">("mods");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
-  // Games on both sites start with both, mixed, as Minecraft's Discover does.
-  const [provider, setProvider] = useState<"any" | "nexus" | "curseforge">(detail.curseforge ? "any" : "nexus");
+  // Games on several sites start with all of them, mixed, as Minecraft's Discover does.
+  const [provider, setProvider] = useState<"any" | GameModProvider>("any");
+  // The sites with mods for this game, kept when a search fails so another can be picked.
+  const [offered, setOffered] = useState<Offered>([]);
   const [sort, setSort] = useState("popular");
   // The last search's answer, and which search it answered: another one is loading until it's in.
   const [loaded, setLoaded] = useState<{ key: string; result: GameSearchPage | null; error: string | null } | null>(null);
@@ -89,7 +101,11 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
     let active = true;
     window.gamesAPI
       .search(detail.id, { provider, query: debounced, sort, page: page - 1 })
-      .then((next) => active && setLoaded({ key: searchKey, result: next, error: null }))
+      .then((next) => {
+        if (!active) return;
+        setLoaded({ key: searchKey, result: next, error: null });
+        if (next.sources) setOffered(next.sources);
+      })
       .catch((err) => active && setLoaded({ key: searchKey, result: null, error: errorText(err) }));
     return () => {
       active = false;
@@ -137,7 +153,9 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
           if (!fileId) throw new Error(`${mod.name} has no files to download.`);
         }
         const result = await window.gamesAPI.installRemote(detail.id, mod.provider, mod.id, fileId, mod.name);
-        if (result.needsWebsite && mod.provider === "nexus") {
+        if (result.viaSteam) {
+          setMessage({ tone: "info", text: `${mod.name}: ${result.reason ?? "opened in Steam. Press Subscribe there and Steam installs it."}` });
+        } else if (result.needsWebsite && mod.provider === "nexus") {
           await openOnNexus({ modId: mod.id, name: mod.name, page: result.needsWebsite });
         } else if (result.needsWebsite !== undefined) {
           const page = result.needsWebsite ?? mod.url;
@@ -167,8 +185,9 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
     }
     return rows;
   })();
-  const label = provider === "curseforge" ? "CurseForge" : provider === "nexus" ? "Nexus Mods" : "Nexus Mods and CurseForge";
-  const showsNexus = provider !== "curseforge";
+  const sourceLabel = (id: string) => offered.find((source) => source.id === id)?.label ?? BADGE[id]?.label ?? id;
+  const label = provider === "any" ? "every site" : sourceLabel(provider);
+  const showsNexus = Boolean(detail.nexus) && (provider === "any" || provider === "nexus");
   const hasTips = !!MORE_SITES[detail.id] || (showsNexus && !!account && !account.premium);
   useEffect(() => {
     if (!infoOpen) return;
@@ -259,17 +278,20 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
               ]}
             /></div>
           )}
-          {showing === "mods" && detail.curseforge && (
-            <Select size="sm" wrapperClassName="dc-bar__source" value={provider} onChange={(event) => setProvider(event.target.value as "any" | "nexus" | "curseforge")} aria-label="Where to search">
-              <option value="any">Any source</option>
-              <option value="nexus">Nexus Mods</option>
-              <option value="curseforge">CurseForge</option>
+          {showing === "mods" && offered.length > 1 && (
+            <Select size="sm" wrapperClassName="dc-bar__source" value={provider} onChange={(event) => setProvider(event.target.value as "any" | GameModProvider)} aria-label="Where to search">
+              <option value="any">Any site</option>
+              {offered.map((source) => (
+                <option key={source.id} value={source.id}>
+                  {source.ready ? source.label : `${source.label} (add a key)`}
+                </option>
+              ))}
             </Select>
           )}
           {showing === "mods" && result && (
             <span
               className="dc-bar__count dc-bar__count--keep"
-              title={`${result.totals && Object.keys(result.totals).length > 1 ? `${countText(result.totals.nexus ?? 0)} on Nexus Mods, ${countText(result.totals.curseforge ?? 0)}${(result.totals.curseforge ?? 0) >= 10000 ? "+" : ""} on CurseForge` : `${countText(result.total)} on ${label}`}. Page ${page.toLocaleString()} of ${pageCount.toLocaleString()}`}
+              title={`${result.totals && Object.keys(result.totals).length > 1 ? Object.entries(result.totals).map(([id, count = 0]) => `${countText(count)}${id === "curseforge" && count >= 10000 ? "+" : ""} on ${sourceLabel(id)}`).join(", ") : `${countText(result.total)} on ${label}`}. Page ${page.toLocaleString()} of ${pageCount.toLocaleString()}`}
             >
               {countText(result.total)} mods
             </span>
@@ -329,7 +351,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
               )}
               meta={
                 <>
-                  <span className="dc-stat" title="Downloads"><Download size={12} aria-hidden="true" /><strong>{countText(mod.downloads)}</strong></span>
+                  {/* GameBanana's and BeatMods' lists don't give a count: none is shown rather than 0. */}
+                  {mod.downloads > 0 && <span className="dc-stat" title="Downloads"><Download size={12} aria-hidden="true" /><strong>{countText(mod.downloads)}</strong></span>}
                   {mod.endorsements != null && (
                     <span className="dc-stat" title="Endorsements"><Heart size={12} aria-hidden="true" />{countText(mod.endorsements)}</span>
                   )}
@@ -337,7 +360,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
                     <span className="dc-stat" title={`Updated ${shortDate(mod.updated)}`}><Clock size={12} aria-hidden="true" />{ago(mod.updated)}</span>
                   )}
                   {also.map((provider) => (
-                    <Badge key={provider} className="dc-chip" tone={provider === "nexus" ? "accent" : "neutral"}>{BADGE[provider].label}</Badge>
+                    <Badge key={provider} className="dc-chip" tone={provider === "nexus" ? "accent" : "neutral"}>{BADGE[provider]?.label ?? provider}</Badge>
                   ))}
                   {mod.adult && <Badge className="dc-chip" tone="danger">18+</Badge>}
                 </>
@@ -356,9 +379,11 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
                         ? account
                           ? "Opens its main file's download on Nexus Mods: one click there installs it"
                           : "Opens it on Nexus Mods (add your Nexus Mods key to install with the launcher)"
-                        : mod.installable === false
-                          ? "Its author only allows downloads from their website: opens it"
-                          : `Install into ${detail.name}`
+                        : mod.provider === "workshop"
+                          ? "Opens it in Steam: press Subscribe there and Steam installs it"
+                          : mod.installable === false
+                            ? "Its author only allows downloads from their website: opens it"
+                            : `Install into ${detail.name}`
                   }
                   disabled={installing !== null}
                   onClick={() => quickInstall(mod)}

@@ -1,0 +1,215 @@
+/* An instance's Worlds tab: its worlds, adding more, and CurseForge's. */
+
+.worlds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.worlds__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.worlds__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.worlds__link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--ui-radius-card);
+}
+
+.worlds__link-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.worlds__link-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.worlds__input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--control-sm);
+}
+
+.worlds__progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.worlds__progress-text,
+.worlds__muted {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.worlds__notice {
+  margin: 0;
+}
+
+.worlds__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.worlds__item {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--color-surface-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--ui-radius-card);
+}
+
+.worlds__icon {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-surface-sunken);
+}
+
+.worlds__icon--pixel {
+  image-rendering: pixelated;
+}
+
+.worlds__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+}
+
+.worlds__name {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.worlds__by {
+  font-weight: normal;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.worlds__summary {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.worlds__meta {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.worlds__meta--small {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.worlds__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.worlds__item-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.worlds__site {
+  display: inline-grid;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--ui-radius-control);
+  color: var(--color-text-muted);
+}
+
+.worlds__site:hover {
+  color: var(--color-text);
+  background: var(--color-hover);
+}
+
+.worlds__find {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.worlds__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.worlds__search {
+  flex: 1 1 240px;
+}
+
+.worlds__check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.worlds__check input {
+  accent-color: var(--color-accent);
+  width: 15px;
+  height: 15px;
+}
+
+.worlds__source {
+  margin-top: calc(-1 * var(--space-1));
+}
+
+@media (max-width: 640px) {
+  .worlds__item {
+    flex-wrap: wrap;
+  }
+
+  .worlds__item-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

@@ -53,6 +53,7 @@ function gamesSearch(): Plugin {
             price: url.searchParams.get('price') ?? undefined,
             sort: url.searchParams.get('sort') ?? undefined,
             mac: url.searchParams.get('mac') === '1',
+            mods: url.searchParams.get('mods') ?? undefined,
             own: GAMES,
           })
           .then((result: unknown) => {
@@ -66,14 +67,50 @@ function gamesSearch(): Plugin {
       })
       // A game page's Steam news and DLC offers, from the same code as the app.
       server.middlewares.use('/__games/store', (req, res) => {
-        const appId = new URL(req.url ?? '', 'http://localhost').searchParams.get('appid') ?? ''
-        if (!/^\d{1,10}$/.test(appId)) {
+        const params = new URL(req.url ?? '', 'http://localhost').searchParams
+        const appId = params.get('appid') ?? ''
+        const name = (params.get('name') ?? '').slice(0, 200)
+        if (appId ? !/^\d{1,10}$/.test(appId) : !name) {
           res.statusCode = 400
           res.end('{}')
           return
         }
         load('./electron/games/custom.cjs')
-          .storeInfo({ steamAppIds: [appId] })
+          .storeInfo({ name, steamAppIds: appId ? [appId] : [] })
+          .then((result: unknown) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+          })
+          .catch((err: unknown) => {
+            res.statusCode = 502
+            res.end(JSON.stringify({ error: String(err) }))
+          })
+      })
+      // CurseForge's worlds, for an instance's Worlds tab, from the same code as the app.
+      server.middlewares.use('/__worlds/search', (req, res) => {
+        const params = new URL(req.url ?? '', 'http://localhost').searchParams
+        load('./electron/minecraft/worlds.cjs')
+          .search({
+            query: (params.get('q') ?? '').slice(0, 200),
+            mcVersion: params.get('version') || null,
+            category: params.get('category') || null,
+            sort: params.get('sort') ?? undefined,
+            page: Number(params.get('page')) || 0,
+          })
+          .then((result: unknown) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(result))
+          })
+          .catch((err: unknown) => {
+            res.statusCode = 502
+            res.end(JSON.stringify({ error: String(err) }))
+          })
+      })
+      // Where a page of games can be bought or downloaded (Wikidata and GOG), from the same code as the app.
+      server.middlewares.use('/__games/where', (req, res) => {
+        const names = new URL(req.url ?? '', 'http://localhost').searchParams.getAll('name').map((n) => n.slice(0, 200)).slice(0, 40)
+        load('./electron/games/custom.cjs')
+          .whereToGet(names)
           .then((result: unknown) => {
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify(result))

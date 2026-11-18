@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { marked } from "marked";
 import { sanitizeHtml } from "../../utils/sanitizeHtml";
 import { countText, errorText, installSummary, note, shortDate, sizeText } from "./shared";
 
 type Props = {
   detail: GameDetail;
-  provider: "nexus" | "curseforge";
+  provider: GameModProvider;
   modId: string;
   afterInstall: (result: GameInstallResult) => void;
   /* A free Nexus account installs through the website; what the mod needs follows it. */
@@ -12,8 +13,17 @@ type Props = {
   goLauncherSettings: () => void;
 };
 
-const SITE = { nexus: "https://www.nexusmods.com/", curseforge: "https://www.curseforge.com/" };
-const BADGE = { nexus: { label: "NEXUS MODS", colour: "var(--color-warning-solid)" }, curseforge: { label: "CURSEFORGE", colour: "var(--color-warning-solid)" } };
+const SITES: Record<GameModProvider, { name: string; url: string }> = {
+  nexus: { name: "Nexus Mods", url: "https://www.nexusmods.com/" },
+  curseforge: { name: "CurseForge", url: "https://www.curseforge.com/" },
+  thunderstore: { name: "Thunderstore", url: "https://thunderstore.io/" },
+  modio: { name: "mod.io", url: "https://mod.io/" },
+  workshop: { name: "Steam Workshop", url: "https://steamcommunity.com/" },
+  gamebanana: { name: "GameBanana", url: "https://gamebanana.com/" },
+  factorio: { name: "Factorio Mod Portal", url: "https://mods.factorio.com/" },
+  spacedock: { name: "SpaceDock", url: "https://spacedock.info/" },
+  beatmods: { name: "BeatMods", url: "https://beatmods.com/" },
+};
 
 /* A mod's page, laid out as Minecraft's: what it is, its files, its pictures, and installing it. */
 export default function GameModPage({ detail, provider, modId, afterInstall, openOnNexus, goLauncherSettings }: Props) {
@@ -37,7 +47,12 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
     };
   }, [detail.id, provider, modId]);
 
-  const body = useMemo(() => sanitizeHtml(mod?.html || mod?.summary || "No description", { baseUrl: SITE[provider] }), [mod, provider]);
+  const site = SITES[provider] ?? { name: provider, url: "" };
+  // Thunderstore, SpaceDock and the like write descriptions in Markdown.
+  const body = useMemo(
+    () => sanitizeHtml(mod?.html || (mod?.markdown ? marked.parse(mod.markdown, { async: false }) : "") || mod?.summary || "No description", { baseUrl: site.url || undefined }),
+    [mod, site.url],
+  );
 
   const mainFile = mod?.files.find((file) => file.category === "Main" || file.category === "File") ?? mod?.files[0] ?? null;
   // A free Nexus account downloads through the website's Mod Manager Download button.
@@ -65,7 +80,9 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
     setInstalling(file?.id ?? "main");
     try {
       const result = await window.gamesAPI.installRemote(detail.id, provider, mod.id, file?.id ?? null, mod.name);
-      if (result.needsWebsite && provider === "nexus") {
+      if (result.viaSteam) {
+        setMessage({ tone: "info", text: result.reason ?? "Opened in Steam: press Subscribe there and Steam installs it." });
+      } else if (result.needsWebsite && provider === "nexus") {
         await openOnNexus({ modId: mod.id, name: mod.name, page: result.needsWebsite });
       } else if (result.needsWebsite !== undefined) {
         const page = result.needsWebsite ?? mod.url;
@@ -110,7 +127,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
           <div style={{ minWidth: 0 }}>
             <h1 style={{ margin: 0 }}>{mod.name}</h1>
             <p style={{ color: "var(--color-text-muted)", marginTop: 6 }}>{mod.author}</p>
-            <span style={{ display: "inline-block", marginTop: 10, padding: "4px 10px", borderRadius: 8, background: BADGE[provider].colour, fontSize: 12, fontWeight: 700 }}>{BADGE[provider].label}</span>
+            <span style={{ display: "inline-block", marginTop: 10, padding: "4px 10px", borderRadius: 8, background: "var(--color-warning-solid)", fontSize: 12, fontWeight: 700 }}>{site.name.toUpperCase()}</span>
             <p style={{ marginTop: 14, color: "var(--color-text-secondary)" }}>{mod.summary}</p>
           </div>
         </div>
@@ -222,14 +239,16 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
           onClick={() => install(mainFile)}
           style={{ width: "100%", padding: 14, fontSize: 15, background: "var(--color-accent)", color: "var(--color-on-accent)", borderColor: "var(--color-accent-line)" }}
         >
-          {installing ? "Installing..." : viaWebsite ? "Install from Nexus Mods" : `Install into ${detail.name}`}
+          {installing ? "Installing..." : viaWebsite ? "Install from Nexus Mods" : provider === "workshop" ? "Subscribe in Steam" : `Install into ${detail.name}`}
         </button>
         <div style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 8, lineHeight: 1.5 }}>
           {viaWebsite
             ? mod.hasKey
               ? `Opens ${mainFile ? "its main file's download" : "its files"} on Nexus Mods: one click on the download button there and the launcher puts it in the right folders.`
               : `Opens it on Nexus Mods. Add your Nexus Mods key in Settings → API keys and its download there installs it here.`
-            : mainFile
+            : provider === "workshop"
+              ? "Opens its page in Steam. Press Subscribe there and Steam downloads it and keeps it up to date."
+              : mainFile
               ? `${mainFile.name}${mainFile.version ? ` ${mainFile.version}` : ""}. Unpacked and put in the right folders.`
               : "Unpacked and put in the right folders."}
         </div>
@@ -266,12 +285,12 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
         <p><b>Author</b></p>
         <p>{mod.author || "Unknown"}</p>
         <p><b>Source</b></p>
-        <p>{provider === "nexus" ? "Nexus Mods" : "CurseForge"}</p>
+        <p>{site.name}</p>
         {mod.url && (
           <>
             <p><b>Website</b></p>
             <a href={mod.url} onClick={(event) => { event.preventDefault(); window.gamesAPI.openUrl(mod.url!).catch(() => {}); }} style={{ color: "var(--color-info-text)" }}>
-              Open on {provider === "nexus" ? "Nexus Mods" : "CurseForge"}
+              Open on {site.name}
             </a>
           </>
         )}

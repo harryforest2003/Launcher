@@ -167,7 +167,7 @@ export default function LauncherSettings({
   }, []);
 
   const added = apiKeys
-    ? (["modrinth", "nexus", "github"] as const).filter(
+    ? (["modrinth", "nexus", "github", "modio", "steam", "factorio"] as const).filter(
         (key) => apiKeys[key]?.set,
       ).length
     : 0;
@@ -177,7 +177,7 @@ export default function LauncherSettings({
       <div className="set-pane-head set-pane-head--end">
         {apiKeys && (
           <span className="set-count" style={{ marginRight: 0 }}>
-            <strong>{added}</strong> of 3 added
+            <strong>{added}</strong> of 6 added
           </span>
         )}
       </div>
@@ -229,6 +229,48 @@ export default function LauncherSettings({
               Installs from GitHub allow 60 lookups an hour without one, and
               5,000 with one. Create one at github.com/settings/tokens; it needs
               no permissions.
+            </ApiKeyRow>
+          </div>
+
+          <div id="token-modio" className="page-section-anchor">
+            <ApiKeyRow
+              name="modio"
+              label="mod.io"
+              environmentVariable="MODIO_API_KEY"
+              status={apiKeys?.modio}
+              onChange={setApiKeys}
+            >
+              Lets the launcher browse and install mods from mod.io for the
+              games that use it. Get a read-only API key at mod.io, in your
+              account's API access settings.
+            </ApiKeyRow>
+          </div>
+
+          <div id="token-steam" className="page-section-anchor">
+            <ApiKeyRow
+              name="steam"
+              label="Steam Web API"
+              environmentVariable="STEAM_WEB_API_KEY"
+              status={apiKeys?.steam}
+              onChange={setApiKeys}
+            >
+              Lets the launcher search the Steam Workshop. Installing still
+              happens in Steam: you press Subscribe there. Get a key at
+              steamcommunity.com/dev/apikey.
+            </ApiKeyRow>
+          </div>
+
+          <div id="token-factorio" className="page-section-anchor">
+            <ApiKeyRow
+              name="factorio"
+              label="Factorio"
+              environmentVariable="FACTORIO_TOKEN"
+              status={apiKeys?.factorio}
+              onChange={setApiKeys}
+            >
+              Lets the launcher search the Factorio Mod Portal and download its
+              mods. Browsing works without it. Paste it as username:token, with
+              the token from your profile on factorio.com.
             </ApiKeyRow>
           </div>
         </div>

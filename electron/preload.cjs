@@ -90,6 +90,18 @@ expose("instanceAPI", {
     fileAction: (name, request) => ipcRenderer.invoke("instance:fileAction", name, request),
     duplicate: (name, newName) => ipcRenderer.invoke("instance:duplicate", name, newName),
 
+    // ----- adding worlds: from this computer, a link, or CurseForge -----
+    importWorldFile: (name) => ipcRenderer.invoke("worlds:importFile", name),
+    importWorldFolder: (name) => ipcRenderer.invoke("worlds:importFolder", name),
+    importWorldLink: (name, url) => ipcRenderer.invoke("worlds:importLink", name, url),
+    searchWorlds: (name, options) => ipcRenderer.invoke("worlds:search", name, options),
+    installWorld: (name, projectId) => ipcRenderer.invoke("worlds:install", name, projectId),
+    onWorldProgress: (callback) => {
+        const h = (_event, progress) => callback(progress);
+        ipcRenderer.on("worlds:progress", h);
+        return () => ipcRenderer.removeListener("worlds:progress", h);
+    },
+
 
     // ----- mods, resource packs, shaders and data packs for one instance -----
     content: (name) => ipcRenderer.invoke("instance:content", name),
@@ -316,6 +328,7 @@ expose("gamesAPI", {
     openGame: (entry) => ipcRenderer.invoke("games:openGame", entry),
     getOnSteam: (steamAppId) => ipcRenderer.invoke("games:getOnSteam", steamAppId),
     storeInfo: (id) => ipcRenderer.invoke("games:storeInfo", id),
+    whereToGet: (names) => ipcRenderer.invoke("games:whereToGet", names),
     removeGame: (id) => ipcRenderer.invoke("games:removeGame", id),
     chooseModsDir: (id) => ipcRenderer.invoke("games:chooseModsDir", id),
     forgetModsDir: (id) => ipcRenderer.invoke("games:forgetModsDir", id),
