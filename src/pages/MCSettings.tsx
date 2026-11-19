@@ -116,9 +116,10 @@ function MCSettings({
   }, [load]);
 
   // Every change is written to disk straight away, so leaving the page never loses one.
-  async function patch(update: Partial<LauncherSettings>) {
+  async function patch(update: Partial<LauncherSettings>, force = false) {
     const before = stored.current;
     if (
+      !force &&
       before &&
       (Object.keys(update) as (keyof LauncherSettings)[]).every(
         (key) => before[key] === update[key],
@@ -134,7 +135,11 @@ function MCSettings({
       const next = await window.instanceAPI.setSettings(update);
       stored.current = next;
       setSettings(next);
-      setNotice("Saved.");
+      setNotice(
+        "javaTuning" in update && before && next.jvmArgs !== before.jvmArgs
+          ? "Saved. The -XX: flags in your Java arguments were removed so they don't override it."
+          : "Saved.",
+      );
     } catch (err) {
       setError(message(err));
     }
@@ -339,6 +344,33 @@ function MCSettings({
                                   ? "The Minecraft Launcher's settings, plus no freezes when a mod asks Java to clean up and room for more compiled code in big modpacks. Picture quality doesn't change. For more frames, add speed mods with Optimise."
                                   : "The Minecraft Launcher's own memory clean-up settings."}
                               </p>
+                              {/(^|\s)-XX:/.test(settings.jvmArgs ?? "") && (
+                                <p
+                                  role="note"
+                                  style={{
+                                    fontSize: 12,
+                                    marginTop: 8,
+                                    padding: "8px 10px",
+                                    borderRadius: 8,
+                                    border: "1px solid var(--color-warning-border)",
+                                    background: "var(--color-warning-bg)",
+                                    color: "var(--color-warning-text)",
+                                    display: "flex",
+                                    gap: 10,
+                                    alignItems: "center",
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  Your Java arguments below set Java flags of their own (-XX:), so this set isn't used.
+                                  <Button
+                                    size="sm"
+                                    disabled={busy}
+                                    onClick={() => patch({ javaTuning: settings.javaTuning ?? "performance" }, true)}
+                                  >
+                                    Remove them
+                                  </Button>
+                                </p>
+                              )}
                             </div>
                             <div className="set-row-controls">
                               <Segmented
@@ -346,6 +378,7 @@ function MCSettings({
                                 value={settings.javaTuning ?? "performance"}
                                 onChange={(value) => {
                                   setSettings({ ...settings, javaTuning: value });
+                                  // The main process removes the -XX: flags typed below with it.
                                   patch({ javaTuning: value });
                                 }}
                                 options={[

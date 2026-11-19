@@ -117,7 +117,14 @@ function settingsFromPage(patch) {
     if ("javaPath" in clean) clean.javaPath = checkJavaPath(clean.javaPath);
     if ("cloudFolder" in clean) clean.cloudFolder = checkFolder(clean.cloudFolder);
     if ("jvmArgs" in clean) clean.jvmArgs = checkJvmArgs(clean.jvmArgs);
-    if ("javaTuning" in clean) clean.javaTuning = javaTuningOf(clean.javaTuning);
+    if ("javaTuning" in clean) {
+        clean.javaTuning = javaTuningOf(clean.javaTuning);
+        // Picking a set clears the Java flags typed in Settings, or they'd override it.
+        if (!("jvmArgs" in clean)) {
+            const { text, removed } = withoutJavaFlags(readSettings().jvmArgs);
+            if (removed.length) clean.jvmArgs = text;
+        }
+    }
     if ("downloadConcurrency" in clean) {
         clean.downloadConcurrency = Math.max(1, Math.min(64, Math.round(Number(clean.downloadConcurrency)) || DEFAULTS.downloadConcurrency));
     }
@@ -303,6 +310,20 @@ function checkJvmArgs(raw) {
 const cleanJvmArgs = (raw) => safeJvmArgs(raw).args.map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)).join(" ");
 
 /*
+ * Java arguments without their -XX: flags (garbage collection, memory tuning and the JIT
+ * compiler: what the Performance and Standard sets are made of), for when one of those sets
+ * is picked, so it's the one used rather than flags typed earlier. Memory (-Xmx) and -D
+ * settings stay. -> { text, removed: the flags taken out }
+ */
+function withoutJavaFlags(raw) {
+    const args = parseJvmArgs(String(raw ?? ""));
+    const removed = args.filter((arg) => arg.startsWith("-XX:"));
+    if (!removed.length) return { text: String(raw ?? "").trim(), removed };
+    const text = args.filter((arg) => !arg.startsWith("-XX:")).map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg)).join(" ");
+    return { text, removed };
+}
+
+/*
  * The Minecraft Launcher's own garbage collection settings, used for every launch unless
  * the instance (or Settings) chooses a garbage collector itself. Java's pauses are kept
  * short (50 ms, rather than its usual 200), so fewer stutters. Java 8 to 25 all take them.
@@ -364,6 +385,7 @@ module.exports = {
     checkJvmArgs,
     safeJvmArgs,
     cleanJvmArgs,
+    withoutJavaFlags,
     jvmArgProblem,
     checkJavaPath,
     checkFolder,

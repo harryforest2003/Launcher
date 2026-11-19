@@ -355,7 +355,12 @@ function findInstance(name: string) {
   return instance;
 }
 
-const activeAccount = () => state.accounts.find((account) => account.uuid === state.active) ?? null;
+// Mirrors withoutJavaFlags in electron/minecraft/settings.cjs (text only).
+function withoutJavaFlags(raw: string) {
+  return raw.split(/\s+/).filter((arg) => arg && !arg.startsWith("-XX:")).join(" ");
+}
+
+const activeAccount =() => state.accounts.find((account) => account.uuid === state.active) ?? null;
 
 // Each simulated game closes itself after a while, unless stopped first.
 const GAME_MS = 60_000;
@@ -619,7 +624,12 @@ const instanceBridge = {
     return { fileName, name: payload.modName, type, world, folder: folders[type], dependencies: [] };
   },
   update: async (name: string, patch: Partial<Instance>) => {
-    Object.assign(findInstance(name), patch);
+    const instance = findInstance(name);
+    Object.assign(instance, patch);
+    // Like the app: picking a Java set clears the -XX: flags that would override it.
+    if ("javaTuning" in patch && !("jvmArgs" in patch) && instance.jvmArgs) {
+      instance.jvmArgs = withoutJavaFlags(instance.jvmArgs);
+    }
     persist();
     return findInstance(name);
   },
@@ -669,6 +679,9 @@ const instanceBridge = {
   getSettings: async () => state.settings,
   setSettings: async (patch: Partial<LauncherSettings>) => {
     state.settings = { ...state.settings, ...patch };
+    if ("javaTuning" in patch && !("jvmArgs" in patch) && state.settings.jvmArgs) {
+      state.settings.jvmArgs = withoutJavaFlags(state.settings.jvmArgs);
+    }
     persist();
     return state.settings;
   },

@@ -326,9 +326,12 @@ function updateInstance(name, patch) {
             continue;
         }
 
-        // "" follows Settings; otherwise "performance" or "standard".
+        // "" follows Settings; otherwise "performance" or "standard". Picking one clears the
+        // Java flags typed for this instance, or they'd override it (memory and -D stay).
         if (key === "javaTuning") {
             next.javaTuning = patch.javaTuning ? launcherSettings.javaTuningOf(patch.javaTuning) : "";
+            const typed = "jvmArgs" in patch ? { removed: [] } : launcherSettings.withoutJavaFlags(next.jvmArgs);
+            if (typed.removed.length) next.jvmArgs = typed.text;
             continue;
         }
 

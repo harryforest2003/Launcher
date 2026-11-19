@@ -131,6 +131,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   // The Java chosen in Settings for every instance, if any, and what automatic would use here.
   const [globalJava, setGlobalJava] = useState("");
   const [globalTuning, setGlobalTuning] = useState<JavaTuning>("performance");
+  const [globalJvmArgs, setGlobalJvmArgs] = useState("");
   const [javaInfo, setJavaInfo] = useState<{ majorVersion: number; downloaded: boolean } | null>(null);
 
   useEffect(() => {
@@ -144,6 +145,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         setSystem(s.system);
         setGlobalJava(s.javaPath ?? "");
         setGlobalTuning(s.javaTuning ?? "performance");
+        setGlobalJvmArgs(s.jvmArgs ?? "");
       })
       .catch(() => setSystem(null));
   }, []);
@@ -185,6 +187,23 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     }
 
     setBusy(null);
+  }
+
+  // The -XX: flags typed for this instance (or in Settings, if it has none): they override the sets.
+  const ownFlags = (instance?.jvmArgs || globalJvmArgs).split(/\s+/).filter((arg) => arg.startsWith("-XX:"));
+
+  /* Picks a Java flags set ("settings" follows Settings). The main process removes the -XX:
+     flags typed for this instance with it, or they'd override the set. */
+  function pickTuning(value: JavaTuning | "settings") {
+    if (!instance) return;
+    const before = instance.jvmArgs ?? "";
+    void run("java", async () => {
+      const updated = await window.instanceAPI.update(instanceName, { javaTuning: value === "settings" ? "" : value });
+      const cleared = (updated.jvmArgs ?? "") !== before;
+      if (cleared) setJvmDraft(updated.jvmArgs ?? "");
+      const set = value === "settings" ? "the Java flags in Settings" : `the ${value === "performance" ? "Performance" : "Standard"} Java flags`;
+      setNotice(`${instance.name} uses ${set} from its next launch.${cleared ? " The -XX: flags in its JVM arguments were removed so they don't override them." : ""}`);
+    });
   }
 
   /* Starts it alongside any other open games: as accountId, or the active account. */
@@ -757,15 +776,37 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 ? "Performance. The Minecraft Launcher's settings, plus no freezes when a mod asks Java to clean up and room for more compiled code. Picture quality doesn't change."
                 : "Standard, the Minecraft Launcher's own settings."}
             </p>
+            {ownFlags.length > 0 && (
+              <p
+                role="note"
+                style={{
+                  fontSize: 12,
+                  margin: "0 0 10px",
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  border: "1px solid var(--color-warning-border)",
+                  background: "var(--color-warning-bg)",
+                  color: "var(--color-warning-text)",
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                {instance.jvmArgs
+                  ? `This instance's JVM arguments below set ${ownFlags.length} Java flag${ownFlags.length === 1 ? "" : "s"} of their own (-XX:), so these sets aren't used. `
+                  : `The Java arguments in Settings set ${ownFlags.length} Java flag${ownFlags.length === 1 ? "" : "s"} of their own (-XX:), so these sets aren't used. Pick a set in Settings to remove them.`}
+                {instance.jvmArgs && (
+                  <button className="sidebar-button" disabled={busy === "java"} onClick={() => pickTuning(instance.javaTuning || "settings")}>
+                    Remove them
+                  </button>
+                )}
+              </p>
+            )}
             <Segmented
               label="Java flags for this instance"
               value={instance.javaTuning || "settings"}
-              onChange={(value) =>
-                run("java", async () => {
-                  await window.instanceAPI.update(instanceName, { javaTuning: value === "settings" ? "" : value });
-                  setNotice(value === "settings" ? `${instance.name} follows the Java flags in Settings.` : `${instance.name} uses the ${value === "performance" ? "Performance" : "Standard"} Java flags from its next launch.`);
-                })
-              }
+              onChange={(value) => pickTuning(value)}
               options={[
                 { value: "settings", label: `As in Settings (${globalTuning === "performance" ? "Performance" : "Standard"})` },
                 { value: "performance", label: "Performance" },

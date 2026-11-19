@@ -80,5 +80,15 @@ assert.deepStrictEqual(settings.launchJvmArgs(["-XX:+UseZGC"], { tuning: "perfor
 assert.strictEqual(settings.javaTuningOf("turbo"), "performance");
 assert.strictEqual(settings.javaTuningOf("standard"), "standard");
 
+// Picking a Java set clears typed -XX: flags (they would replace or fight it) but keeps
+// memory and -D properties.
+const stripped = settings.withoutJavaFlags("-XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -Xmx6G -Dfile.encoding=UTF-8 -XX:G1HeapRegionSize=32M");
+assert.strictEqual(stripped.text, "-Xmx6G -Dfile.encoding=UTF-8");
+assert.strictEqual(stripped.removed.length, 3);
+assert.deepStrictEqual(settings.withoutJavaFlags(""), { text: "", removed: [] });
+assert.deepStrictEqual(settings.withoutJavaFlags(undefined), { text: "", removed: [] });
+assert.deepStrictEqual(settings.withoutJavaFlags("-Xmx4G"), { text: "-Xmx4G", removed: [] });
+assert.strictEqual(settings.withoutJavaFlags('-XX:+UseG1GC "-Dname=a b"').text, '"-Dname=a b"');
+
 console.log(failed ? `${failed} Java argument check(s) failed.` : `Java arguments: ${ALLOWED.length} allowed sets and ${REFUSED.length} refused examples all as expected.`);
 process.exit(failed ? 1 : 0);
