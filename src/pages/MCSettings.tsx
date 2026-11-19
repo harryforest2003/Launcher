@@ -336,7 +336,7 @@ function MCSettings({
                               <h3 className="set-row-name" id="java-tuning-title">Java flags</h3>
                               <p className="set-help" id="java-tuning-help">
                                 {(settings.javaTuning ?? "performance") === "performance"
-                                  ? "Tuned memory clean-up, a bigger code cache and full memory from the start: fewer stutters in big modpacks. Picture quality doesn't change. For more frames, add speed mods with Optimise."
+                                  ? "The Minecraft Launcher's settings, plus no freezes when a mod asks Java to clean up and room for more compiled code in big modpacks. Picture quality doesn't change. For more frames, add speed mods with Optimise."
                                   : "The Minecraft Launcher's own memory clean-up settings."}
                               </p>
                             </div>

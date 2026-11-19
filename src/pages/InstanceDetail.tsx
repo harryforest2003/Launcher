@@ -754,7 +754,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             </div>
             <p style={{ color: "var(--color-text-muted)", fontSize: 13, margin: "14px 0 8px" }} id="instance-java-flags">
               Java flags: {(instance.javaTuning || globalTuning) === "performance"
-                ? "Performance. Tuned memory clean-up and a bigger code cache, for fewer stutters. Picture quality doesn't change."
+                ? "Performance. The Minecraft Launcher's settings, plus no freezes when a mod asks Java to clean up and room for more compiled code. Picture quality doesn't change."
                 : "Standard, the Minecraft Launcher's own settings."}
             </p>
             <Segmented

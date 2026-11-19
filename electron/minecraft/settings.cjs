@@ -317,40 +317,25 @@ const DEFAULT_GC_ARGS = [
 ];
 
 /*
- * The "Performance" Java settings, after brucethemoose's Minecraft performance flags
- * benchmarks: G1 tuned for short, frequent pauses (fewer stutters), Java free to compile
- * the game's largest methods, and System.gc() calls from mods ignored. They change only how
- * Java runs the game, never what it draws. Flags newer Java has removed are left out (an
- * unknown flag stops Java from starting); all of these run on Java 8 to 25.
+ * The "Performance" Java settings: the Minecraft Launcher's own (above), plus three that
+ * can't make a game slower. They change only how Java runs the game, never what it draws.
+ *  - A mod calling System.gc() starts a background clean-up instead of freezing the game
+ *    while Java clears all its memory at once (often a second or more in a modpack).
+ *  - Java stops writing its statistics to a file on disk, which can hold up a clean-up
+ *    while the disk is busy.
+ *  - Room for 400 MB of compiled code rather than 240 MB, for very big modpacks: when it
+ *    fills, Java stops compiling and the game crawls. Only what's used takes memory.
+ * Heavier tuning (brucethemoose's flags, the heap at full size from the start) was dropped:
+ * on a 4-core, 16 GB laptop it ran worse than the Minecraft Launcher's. The full-size heap
+ * holds all its memory even when the game needs half, pushing the Mac into swap, and
+ * starting clean-up when memory is 10% full keeps it running nearly all the time.
+ * All of these run on Java 8 to 25.
  */
 const PERFORMANCE_GC_ARGS = [
-    "-XX:+UnlockExperimentalVMOptions",
-    "-XX:+UseG1GC",
-    "-XX:MaxGCPauseMillis=37",
-    "-XX:G1HeapRegionSize=16M",
-    "-XX:G1NewSizePercent=23",
-    "-XX:G1ReservePercent=20",
-    "-XX:SurvivorRatio=32",
-    "-XX:G1MixedGCCountTarget=3",
-    "-XX:G1HeapWastePercent=20",
-    "-XX:InitiatingHeapOccupancyPercent=10",
-    "-XX:G1RSetUpdatingPauseTimePercent=0",
-    "-XX:MaxTenuringThreshold=1",
-    "-XX:G1ConcMarkStepDurationMillis=5.0",
-    "-XX:GCTimeRatio=99",
+    ...DEFAULT_GC_ARGS,
+    "-XX:+ExplicitGCInvokesConcurrent",
     "-XX:+PerfDisableSharedMem",
-    "-XX:+DisableExplicitGC",
-    "-XX:-DontCompileHugeMethods",
-];
-
-// Java 9 and later (Minecraft 1.17 on) also take these: a code cache big enough for large
-// modpacks (when it fills, Java stops compiling and the game crawls).
-const PERFORMANCE_JAVA9_ARGS = [
-    "-XX:G1SATBBufferEnqueueingThresholdPercent=30",
     "-XX:ReservedCodeCacheSize=400M",
-    "-XX:NonNMethodCodeHeapSize=12M",
-    "-XX:ProfiledCodeHeapSize=194M",
-    "-XX:NonProfiledCodeHeapSize=194M",
 ];
 
 const JAVA_TUNINGS = new Set(["standard", "performance"]);
@@ -365,17 +350,12 @@ const choosesGc = (args) => args.some((arg) => /^-XX:[+-]Use\w*GC$/.test(arg));
 const withDefaultGc = (args) => (choosesGc(args) ? args : [...DEFAULT_GC_ARGS, ...args]);
 
 /*
- * A launch's Java arguments for a tuning ("standard" or "performance"), on the Java the
- * Minecraft version runs on (javaMajor), with ram GB of memory. The person's own arguments
- * come last and win; if they pick a garbage collector, neither set is used. Performance also
- * starts the heap at full size, so Java never pauses the game to grow it.
+ * A launch's Java arguments for a tuning ("standard" or "performance"). The person's own
+ * arguments come last and win; if they pick a garbage collector, neither set is used.
  */
-function launchJvmArgs(own, { tuning, javaMajor = 8, ram } = {}) {
+function launchJvmArgs(own, { tuning } = {}) {
     if (choosesGc(own)) return own;
-    if (javaTuningOf(tuning) !== "performance") return [...DEFAULT_GC_ARGS, ...own];
-    const gb = Number(ram) > 0 ? Math.floor(Number(ram)) : 4;
-    const fullHeap = own.some((arg) => arg.startsWith("-Xms")) ? [] : [`-Xms${gb}G`];
-    return [...fullHeap, ...PERFORMANCE_GC_ARGS, ...(Number(javaMajor) >= 9 ? PERFORMANCE_JAVA9_ARGS : []), ...own];
+    return [...(javaTuningOf(tuning) === "performance" ? PERFORMANCE_GC_ARGS : DEFAULT_GC_ARGS), ...own];
 }
 
 module.exports = {
@@ -396,6 +376,5 @@ module.exports = {
     javaTuningOf,
     DEFAULT_GC_ARGS,
     PERFORMANCE_GC_ARGS,
-    PERFORMANCE_JAVA9_ARGS,
     DEFAULTS,
 };

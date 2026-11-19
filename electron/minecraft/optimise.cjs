@@ -359,7 +359,7 @@ function javaChanges(instance, globalJvmArgs, modCount, hw, globalJavaTuning) {
     // the instance picks its own garbage collector.
     const tuning = javaTuningOf(instance.javaTuning || globalJavaTuning);
     if (tuning !== "performance" && !choosesGc(parseJvmArgs(instance.jvmArgs || globalJvmArgs))) {
-        changes.push({ key: "javaTuning", label: "Java flags", from: "Standard", to: "Performance", value: "performance", reason: "tuned garbage collection and a bigger code cache, for fewer stutters" });
+        changes.push({ key: "javaTuning", label: "Java flags", from: "Standard", to: "Performance", value: "performance", reason: "no freezes when a mod asks Java to clean up, and room for more compiled code" });
     }
     return changes;
 }

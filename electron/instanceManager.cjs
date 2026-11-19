@@ -654,7 +654,7 @@ async function launchInstance(name, account, { onProgress } = {}) {
     // Performance (tuned) or Standard (the Minecraft Launcher's): the instance's own choice, else Settings'.
     const javaNeed = requiredJava(folder, instance);
     const tuning = launcherSettings.javaTuningOf(instance.javaTuning || global.javaTuning);
-    const extraJvmArgs = launcherSettings.launchJvmArgs(ownJvmArgs, { tuning, javaMajor: javaNeed.majorVersion, ram: instance.ram });
+    const extraJvmArgs = launcherSettings.launchJvmArgs(ownJvmArgs, { tuning });
 
     // This run's own record, so a game stopped and started again keeps its two runs apart.
     const run = { id: crypto.randomUUID(), lines: [], partial: "", running: true, startedAt: Date.now(), endedAt: null, exitCode: null };
@@ -666,7 +666,7 @@ async function launchInstance(name, account, { onProgress } = {}) {
     }
     if (restored) note(`Put back ${restored} of Minecraft's own libraries that an earlier install left out.`);
     if (launcherSettings.choosesGc(ownJvmArgs)) note("Using your own garbage collection settings.");
-    else if (tuning === "performance") note("Using the Performance Java settings: tuned garbage collection, a bigger code cache and full-size memory from the start, for fewer stutters.");
+    else if (tuning === "performance") note("Using the Performance Java settings: the Minecraft Launcher's, plus no freezes when a mod asks Java to clean up and room for more compiled code.");
     else note("Using the Minecraft Launcher's garbage collection settings, for fewer stutters.");
 
     // Held from here, so a second Play with the same account waits its turn.
