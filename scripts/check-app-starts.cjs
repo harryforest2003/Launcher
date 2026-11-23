@@ -104,7 +104,9 @@ const CHECKS = `(async () => {
     setTimeout(() => resolve(refused && !window.__inlineScriptRan), 300);
   });
   return {
-    name: /Unity\\s+Launcher/.test(text()),
+    // Read hidden text too: in a window under 1240px wide the sidebar folds to icons and
+    // hides its "Unity Launcher" wordmark (as on GitHub's smaller Windows and Mac screens).
+    name: /Unity\\s+Launcher/.test(document.body?.textContent ?? ""),
     homeScreen: text().includes("Minecraft"),
     appConnected: typeof window.instanceAPI === "object",
     // A message to the main process gets an answer (its sender is checked first).
