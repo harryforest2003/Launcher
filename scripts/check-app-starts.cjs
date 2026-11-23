@@ -24,7 +24,8 @@ const args = [`--user-data-dir=${profile}`, `--remote-debugging-port=${PORT}`];
 if (process.platform === "linux") args.push("--no-sandbox");
 // On a Mac, a throwaway copy never touches the real app's Keychain entry (no Keychain prompt).
 if (process.platform === "darwin") args.push("--use-mock-keychain");
-const app = spawn(program, args, { stdio: "ignore" });
+// A throwaway copy never looks for updates of the launcher itself.
+const app = spawn(program, args, { stdio: "ignore", env: { ...process.env, UNITY_NO_UPDATES: "1" } });
 
 let exited = null;
 app.on("exit", (code) => (exited = code));

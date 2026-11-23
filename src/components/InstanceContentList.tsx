@@ -21,12 +21,28 @@ type Props = {
   onDelete: (item: InstanceMod) => void;
   onAddToWorld: (item: InstanceMod, world: string) => void;
   onAddContent: () => void;
+  /** Opens the page of something from a mod site. */
+  onOpenProject?: (source: ProjectSource, id: string) => void;
 };
+
+type ProjectSource = "modrinth" | "curseforge";
 
 type Details = Awaited<ReturnType<typeof window.instanceAPI.contentDetails>>;
 
 const TYPE_BADGE: Partial<Record<ContentType, string>> = { resourcepack: "Resource pack", shader: "Shader", datapack: "Data pack" };
 const SOURCE_LABEL: Record<string, string> = { modrinth: "Modrinth", curseforge: "CurseForge", github: "GitHub" };
+
+const isSite = (source: string | null | undefined): source is ProjectSource => source === "modrinth" || source === "curseforge";
+
+// Where an item's own page is: from how it was installed, else from the update check.
+function projectOf(item: InstanceMod, status: UpdateStatus | null): { source: ProjectSource; id: string } | null {
+  if (isSite(item.source) && item.projectId) return { source: item.source, id: String(item.projectId) };
+  if (isSite(status?.source) && status.projectId) return { source: status.source, id: status.projectId };
+  return null;
+}
+
+// Clicks on the row's own controls do their own thing, not open the page.
+const fromControl = (event: React.MouseEvent) => Boolean((event.target as Element).closest("button, input, label, a, select"));
 
 const contentKey = (item: { type: ContentType; world?: string | null; fileName: string }) => `${item.type}/${item.world ?? ""}/${item.fileName}`;
 
@@ -44,7 +60,7 @@ const countBy = (values: (string | null | undefined)[]) => {
 };
 
 /* An instance's mods, resource packs, shaders and data packs: searchable, filterable, one thin card each. */
-export default function InstanceContentList({ instanceName, mcVersion, content, updates, busyKey, targetWorld, onToggle, onDelete, onAddToWorld, onAddContent }: Props) {
+export default function InstanceContentList({ instanceName, mcVersion, content, updates, busyKey, targetWorld, onToggle, onDelete, onAddToWorld, onAddContent, onOpenProject }: Props) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [showFilter, setShowFilter] = useState(false);
@@ -80,6 +96,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
       // Where it came from, or else whether Modrinth knows it (found by its hash).
       source: SOURCE_LABEL[item.source ?? ""] ?? (status && status.state !== "unknown" ? "Modrinth" : "Not on Modrinth or CurseForge"),
       updateState: item.kind === "file" ? (status?.state ?? null) : ("unknown" as const),
+      project: onOpenProject ? projectOf(item, status) : null,
     };
   });
 
@@ -168,11 +185,12 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
             <span className="ct-file-head">Version</span>
             <span>Actions</span>
           </div>
-          {shown.map(({ item, key, status, name, icon, author, version, source }) => (
+          {shown.map(({ item, key, status, name, icon, author, version, source, project }) => (
             <div
               key={key}
               data-testid="content-item"
-              className={`ct-row${item.enabled ? "" : " off"}`}
+              className={`ct-row${item.enabled ? "" : " off"}${project ? " ct-row--link" : ""}`}
+              onClick={project ? (event) => !fromControl(event) && onOpenProject?.(project.source, project.id) : undefined}
             >
               {icon ? (
                 <img src={icon} alt="" width={32} height={32} className="ct-icon" />
@@ -184,9 +202,21 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                  <span title={item.fileName} className="ct-name">
-                    {name}
-                  </span>
+                  {project ? (
+                    <button
+                      type="button"
+                      title={`Open ${name}'s page`}
+                      className="ct-name ct-name--link"
+                      data-testid="content-open"
+                      onClick={() => onOpenProject?.(project.source, project.id)}
+                    >
+                      {name}
+                    </button>
+                  ) : (
+                    <span title={item.fileName} className="ct-name">
+                      {name}
+                    </span>
+                  )}
                   {TYPE_BADGE[item.type] && (
                     <span style={{ flexShrink: 0, fontSize: 10, color: "var(--color-accent-text)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "1px 6px" }}>{TYPE_BADGE[item.type]}</span>
                   )}

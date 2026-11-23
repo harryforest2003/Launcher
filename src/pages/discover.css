@@ -977,3 +977,27 @@
 .dc-bar__row--tabs .dc-bar__count { margin-left: auto; }
 .dc-bar .dc-tabs { order: 0; flex-basis: auto; }
 .dc-bar__row--tabs .dc-tabs { flex: 0 0 auto; }
+
+/* The project page inside another page (an instance's): no sidebar, a back button on top. */
+.pd-page--embedded {
+  padding: 0;
+  overflow: visible;
+}
+
+.pd-back {
+  margin-bottom: var(--space-3);
+}
+
+.pd-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* The Versions tab: the release / beta / alpha filter above the table. */
+.pd-versions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

@@ -419,9 +419,10 @@ async function downloadPackFile(source, projectId, fileId) {
 
         if (!versions?.length) throw new Error("That modpack has no released versions.");
 
-        const version = fileId
-            ? versions.find(v => v.id === fileId) ?? versions[0]
-            : versions[0];
+        // A version picked by the user is that one or none: never quietly the newest instead.
+        const version = fileId ? versions.find(v => v.id === fileId) : versions[0];
+
+        if (!version) throw new Error("That version of the modpack isn't on Modrinth any more.");
 
         const file =
             version.files.find(f => f.primary) ?? version.files[0];
@@ -438,17 +439,18 @@ async function downloadPackFile(source, projectId, fileId) {
     }
 
     if (source === "curseforge") {
-        const res = await curseforgeFetch(`/mods/${projectId}/files?pageSize=20`);
+        // A picked file is looked up by its id, as it may be far down the pack's list.
+        const res = fileId
+            ? await curseforgeFetch("/mods/files", { method: "POST", body: { fileIds: [Number(fileId)] } })
+            : await curseforgeFetch(`/mods/${projectId}/files?pageSize=20`);
 
         if (!res.ok) throw new Error(`CurseForge lookup failed (HTTP ${res.status}).`);
 
         const files = (await res.json()).data ?? [];
+        const file = files[0];
 
-        const file = fileId
-            ? files.find(f => String(f.id) === String(fileId)) ?? files[0]
-            : files[0];
-
-        if (!file) throw new Error("That modpack has no files.");
+        if (!file) throw new Error(fileId ? "That version of the modpack isn't on CurseForge any more." : "That modpack has no files.");
+        if (fileId && String(file.modId) !== String(projectId)) throw new Error("That file isn't part of this modpack.");
 
         if (!file.downloadUrl) {
             throw new Error(

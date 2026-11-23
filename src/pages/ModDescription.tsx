@@ -1,19 +1,29 @@
 import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useMemo, useState } from "react";
-import { Clock, Download, ExternalLink, Heart } from "lucide-react";
-import { Badge, Button, EmptyState, Monogram, Notice, Skeleton, Tabs } from "../components/ui";
+import { ArrowLeft, Clock, Download, ExternalLink, Heart } from "lucide-react";
+import { Badge, Button, EmptyState, Monogram, Notice, ProgressBar, Skeleton, Tabs } from "../components/ui";
 import "./discover.css";
 import InstallToInstance from "../components/InstallToInstance";
 import Sidebar from "../components/MCSidebar";
+import PackContentsList from "../components/PackContentsList";
+import PackVersionPicker from "../components/PackVersionPicker";
+import { CHANNEL, channelOf, type PackVersion } from "../components/packVersions";
+import { useModpackInstall } from "../components/useModpackInstall";
+import { countChannels, useChannelFilter } from "../components/versionChannels";
+import ChannelFilterBar from "../components/ChannelFilterBar";
 import { descriptionHtml } from "../utils/projectDescription";
 import { projectFromLink } from "../utils/projectLinks";
 
-type Props = {
+type Common = {
   source: "modrinth" | "curseforge";
   projectId: string;
   openProject: (source: "modrinth" | "curseforge", id: string) => void;
-
   onBack: () => void;
+};
+
+/** A screen of its own, with the launcher's sidebar. */
+type Routed = Common & {
+  embedded?: false;
   goHome: () => void;
   goMinecraft: () => void;
   goDiscover: () => void;
@@ -21,6 +31,21 @@ type Props = {
   goSkinSelector: () => void;
   goSettings: () => void;
 };
+
+/** Inside another page (an instance's), with a back button in place of the sidebar. */
+type Embedded = Common & {
+  embedded: true;
+  backLabel: string;
+  /** The instance it was opened from: offered first when adding, and told when added to. */
+  instanceName?: string;
+  onInstalled?: (instanceName: string) => void;
+};
+
+type Props = Routed | Embedded;
+
+const date = (value?: string) => (value ? new Date(value).toLocaleDateString() : "Unknown");
+
+type Section = "desc" | "mods" | "versions" | "gallery";
 
 type Version = {
   id: string; name?: string; version_number?: string; version_type?: string;
@@ -41,22 +66,13 @@ const TYPE_LABELS: Record<string, string> = {
   resourcepack: "Resource Pack",
 };
 
-function ModDescription({
-  source,
-  projectId,
-  openProject,
-  onBack,
-  goHome,
-  goMinecraft,
-  goDiscover,
-  goLibrary,
-  goSkinSelector,
-  goSettings,
-}: Props) {
+function ModDescription(props: Props) {
+  const { source, projectId, openProject, onBack } = props;
   const [mod, setMod] = useState<Project | null>(null);
-  const [tab, setTab] = useState<"desc" | "versions" | "gallery">("desc");
+  const [tab, setTab] = useState<Section>("desc");
+  const [pickingVersion, setPickingVersion] = useState(false);
+  const pack = useModpackInstall();
 
-  
   const [versions, setVersions] = useState<Version[]>([]);
   const [failed, setFailed] = useState(false);
   // Why it failed, when the launcher knows (CurseForge busy, say).
@@ -119,25 +135,40 @@ function ModDescription({
     [source, mod]
   );
 
-  const shell = (children: React.ReactNode) => (
-    <div className="app-screen">
-      <Sidebar
-        currentPage="discover"
-        goHome={goHome}
-        goMinecraft={goMinecraft}
-        goDiscover={goDiscover}
-        goLibrary={goLibrary}
-        goSkinSelector={goSkinSelector}
-        goSettings={goSettings}
-        showBack
-        onBack={onBack}
-      />
-      <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
-        <BackgroundLogo />
-        <div className="pd-page">{children}</div>
+  const shell = (children: React.ReactNode) =>
+    props.embedded ? (
+      <div className="pd-page pd-page--embedded">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="pd-back"
+          icon={<ArrowLeft size={16} aria-hidden="true" />}
+          onClick={onBack}
+          data-testid="project-back"
+        >
+          {props.backLabel}
+        </Button>
+        {children}
       </div>
-    </div>
-  );
+    ) : (
+      <div className="app-screen">
+        <Sidebar
+          currentPage="discover"
+          goHome={props.goHome}
+          goMinecraft={props.goMinecraft}
+          goDiscover={props.goDiscover}
+          goLibrary={props.goLibrary}
+          goSkinSelector={props.goSkinSelector}
+          goSettings={props.goSettings}
+          showBack
+          onBack={onBack}
+        />
+        <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
+          <BackgroundLogo />
+          <div className="pd-page">{children}</div>
+        </div>
+      </div>
+    );
 
   if (failed) {
     return shell(
@@ -157,11 +188,17 @@ function ModDescription({
   }
 
   const siteName = source === "curseforge" ? "CurseForge" : "Modrinth";
-  const date = (value?: string) => (value ? new Date(value).toLocaleDateString() : "Unknown");
   const gameVersions: string[] = mod.minecraftVersions ?? [];
   const recent = gameVersions.slice(-8).reverse();
   const loaders: string[] = mod.loaders ?? [];
   const website = mod.website || mod.url;
+  const isPack = mod.type === "modpack";
+  const packName = mod.title ?? "Modpack";
+
+  function installPack(version: PackVersion) {
+    setPickingVersion(false);
+    pack.install({ source, projectId, name: packName }, version);
+  }
 
   return shell(
     <>
@@ -187,7 +224,25 @@ function ModDescription({
         </div>
 
         <div className="pd-hero__action">
-          {mod.type !== "modpack" && (
+          {isPack ? (
+            mod.installable === false ? (
+              website && (
+                <Button variant="secondary" onClick={() => window.modAPI.openUrl(website).catch(() => {})}>
+                  Open on {siteName} <ExternalLink size={14} aria-hidden="true" />
+                </Button>
+              )
+            ) : (
+              <Button
+                variant="primary"
+                icon={<Download size={16} aria-hidden="true" />}
+                data-testid="pack-install"
+                disabled={!!pack.installing || !versions.length}
+                onClick={() => setPickingVersion(true)}
+              >
+                {pack.installing ? "Installing..." : "Install"}
+              </Button>
+            )
+          ) : (
             <InstallToInstance
               source={source}
               projectId={projectId}
@@ -197,10 +252,37 @@ function ModDescription({
               installable={mod.installable !== false}
               url={mod.url}
               emphasis="solid"
+              preferInstance={props.embedded ? props.instanceName : undefined}
+              onInstalled={props.embedded ? props.onInstalled : undefined}
             />
           )}
         </div>
       </header>
+
+      {isPack && (pack.error || pack.result || (pack.installing && pack.progress)) && (
+        <div className="pd-notices">
+          {pack.error && <Notice tone="danger" style={{ whiteSpace: "pre-wrap" }}>{pack.error}</Notice>}
+          {pack.result && <Notice tone="success">{pack.result}</Notice>}
+          {pack.installing && pack.progress && (
+            <Notice tone="info">
+              <div>{pack.progress.detail ?? pack.progress.stage} ({pack.progress.percent}%)</div>
+              <ProgressBar value={pack.progress.percent / 100} label="Modpack install progress" />
+            </Notice>
+          )}
+        </div>
+      )}
+
+      {pickingVersion && (
+        <PackVersionPicker
+          source={source}
+          projectId={projectId}
+          name={packName}
+          icon={mod.icon}
+          versions={versions}
+          onPick={installPack}
+          onClose={() => setPickingVersion(false)}
+        />
+      )}
 
       <div className="pd-body">
         <section className="pd-main">
@@ -211,6 +293,7 @@ function ModDescription({
             onChange={setTab}
             tabs={[
               { value: "desc", label: "Description" },
+              ...(isPack ? [{ value: "mods" as Section, label: "Mods" }] : []),
               { value: "versions", label: "Versions", count: versions.length || undefined },
               { value: "gallery", label: "Gallery", count: mod.gallery?.length || undefined },
             ]}
@@ -223,34 +306,15 @@ function ModDescription({
               </div>
             )}
 
+            {tab === "mods" && isPack && (
+              <PackContentsList source={source} projectId={projectId} versions={versions} openProject={openProject} />
+            )}
+
             {tab === "versions" &&
               (versions.length === 0 ? (
                 <EmptyState size="compact" title="No versions listed" body="Open the project's site to see its files." />
               ) : (
-                <table className="pd-table">
-                  <thead>
-                    <tr>
-                      <th>Version</th>
-                      <th>Type</th>
-                      <th>Game version</th>
-                      <th>Loaders</th>
-                      <th className="pd-num">Downloads</th>
-                      <th className="pd-num">Published</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {versions.map((v) => (
-                      <tr key={v.id}>
-                        <td><span className="pd-vname">{v.name || v.version_number}</span></td>
-                        <td><Badge tone={v.version_type === "release" ? "success" : v.version_type === "beta" ? "warning" : "neutral"}>{v.version_type ?? "release"}</Badge></td>
-                        <td>{v.game_versions?.slice(-3).join(", ")}</td>
-                        <td>{v.loaders?.join(", ")}</td>
-                        <td className="pd-num">{v.downloads?.toLocaleString() ?? "N/A"}</td>
-                        <td className="pd-num">{date(v.date_published)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <VersionsTable versions={versions} />
               ))}
 
             {tab === "gallery" &&
@@ -313,3 +377,44 @@ function ModDescription({
 }
 
 export default ModDescription;
+
+/* Every version of a project, narrowed to full releases, betas or alphas if wanted. */
+function VersionsTable({ versions }: { versions: Version[] }) {
+  const counts = useMemo(() => countChannels(versions.map(channelOf)), [versions]);
+  const { filter, wanted, setFilter } = useChannelFilter(counts);
+  const shown = filter === "all" ? versions : versions.filter((v) => channelOf(v) === filter);
+
+  return (
+    <div className="pd-versions">
+      <ChannelFilterBar counts={counts} value={filter} wanted={wanted} onChange={setFilter} />
+      <table className="pd-table">
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Type</th>
+            <th>Game version</th>
+            <th>Loaders</th>
+            <th className="pd-num">Downloads</th>
+            <th className="pd-num">Published</th>
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((v) => (
+            <tr key={v.id}>
+              <td><span className="pd-vname">{v.name || v.version_number}</span></td>
+              <td>
+                <span title={CHANNEL[channelOf(v)].hint}>
+                  <Badge tone={CHANNEL[channelOf(v)].tone}>{CHANNEL[channelOf(v)].label}</Badge>
+                </span>
+              </td>
+              <td>{v.game_versions?.slice(-3).join(", ")}</td>
+              <td>{v.loaders?.join(", ")}</td>
+              <td className="pd-num">{v.downloads?.toLocaleString() ?? "N/A"}</td>
+              <td className="pd-num">{date(v.date_published)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}

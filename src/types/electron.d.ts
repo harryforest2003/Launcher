@@ -37,6 +37,13 @@ declare global {
                 id: string
             ): Promise<any>;
 
+            /** What one modpack version contains, read from the pack's own file list. */
+            packContents(
+                source: "modrinth" | "curseforge",
+                projectId: string,
+                versionId: string
+            ): Promise<PackContents>;
+
             // ---------- Search ----------
             browseCatalog(options: CatalogQuery): Promise<CatalogPage>;
             resolveProjectLink(link: object): Promise<{ source: "modrinth" | "curseforge"; id: string } | null>;

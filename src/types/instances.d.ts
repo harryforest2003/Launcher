@@ -116,6 +116,9 @@ declare global {
         iconUrl?: string;
         /** Who publishes it on Modrinth. */
         author?: string;
+        /** The site it's from, when known, so its page can be opened. */
+        source?: "modrinth" | "curseforge";
+        projectId?: string;
     };
 
     type ModUpdate = {
@@ -185,6 +188,31 @@ declare global {
         blocking: string[];
         /** Other updates from the latest check that could go in at the same time. */
         otherUpdates: number;
+    };
+
+    /** One file in a modpack version: a mod, resource pack, shader or data pack. */
+    type PackItem = {
+        name: string;
+        kind: "mod" | "resourcepack" | "shader" | "datapack" | "other";
+        fileName?: string;
+        source?: "modrinth" | "curseforge";
+        projectId?: string;
+        icon?: string | null;
+        summary?: string;
+        version?: string;
+        /** Which side it runs on, when the pack says. */
+        side?: "client" | "server" | "both";
+        optional?: boolean;
+        /** Shipped inside the pack rather than downloaded from a mod site. */
+        bundled?: boolean;
+    };
+
+    type PackContents = {
+        versionId: string;
+        versionName: string;
+        items: PackItem[];
+        /** Only the projects Modrinth knows the pack embeds: the pack's own list couldn't be read. */
+        partial?: boolean;
     };
 
     type ContentVersion = {

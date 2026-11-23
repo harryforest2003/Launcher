@@ -11,6 +11,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Puzzle,
+  RefreshCw,
   Settings,
   SlidersHorizontal,
   Shirt,
@@ -21,6 +22,7 @@ import AccountSwitcher from "../AccountSwitcher";
 import { useGameArt } from "../../pages/gameArt";
 import Monogram from "./Monogram";
 import { useDownloads } from "./downloadsContext";
+import { restartToUpdate, useAppUpdate } from "../appUpdate";
 import type { GamePageKey, McPage, PageNav } from "./shellContext";
 import "./shell.css";
 
@@ -189,6 +191,7 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
         <img className="ui-shell__mark" src={logoMark} alt="" draggable={false} />
         <span className="ui-shell__wordmark">Unity Launcher</span>
       </div>
+      <UpdateReady tip={tip} />
       <div className="ui-shell__scroll" ref={scroller}>
         <span
           ref={bar}
@@ -274,5 +277,35 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
         </button>
       </div>
     </aside>
+  );
+}
+
+/* A newer build is downloaded: under the title until the launcher restarts into it. */
+function UpdateReady({ tip }: { tip: (label: string) => string | undefined }) {
+  const update = useAppUpdate();
+  const [restarting, setRestarting] = useState(false);
+  if (update.status !== "ready") return null;
+
+  const label = restarting ? "Restarting..." : "Update ready: restart";
+  return (
+    <div className="ui-shell__update">
+      <button
+        type="button"
+        className="ui-shell__item ui-shell__item--update"
+        data-testid="update-ready"
+        aria-label="An update is ready. Restart Unity Launcher to use it."
+        data-tip={tip(label)}
+        disabled={restarting}
+        onClick={() => {
+          setRestarting(true);
+          restartToUpdate()?.then((started) => started || setRestarting(false), () => setRestarting(false));
+        }}
+      >
+        <span className="ui-shell__icon">
+          <RefreshCw size={16} />
+        </span>
+        <span className="ui-shell__label">{label}</span>
+      </button>
+    </div>
   );
 }

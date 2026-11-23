@@ -206,6 +206,13 @@ async function checkUpdates(name, instance, folder) {
 
     for (const item of items) status[keyOf(item)] ??= { state: "unknown" };
 
+    // Which site each file is from, so its page can be opened from the instance.
+    for (const item of items) {
+        if (item.projectId && (item.source === "modrinth" || item.source === "curseforge")) {
+            Object.assign(status[keyOf(item)], { source: item.source, projectId: String(item.projectId) });
+        }
+    }
+
     // From each file's Modrinth page: who publishes it, and a name and icon for files the
     // launcher didn't install.
     const fromModrinth = onModrinth.filter((item) => item.source === "modrinth");

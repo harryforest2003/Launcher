@@ -1,0 +1,138 @@
+/* What's in a modpack: its mods, resource packs, shaders and data packs. */
+
+.pc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.pc-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pc-version {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.pc-search {
+  flex: 1;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.pc-totals,
+.pc-none {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.pc-group + .pc-group {
+  margin-top: var(--space-3);
+}
+
+.pc-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-md);
+  font-weight: 600;
+}
+
+.pc-heading span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+.pc-list,
+.pc-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid transparent;
+  border-radius: var(--ui-radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+}
+
+button.pc-row {
+  cursor: pointer;
+}
+
+button.pc-row:hover {
+  background: var(--color-hover);
+}
+
+button.pc-row:hover .pc-name {
+  color: var(--color-accent);
+}
+
+.pc-icon {
+  flex-shrink: 0;
+  border-radius: var(--ui-radius-control);
+  object-fit: cover;
+}
+
+.pc-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pc-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pc-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-ver,
+.pc-summary {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pc-ver {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.pc-tags {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}

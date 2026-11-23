@@ -18,6 +18,8 @@ type Props = {
   emphasis?: "solid" | "tonal";
   /** Told after it is added, so a list can mark it installed. */
   onInstalled?: (instanceName: string) => void;
+  /** The instance to offer first (the one whose page this was opened from). */
+  preferInstance?: string;
 };
 
 const INSTALLABLE_TYPES = ["mod", "resourcepack", "shader", "datapack"];
@@ -39,6 +41,7 @@ export default function InstallToInstance({
   alternatives = [],
   emphasis = "tonal",
   onInstalled,
+  preferInstance,
 }: Props) {
   const [instances, setInstances] = useState<Instance[] | null>(null);
   const [chosen, setChosen] = useState("");
@@ -98,7 +101,8 @@ export default function InstallToInstance({
     try {
       const list = await window.instanceAPI.list();
       setInstances(list);
-      if (list.length > 0) await chooseInstance(list[0].name);
+      const first = list.find((instance) => instance.name === preferInstance) ?? list[0];
+      if (first) await chooseInstance(first.name);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }

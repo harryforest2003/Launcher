@@ -39,7 +39,7 @@ type PreviewState = {
 // Names for the simulated accounts, in the order they're added.
 const PREVIEW_PLAYERS = [PLAYER_NAME, "PreviewAlex", "PreviewSam", "PreviewRiley"];
 
-function sampleMod(name: string, fileName: string, size: number, enabled = true): InstanceMod {
+function sampleMod(name: string, fileName: string, size: number, enabled = true, projectId: string | null = null): InstanceMod {
   return {
     type: "mod",
     world: null,
@@ -51,7 +51,7 @@ function sampleMod(name: string, fileName: string, size: number, enabled = true)
     size,
     modified: "2026-10-28T18:12:00.000Z",
     source: "modrinth",
-    projectId: null,
+    projectId,
     versionNumber: null,
     installedAt: "2026-10-28T18:12:00.000Z",
     iconUrl: null,
@@ -91,11 +91,11 @@ function initialState(): PreviewState {
     ],
     mods: {
       "Fabric 26.2": [
-        sampleMod("Fabric API", "fabric-api.jar", 2_310_000),
-        sampleMod("Sodium", "sodium-fabric.jar", 1_240_000),
-        sampleMod("Iris Shaders", "iris-fabric.jar", 2_680_000, false),
+        sampleMod("Fabric API", "fabric-api.jar", 2_310_000, true, "P7dR8mSH"),
+        sampleMod("Sodium", "sodium-fabric.jar", 1_240_000, true, "AANobbMI"),
+        sampleMod("Iris Shaders", "iris-fabric.jar", 2_680_000, false, "YL57xq9U"),
       ],
-      "All The Mods": [sampleMod("JEI", "jei.jar", 1_620_000)],
+      "All The Mods": [sampleMod("JEI", "jei.jar", 1_620_000, true, "u6dRKJwZ")],
     },
     settings: {
       defaultRam: 8,
@@ -235,6 +235,38 @@ const webCatalog = createCatalog({
 /* The dev server adds the key to these requests, so the page never sees it. */
 async function curseForgeGet<T>(path: string): Promise<T> {
   return fetchJson<T>(`/curseforge-api/v1${path}`);
+}
+
+/*
+ * What's in a modpack version. The desktop app reads the pack file itself; here the
+ * mods a Modrinth version lists as its dependencies stand in, else a few samples.
+ */
+async function packContents(source: string, _projectId: string, versionId: string): Promise<PackContents> {
+  const sample: PackItem[] = [
+    { name: "Sodium", kind: "mod", source: "modrinth", projectId: "AANobbMI", summary: "The fastest rendering optimization mod for Minecraft", side: "client" },
+    { name: "Lithium", kind: "mod", source: "modrinth", projectId: "gvQqBUqZ", summary: "No-compromises game logic optimization mod" },
+    { name: "Fabric API", kind: "mod", source: "modrinth", projectId: "P7dR8mSH", summary: "Lightweight and modular API providing common hooks" },
+    { name: "Mod Menu", kind: "mod", source: "modrinth", projectId: "mOgUt4GM", summary: "Adds a mod menu to view the list of mods you have installed", side: "client", optional: true },
+    { name: "pack-tweaks.jar", kind: "mod", fileName: "pack-tweaks.jar", bundled: true },
+    { name: "Complementary Shaders", kind: "shader", source: "modrinth", projectId: "HVnmMxH1", summary: "Shaders that look great everywhere", optional: true },
+  ];
+  if (source !== "modrinth") return { versionId, versionName: versionId, items: sample, partial: true };
+
+  const version = await fetch(`https://api.modrinth.com/v2/version/${versionId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const ids: string[] = [...new Set<string>((version?.dependencies ?? []).map((d: { project_id?: string }) => d.project_id).filter(Boolean))];
+  const projects = ids.length
+    ? await fetch(`https://api.modrinth.com/v2/projects?ids=${encodeURIComponent(JSON.stringify(ids))}`).then((r) => (r.ok ? r.json() : [])).catch(() => [])
+    : [];
+  const kinds: Record<string, PackItem["kind"]> = { mod: "mod", resourcepack: "resourcepack", shader: "shader", datapack: "datapack" };
+  const items: PackItem[] = projects.map((p: any) => ({
+    name: p.title,
+    kind: kinds[p.project_type] ?? "other",
+    source: "modrinth",
+    projectId: p.id,
+    icon: p.icon_url ?? undefined,
+    summary: p.description,
+  }));
+  return { versionId, versionName: version?.name ?? versionId, items: items.length ? items : sample, partial: true };
 }
 
 async function getProject(source: string, id: string) {
@@ -501,6 +533,7 @@ const launcherBridge = {
     { id: "quilt", name: "Quilt" },
   ],
   getProject,
+  packContents,
   browseCatalog: (options: CatalogQuery) => webCatalog.browse(options),
   resolveProjectLink: (link: object) => webCatalog.resolveProjectLink(link),
   searchPlayers: async (query: string) =>
@@ -1394,6 +1427,26 @@ if (!window.launcherAPI) {
     },
     onSaved: () => () => {},
   });
+  // The web preview never updates itself; sessionStorage "preview.update" = "ready" shows the
+  // sidebar's "Update ready" as if a newer build had downloaded.
+  const updateState = (): AppUpdateState =>
+    sessionStorage.getItem("preview.update") === "ready"
+      ? {
+          status: "ready",
+          current: { commit: "preview", committed: new Date(0).toISOString() },
+          latest: { commit: "preview-next", committed: new Date().toISOString() },
+        }
+      : { status: "unsupported", current: null };
+  target.updaterAPI = {
+    state: async () => updateState(),
+    check: async () => updateState(),
+    restart: async () => {
+      sessionStorage.removeItem("preview.update");
+      location.reload();
+      return true;
+    },
+    onState: () => () => {},
+  };
 
   if (document.body) showPreviewLabel();
   else document.addEventListener("DOMContentLoaded", showPreviewLabel, { once: true });

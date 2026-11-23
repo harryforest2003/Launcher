@@ -13,13 +13,21 @@ Everything the app is built from is in this repository, so another computer need
 
 **Download a build from GitHub**
 
-1. On GitHub, open **Actions**, then **Build app**, then **Run workflow**. Choose **all**, or just the system you need: Mac builds use the most of GitHub's build minutes, which are limited each month on a free account. It takes about 5 minutes, and checks that each build starts before publishing it.
-2. Open **Releases** and download the file for your computer, then install it:
+1. Every push to `main` builds the app for every system on GitHub (Actions, **Build app**), checks each build starts, and publishes them on **Releases**. It takes about 5 minutes. To build without pushing, open **Actions**, then **Build app**, then **Run workflow**, and choose **all** or one system.
+2. Open **Releases** and download the file for your computer from the newest release, then install it:
    - **Mac:** the zip for `apple-silicon` (an M1 chip or later) or `intel`; Apple menu > About This Mac says which. Unzip it and drag **Unity Launcher** into Applications. The app has no Apple developer signature, so the first time macOS won't open it: open System Settings > Privacy & Security and click **Open Anyway**, or run `xattr -dr com.apple.quarantine "/Applications/Unity Launcher.app"` in Terminal.
    - **Windows:** run `Unity-Launcher-windows-setup.exe`. It installs for you only and adds Unity Launcher to the Start menu. The app has no developer signature, so Windows may say it protected your PC: click **More info**, then **Run anyway**.
    - **Linux:** `chmod +x Unity-Launcher-linux.AppImage`, then run it. AppImages need FUSE 2 (`sudo apt install libfuse2t64` on Ubuntu 24.04 or later, `libfuse2` before that). If it doesn't open on Ubuntu 24.04 or later, run it with `--no-sandbox`.
 
-Run the workflow again after changing the code to get an updated build; on Windows, run the new setup over the old one.
+**Updates**
+
+An installed launcher keeps itself up to date, as the Modrinth app does. A few seconds after it opens, and every 2 hours, it looks for the newest release with a build for its computer, downloads it in the background and checks it against the release's `update.json`. When it's ready, **Update ready: restart** shows at the top of the sidebar: click it, or just quit and reopen the launcher, and the new build is put in place.
+
+- The repository must be public: the launcher reads releases without signing in to GitHub.
+- A copy updates only to a release built from a later commit than its own, so a Mac copy from `npm run app:install` with newer code isn't swapped for an older release. Copies from `npm run dist` and `npm run electron:dev` never update themselves.
+- Only the 10 newest `build-...` releases are kept; the workflow removes older ones. Releases named anything else are left alone.
+- The Mac app has no Apple developer signature, so after an update macOS may ask once to let Unity Launcher use its keychain entry (where sign-ins and tokens are kept): click **Always Allow**.
+- A Mac copy that macOS is running from a quarantined download (straight from Downloads, say) can't replace itself: move it to Applications first.
 
 **Build it yourself**
 

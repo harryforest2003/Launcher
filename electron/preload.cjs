@@ -52,6 +52,10 @@ expose("launcherAPI", {
     getProject: (source, id) =>
         ipcRenderer.invoke("project:get", source, id),
 
+    // What one modpack version contains.
+    packContents: (source, projectId, versionId) =>
+        ipcRenderer.invoke("pack:contents", source, projectId, versionId),
+
     // ---------- Search ----------
     browseCatalog: (options) =>
         ipcRenderer.invoke("catalog:browse", options),
@@ -427,6 +431,18 @@ expose("gamesAPI", {
 });
 
 /* Home's dashboard: play time, recent activity, news (Minecraft or general gaming) and Steam deals. */
+// The launcher's own updates (updater.cjs).
+expose("updaterAPI", {
+    state: () => ipcRenderer.invoke("updater:state"),
+    check: () => ipcRenderer.invoke("updater:check"),
+    restart: () => ipcRenderer.invoke("updater:restart"),
+    onState: (listener) => {
+        const relay = (_event, state) => listener(state);
+        ipcRenderer.on("updater:state", relay);
+        return () => ipcRenderer.removeListener("updater:state", relay);
+    },
+});
+
 expose("dashboardAPI", {
     stats: () => ipcRenderer.invoke("dashboard:stats"),
     activity: (limit) => ipcRenderer.invoke("dashboard:activity", limit),

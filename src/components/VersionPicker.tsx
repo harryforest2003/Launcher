@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Badge, Button, type Tone } from "./ui";
 import { color, font, radius, shadow, space, z } from "../theme/tokens";
+import { countChannels, useChannelFilter } from "./versionChannels";
+import ChannelFilterBar from "./ChannelFilterBar";
 
 type Props = {
   instanceName: string;
@@ -52,15 +54,12 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
       .then((found) => {
         if (!current) return;
         setVersions(found.versions);
-        // The update that was found, or else the newest if it isn't the one installed.
-        const newest = found.versions[0] && !found.versions[0].installed ? found.versions[0] : null;
-        setChosen((found.versions.find((v) => v.number === suggested) ?? newest)?.id ?? null);
       })
       .catch((err) => current && setLoadError(message(err)));
     return () => {
       current = false;
     };
-  }, [instanceName, itemKey, suggested]);
+  }, [instanceName, itemKey]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onClose();
@@ -91,8 +90,15 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
     setError(null);
   };
 
+  const counts = useMemo(() => countChannels((versions ?? []).map((v) => v.channel)), [versions]);
+  const { filter, wanted, setFilter } = useChannelFilter(counts);
+  const shown = !versions ? null : filter === "all" ? versions : versions.filter((v) => v.channel === filter);
+  // Until one is clicked: the update that was found, or else the newest shown if it isn't the one installed.
+  const start = shown && (shown.find((v) => v.number === suggested) ?? (shown[0] && !shown[0].installed ? shown[0] : null));
+  const chosenId = chosen ?? start?.id ?? null;
+
   const installed = versions?.find((v) => v.installed) ?? null;
-  const picked = versions?.find((v) => v.id === chosen) ?? null;
+  const picked = versions?.find((v) => v.id === chosenId) ?? null;
   const goingBack = Boolean(picked && installed && Date.parse(picked.published) < Date.parse(installed.published));
 
   async function install(force: boolean) {
@@ -160,16 +166,20 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
           </button>
         </div>
 
+        {versions && versions.length > 0 && (
+          <ChannelFilterBar counts={counts} value={filter} wanted={wanted} onChange={setFilter} style={{ padding: `${space[3]} ${space[4]} 0` }} />
+        )}
+
         <div role="radiogroup" aria-label="Versions" style={{ overflowY: "auto", padding: `${space[3]} ${space[4]}`, flex: 1 }}>
           {loadError ? (
             <div style={{ color: color.dangerText, fontSize: font.size.sm, padding: space[2] }}>{loadError}</div>
-          ) : !versions ? (
+          ) : !versions || !shown ? (
             <div style={{ color: color.textMuted, fontSize: font.size.sm, padding: space[2] }}>Finding versions...</div>
           ) : !versions.length ? (
             <div style={{ color: color.textMuted, fontSize: font.size.sm, padding: space[2] }}>No versions of this work on this instance.</div>
           ) : (
-            versions.map((version, index) => {
-              const selected = version.id === chosen;
+            shown.map((version) => {
+              const selected = version.id === chosenId;
               const channel = CHANNEL[version.channel] ?? CHANNEL.release;
               return (
                 <div key={version.id} data-testid="version-row" style={{ marginBottom: space[1.5] }}>
@@ -211,7 +221,7 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
                         <span style={{ fontWeight: font.weight.semibold, fontSize: font.size.sm, fontFamily: font.mono }}>{version.number}</span>
                         <Badge tone={channel.tone}>{channel.label}</Badge>
                         {version.installed && <Badge tone="accent">Installed</Badge>}
-                        {index === 0 && !version.installed && <span style={{ fontSize: font.size.xs, fontWeight: font.weight.semibold, color: color.successText }}>Newest</span>}
+                        {version === versions[0] && !version.installed && <span style={{ fontSize: font.size.xs, fontWeight: font.weight.semibold, color: color.successText }}>Newest</span>}
                       </div>
                       <div style={{ fontSize: font.size.xs, color: color.textMuted }}>
                         {new Date(version.published).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}

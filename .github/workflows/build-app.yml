@@ -1,10 +1,19 @@
 # Builds Unity Launcher on GitHub for Mac (Apple Silicon and Intel), Windows and Linux,
 # checks each build starts, and publishes them on the repository's Releases page.
-# Start it from the Actions tab: Build app, then Run workflow. It needs no keys:
-# CurseForge goes through the launcher's proxy.
+# It runs on every push to main, and from the Actions tab (Build app, then Run workflow).
+# Installed launchers find the new release by themselves (electron/updater.cjs), download
+# it in the background and put it in when they restart. It needs no keys: CurseForge goes
+# through the launcher's proxy.
 name: Build app
 
 on:
+  push:
+    branches: [main]
+    # Changes that can't change the app don't build it.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".claude/**"
   workflow_dispatch:
     inputs:
       systems:
@@ -20,8 +29,11 @@ on:
 permissions:
   contents: write
 
+# A newer push replaces a build still running for an older one; a build started by hand
+# finishes.
 concurrency:
   group: build-app
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   plan:
@@ -32,7 +44,7 @@ jobs:
     steps:
       - id: pick
         env:
-          SYSTEMS: ${{ inputs.systems }}
+          SYSTEMS: ${{ inputs.systems || 'all' }}
         run: |
           all='[
             {"system": "mac", "runner": "macos-26", "label": "Mac, Apple Silicon", "file": "Unity-Launcher-mac-apple-silicon.zip"},
@@ -78,6 +90,14 @@ jobs:
       - name: Build the model editor
         if: steps.blockbench.outputs.cache-hit != 'true'
         run: npm run blockbench:build
+
+      # Which commit this build is, and when that commit was made. The launcher compares it
+      # with the newest release's update.json to know whether that release is newer.
+      - name: Stamp the build
+        run: |
+          node -e 'require("fs").writeFileSync("electron/build-info.json", JSON.stringify({ commit: process.argv[1], committed: process.argv[2], built: new Date().toISOString() }) + "\n")' \
+            "$GITHUB_SHA" "$(git log -1 --format=%cI "$GITHUB_SHA")"
+          cat electron/build-info.json
 
       - name: Build the app
         run: |
@@ -142,11 +162,33 @@ jobs:
           shopt -s nullglob
           files=(out/*)
           if [ ${#files[@]} -eq 0 ]; then echo "Nothing built, so there's nothing to publish."; exit 1; fi
+          # What installed launchers read to update themselves: which commit this is, when
+          # it was made, and each file's size and SHA-256 so a download can be checked.
+          committed=$(gh api "repos/${{ github.repository }}/commits/$GITHUB_SHA" --jq .commit.committer.date)
+          for f in "${files[@]}"; do
+            jq -n --arg name "$(basename "$f")" --arg sha "$(sha256sum "$f" | cut -d' ' -f1)" --argjson size "$(stat -c %s "$f")" \
+              '{($name): {sha256: $sha, size: $size}}'
+          done | jq -s --arg commit "$GITHUB_SHA" --arg committed "$committed" --arg built "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{commit: $commit, committed: $committed, built: $built, files: add}' > update.json
+          cat update.json
           # Named by when it was built, so a name is never used twice.
           built=$(date -u +%Y-%m-%d-%H%M)
-          gh release create "build-$built" "${files[@]}" \
+          gh release create "build-$built" "${files[@]}" update.json \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "Unity Launcher, built $(date -u '+%-d %B %Y, %H:%M UTC')" \
-            --notes "Built from ${GITHUB_SHA::7}. Download the file for your computer: the Mac zip for Apple Silicon (an M1 chip or later) or Intel, the Windows setup, or the Linux AppImage. The README says how to install each." \
+            --notes "Built from ${GITHUB_SHA::7}. Installed launchers update to this by themselves: restart when the sidebar says an update is ready. To install it fresh, download the file for your computer: the Mac zip for Apple Silicon (an M1 chip or later) or Intel, the Windows setup, or the Linux AppImage. The README says how to install each." \
             --latest
+
+      # Every push makes a release, so only the 10 newest builds are kept. Releases not
+      # named build-... (made by hand) are left alone.
+      - name: Remove old builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "${{ github.repository }}" --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("build-"))] | sort_by(.createdAt) | reverse | .[10:][] | .tagName' |
+          while read -r tag; do
+            echo "Removing $tag"
+            gh release delete "$tag" --repo "${{ github.repository }}" --cleanup-tag --yes
+          done

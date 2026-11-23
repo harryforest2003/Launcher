@@ -13,6 +13,7 @@ import { Cloud, Folder, Gauge, Hammer, Play, Settings, Square } from "lucide-rea
 import OptimisePanel from "../components/OptimisePanel";
 import { Badge, Segmented, Tabs } from "../components/ui";
 import InstanceArt from "../components/InstanceArt";
+import ModDescription from "./ModDescription";
 import "./library.css";
 import { AccountClashNotice, PlayAsMenu } from "../components/PlayAs";
 import { useAccountChoice } from "../components/playAsChoice";
@@ -25,6 +26,11 @@ type Props = {
 };
 
 type Tab = "mods" | "browse" | "worlds" | "screenshots" | "log" | "settings";
+
+type ProjectSource = "modrinth" | "curseforge";
+
+// Clicks on a row's own controls do their own thing, not open the project's page.
+const fromControl = (event: React.MouseEvent) => Boolean((event.target as Element).closest("button, input, label, a, select"));
 
 // What the instance folder opens in, by system.
 const FILE_MANAGER = navigator.userAgent.includes("Mac") ? "Finder" : navigator.userAgent.includes("Windows") ? "File Explorer" : "your file manager";
@@ -73,6 +79,15 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   // Worlds are listed most recently played first, so that is the default choice.
   const targetWorld = installWorld ?? content.worlds[0] ?? "";
   const [tab, setTab] = useState<Tab>("mods");
+  // Project pages opened from this instance, the last one showing; kept per instance.
+  const [trail, setTrail] = useState<{ instance: string; pages: { source: ProjectSource; id: string }[] }>({ instance: instanceName, pages: [] });
+  const pages = trail.instance === instanceName ? trail.pages : [];
+  const openProject = useCallback(
+    (source: ProjectSource, id: string) =>
+      setTrail((current) => ({ instance: instanceName, pages: [...(current.instance === instanceName ? current.pages : []), { source, id }] })),
+    [instanceName]
+  );
+  const closeProject = () => setTrail({ instance: instanceName, pages: pages.slice(0, -1) });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -399,8 +414,26 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       ? "Vanilla"
       : `${LOADER_NAMES[instance.loader] ?? instance.loader} ${instance.loaderVersion}`;
 
+  const page = pages[pages.length - 1];
+
   return (
-    <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "var(--color-text)", position: "relative" }}>
+    <>
+    {page && (
+      <div key={`${page.source}/${page.id}/${pages.length}`} style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "var(--color-text)", position: "relative" }}>
+        <ModDescription
+          embedded
+          backLabel={pages.length > 1 ? "Back" : `Back to ${instance.name}`}
+          source={page.source}
+          projectId={page.id}
+          openProject={openProject}
+          onBack={closeProject}
+          instanceName={instanceName}
+          onInstalled={(name) => name === instanceName && refresh()}
+        />
+      </div>
+    )}
+    {/* Kept, hidden, under a project page, so the search and tab are as they were on the way back. */}
+    <div style={{ flex: 1, minWidth: 0, padding: 30, overflowY: "auto", color: "var(--color-text)", position: "relative", display: page ? "none" : undefined }}>
       <div className="id-hero">
         <InstanceArt name={instance.name} cols={8} rows={8} />
         <div className="id-hero-text">
@@ -628,6 +661,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
           onDelete={deleteItem}
           onAddToWorld={addToWorld}
           onAddContent={() => setTab("browse")}
+          onOpenProject={openProject}
         />
       )}
 
@@ -1062,6 +1096,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                   <div
                     key={`${mod.source}-${mod.id}`}
                     data-testid="browse-result"
+                    className="id-result"
+                    onClick={(event) => !fromControl(event) && openProject(mod.source, mod.id)}
                     style={{ ...card, display: "flex", gap: 14, alignItems: "center" }}
                   >
                     {mod.icon && (
@@ -1079,9 +1115,15 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                     )}
 
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ color: "var(--color-accent-text)", fontWeight: 600 }}>
+                      <button
+                        type="button"
+                        className="id-result-name"
+                        data-testid="browse-open"
+                        title={`Open ${mod.name}'s page`}
+                        onClick={() => openProject(mod.source, mod.id)}
+                      >
                         {mod.name}
-                      </div>
+                      </button>
 
                       <div style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
                         {mod.summary?.slice(0, 140)}
@@ -1132,5 +1174,6 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </>
       )}
     </div>
+    </>
   );
 }

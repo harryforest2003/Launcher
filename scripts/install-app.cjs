@@ -35,7 +35,20 @@ if (!fs.existsSync(path.join(repo, "vendor", "blockbench", "index.html"))) {
 
 run(bin("tsc"), "-b");
 run(bin("vite"), "build");
-run(bin("electron-builder"), "--mac", "dir");
+
+// Which commit this copy was built from, so it updates only to a release made from a later
+// commit (electron/updater.cjs). Removed again after, so no other build carries it by mistake.
+const git = (...args) => execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+const buildInfo = path.join(repo, "electron", "build-info.json");
+fs.writeFileSync(
+  buildInfo,
+  JSON.stringify({ commit: git("rev-parse", "HEAD"), committed: git("log", "-1", "--format=%cI"), built: new Date().toISOString() }) + "\n",
+);
+try {
+  run(bin("electron-builder"), "--mac", "dir");
+} finally {
+  fs.rmSync(buildInfo, { force: true });
+}
 
 const built = ["mac", "mac-arm64", "mac-universal"]
   .map((folder) => path.join(repo, "release", folder, APP))

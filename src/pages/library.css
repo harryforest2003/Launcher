@@ -1682,6 +1682,28 @@
   white-space: nowrap;
 }
 
+/* A row whose project has a page: the whole row opens it, the name is its button. */
+.ct-row--link {
+  cursor: pointer;
+}
+
+.ct-name--link {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ct-row--link:hover .ct-name--link,
+.ct-name--link:focus-visible {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .ct-sub {
   font-size: var(--font-size-xs);
   line-height: 1.4;
@@ -1829,4 +1851,28 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .ct-add-row { transition: none; }
+}
+
+/* Add content results: the whole card opens the project's page, the name is its button. */
+.id-result {
+  cursor: pointer;
+}
+
+.id-result-name {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.id-result:hover .id-result-name,
+.id-result-name:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

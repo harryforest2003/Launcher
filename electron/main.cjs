@@ -27,6 +27,7 @@ const minecraftAPI = require("./minecraftApi.cjs");
 
 const { curseforgeFetch } = require("./curseforge.cjs");
 const { browse, resolveProjectLink } = require("./minecraft/modSearch.cjs");
+const { packContents } = require("./minecraft/packContents.cjs");
 const { curseForgeType, modrinthType } = require("./minecraft/contentTypes.cjs");
 
 
@@ -105,14 +106,13 @@ function normalizeCurseForgeProject(project, files = [], description = null) {
         id: file.id,
         name: file.displayName,
         version_number: file.fileName,
+        // Modrinth's words for the same thing, so both read alike everywhere.
         version_type:
-            file.releaseType === 1
-                ? "Release"
-                : file.releaseType === 2
-                ? "Beta"
+            file.releaseType === 2
+                ? "beta"
                 : file.releaseType === 3
-                ? "Alpha"
-                : "Unknown",
+                ? "alpha"
+                : "release",
 
         game_versions: (file.sortableGameVersions ?? [])
             .map(v => v.gameVersionName)
@@ -180,6 +180,18 @@ ipcMain.handle("project:resolveLink", async (_event, link) => {
 // A project id or slug, as the sites use them: never a path to another part of their API.
 const PROJECT_ID = /^[\w.-]{1,100}$/;
 
+// What one modpack version contains. Version ids as the sites write them: Modrinth's
+// base62, CurseForge's numbers.
+ipcMain.handle("pack:contents", (_event, source, projectId, versionId) => {
+    const project = String(projectId ?? "");
+    const version = String(versionId ?? "");
+    const valid = source === "modrinth"
+        ? PROJECT_ID.test(project) && /^[A-Za-z0-9]{1,32}$/.test(version)
+        : source === "curseforge" && /^\d{1,12}$/.test(project) && /^\d{1,12}$/.test(version);
+    if (!valid) throw new Error("That isn't a modpack version.");
+    return packContents(source, project, version);
+});
+
 ipcMain.handle("project:get", async (_event, source, rawId) => {
     const id = String(rawId ?? "");
     if (!PROJECT_ID.test(id) || (source !== "modrinth" && source !== "curseforge")) return null;
@@ -206,7 +218,19 @@ ipcMain.handle("project:get", async (_event, source, rawId) => {
         ]);
 
         const project = (await projectRes.json()).data;
-        const files = (await filesRes.json()).data;
+        const firstPage = await filesRes.json();
+        const files = firstPage.data ?? [];
+
+        // Long-lived packs have hundreds of versions, and an older one may be the one wanted.
+        const total = Math.min(firstPage.pagination?.totalCount ?? 0, 500);
+        const more = [];
+        for (let index = 100; index < total; index += 100) {
+            more.push(curseforgeFetch(`/mods/${encodeURIComponent(id)}/files?pageSize=100&index=${index}`)
+                .then((res) => (res.ok ? res.json() : { data: [] }))
+                .then((json) => json.data ?? [])
+                .catch(() => []));
+        }
+        files.push(...(await Promise.all(more)).flat());
         // Only the summary shows if this one call fails, not an error page.
         const description = descriptionRes.ok ? (await descriptionRes.json()).data : null;
 
@@ -403,6 +427,8 @@ app.whenReady().then(() => {
     registerBlockbenchIpc();
     // Home's play time, activity, news and Steam deals.
     registerDashboardIpc();
+    // Downloads newer builds from GitHub and puts them in when the launcher quits.
+    require("./updater.cjs").registerUpdater();
     createWindow();
 });
 

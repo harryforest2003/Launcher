@@ -4,6 +4,9 @@ import { Clock, Download, ExternalLink, KeyRound, SlidersHorizontal } from "luci
 import { Badge, Button, EmptyState, Monogram, Notice, ProgressBar, SearchField, Select, Skeleton, Tabs } from "../components/ui";
 import "./discover.css";
 import InstallToInstance from "../components/InstallToInstance";
+import PackVersionPicker from "../components/PackVersionPicker";
+import type { PackVersion } from "../components/packVersions";
+import { useModpackInstall } from "../components/useModpackInstall";
 import Sidebar from "../components/MCSidebar";
 import Pagination from "../components/Pagination";
 import DiscoverRow from "./DiscoverRow";
@@ -149,16 +152,11 @@ function MCDiscover({
 
   // Installing a modpack creates a whole instance, so it gets its own
   // progress reporting rather than a spinner on the button.
-  const [installingPack, setInstallingPack] = useState<string | null>(null);
-  const [packProgress, setPackProgress] = useState<InstallProgress | null>(null);
-  const [packResult, setPackResult] = useState<string | null>(null);
-  const [packError, setPackError] = useState<string | null>(null);
+  const { installing: installingPack, progress: packProgress, result: packResult, error: packError, install: installPack } = useModpackInstall();
+  // The pack whose versions are on show, before one is picked to install.
+  const [pickingPack, setPickingPack] = useState<CatalogItem | null>(null);
 
   const [curseForgeReady, setCurseForgeReady] = useState(true);
-
-  useEffect(() => {
-    return window.instanceAPI.onProgress(setPackProgress);
-  }, []);
 
   useEffect(() => {
     window.instanceAPI
@@ -167,34 +165,9 @@ function MCDiscover({
       .catch(() => {});
   }, []);
 
-  async function installModpack(item: CatalogItem) {
-    setInstallingPack(item.id);
-    setPackError(null);
-    setPackResult(null);
-    setPackProgress(null);
-
-    try {
-      const created = await window.instanceAPI.installModpack({
-        source: item.source,
-        projectId: item.id,
-        name: item.name,
-      });
-
-      const blocked = created.pack?.blocked?.length ?? 0;
-
-      setPackResult(
-        `Created instance "${created.name}" — Minecraft ${created.version}, ` +
-        `${created.loader} ${created.loaderVersion}, ${created.ram} GB RAM.` +
-        (blocked
-          ? ` ${blocked} file(s) could not be downloaded automatically.`
-          : "")
-      );
-    } catch (err) {
-      setPackError(err instanceof Error ? err.message : String(err));
-    }
-
-    setInstallingPack(null);
-    setPackProgress(null);
+  function installModpack(item: CatalogItem, version: PackVersion) {
+    setPickingPack(null);
+    void installPack({ source: item.source, projectId: item.id, name: item.name }, version);
   }
 
   /* ---------------- versions ---------------- */
@@ -390,6 +363,17 @@ function MCDiscover({
           ))}
         </div>
 
+        {pickingPack && (
+          <PackVersionPicker
+            source={pickingPack.source}
+            projectId={pickingPack.id}
+            name={pickingPack.name}
+            icon={pickingPack.icon}
+            onPick={(version) => installModpack(pickingPack, version)}
+            onClose={() => setPickingPack(null)}
+          />
+        )}
+
         <div ref={listTop} />
         {/* LIST */}
         {loading ? (
@@ -475,7 +459,7 @@ function MCDiscover({
                           className="iti__install"
                           icon={<Download size={14} aria-hidden="true" />}
                           disabled={!!installingPack}
-                          onClick={() => installModpack(item)}
+                          onClick={() => setPickingPack(item)}
                           title="Creates a new instance with this pack's Minecraft version, loader and mods"
                         >
                           {installingPack === item.id ? "Installing..." : "Install"}

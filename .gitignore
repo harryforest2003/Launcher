@@ -70,3 +70,6 @@ vendor/blockbench/
 # The CurseForge proxy's local key and Wrangler's working files.
 proxy/**/.dev.vars
 proxy/**/.wrangler/
+
+# Which commit a build came from; written by the build, never committed.
+electron/build-info.json

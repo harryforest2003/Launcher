@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Check, Download, Layers, Package, Plus } from "lucide-react";
 import ImportPanel from "./ImportPanel";
 import InstanceArt from "./InstanceArt";
+import PackVersionPicker from "./PackVersionPicker";
+import { versionLabel, type PackVersion } from "./packVersions";
 import SearchDropdown from "./SearchDropdown";
 import { Button, Notice } from "./ui";
 import "../pages/library.css";
@@ -90,6 +92,9 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
   const [pack, setPack] = useState<CatalogItem | null>(null);
   const [packNotice, setPackNotice] = useState<string | null>(null);
   const [packDoneName, setPackDoneName] = useState<string | null>(null);
+  // Create asks which version of the pack first; this is the one it's installing.
+  const [pickingVersion, setPickingVersion] = useState(false);
+  const [packVersion, setPackVersion] = useState<PackVersion | null>(null);
 
   // Popular packs at first, then whatever's typed, a moment after typing stops.
   useEffect(() => {
@@ -187,10 +192,12 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
     tabRefs.current[next]?.focus();
   }
 
-  async function createFromPack(chosen: CatalogItem) {
+  async function createFromPack(chosen: CatalogItem, chosenVersion: PackVersion) {
     const source = installableSource(chosen);
     if (!source) return setCreateError(`${chosen.name}'s authors don't allow launchers to download it.`);
 
+    setPickingVersion(false);
+    setPackVersion(chosenVersion);
     setCreating(true);
     setCreateError(null);
     setProgress(null);
@@ -200,6 +207,7 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
       const created = await window.instanceAPI.installModpack({
         source: source.source,
         projectId: source.id,
+        fileId: String(chosenVersion.id),
         name: instanceName.trim() || chosen.name,
       });
       const blocked = created.pack?.blocked?.length ?? 0;
@@ -225,7 +233,9 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
   async function create() {
     if (startFrom === "modpack") {
       if (!pack) return setCreateError("Choose a modpack first.");
-      return createFromPack(pack);
+      if (!installableSource(pack)) return setCreateError(`${pack.name}'s authors don't allow launchers to download it.`);
+      setCreateError(null);
+      return setPickingVersion(true);
     }
 
     const name = nameValue.trim();
@@ -543,6 +553,8 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
                 <dd>{pack ? pack.name : "Not chosen yet"}</dd>
                 <dt>From</dt>
                 <dd>{pack ? siteName(installableSource(pack)?.source ?? pack.source) : "..."}</dd>
+                <dt>Version</dt>
+                <dd>{creating && packVersion ? versionLabel(packVersion) : "Picked when you create"}</dd>
                 <dt>Memory</dt>
                 <dd>Set by the pack</dd>
               </>
@@ -572,6 +584,18 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
                 Cancel
               </Button>
             </>
+          )}
+
+          {pack && pickingVersion && installableSource(pack) && (
+            <PackVersionPicker
+              source={installableSource(pack)!.source as "modrinth" | "curseforge"}
+              projectId={installableSource(pack)!.id}
+              name={pack.name}
+              icon={pack.icon}
+              actionLabel="Create instance"
+              onPick={(chosenVersion) => createFromPack(pack, chosenVersion)}
+              onClose={() => setPickingVersion(false)}
+            />
           )}
 
           {creating && progress && (
