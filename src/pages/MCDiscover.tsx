@@ -10,6 +10,8 @@ import { useModpackInstall } from "../components/useModpackInstall";
 import Sidebar from "../components/MCSidebar";
 import Pagination from "../components/Pagination";
 import DiscoverRow from "./DiscoverRow";
+import PlatformPacks, { PlatformPackRow } from "./PlatformPacks";
+import { PLATFORM_NAMES } from "./platformSites";
 import { useScrollMemory } from "./useScrollMemory";
 
 type Props = {
@@ -62,6 +64,52 @@ const TYPE_LABELS: Record<string, string> = {
 
 const SITE_NAMES: Record<string, string> = { modrinth: "Modrinth", curseforge: "CurseForge" };
 
+// Modpack sites with launchers of their own, picked in the Source filter on the Modpacks tab.
+const PLATFORM_SITES = Object.keys(PLATFORM_NAMES) as PlatformPackSite[];
+const siteFromSource = (source: string) => PLATFORM_SITES.find((site) => PLATFORM_NAMES[site] === source) ?? null;
+// How many of each site's packs go on a page that mixes every site.
+const MIX_PER_SITE = 8;
+
+type Row = { kind: "catalog"; item: CatalogItem } | { kind: "platform"; item: PlatformPackItem };
+type SitePage = { site: PlatformPackSite; found: PlatformPackPage | null; error: string | null };
+
+const plain = (err: unknown) =>
+  (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
+const squash = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
+const downloadsOf = (row: Row) =>
+  row.kind === "catalog" ? row.item.sources.reduce((sum, s) => sum + s.downloads, 0) || row.item.downloads : row.item.downloads;
+
+/*
+ * One page from every site: Modrinth and CurseForge's shared page, then each launcher site's
+ * page, leaving out packs already listed under the same name. Sorted by downloads or date
+ * when asked, else each site's best match first, taking turns.
+ */
+function mixRows(catalog: CatalogItem[], sites: PlatformPackItem[][], sort: string): Row[] {
+  const seen = new Set(catalog.map((item) => squash(item.name)));
+  const lists: Row[][] = [
+    catalog.map((item) => ({ kind: "catalog" as const, item })),
+    ...sites.map((list) =>
+      list
+        .filter((item) => {
+          const key = squash(item.name);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((item) => ({ kind: "platform" as const, item }))
+    ),
+  ];
+  if (sort === "Downloads") return lists.flat().sort((a, b) => downloadsOf(b) - downloadsOf(a));
+  if (sort === "Newest") {
+    const date = (row: Row) => Date.parse(row.item.date ?? "") || 0;
+    return lists.flat().sort((a, b) => date(b) - date(a));
+  }
+  const rows: Row[] = [];
+  const longest = Math.max(0, ...lists.map((list) => list.length));
+  for (let i = 0; i < longest; i++) for (const list of lists) if (list[i]) rows.push(list[i]);
+  return rows;
+}
+
 const compact = (n: number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 
 // Loader, game versions and categories, where the listing carries them, else the filters the list is already narrowed by.
@@ -104,6 +152,15 @@ function MCDiscover({
   const [sort, setSort] = useState(discoverContext.sort);
 
   const [tab, setTab] = useState<Tab>(discoverContext.tab);
+  // FTB, Technic or ATLauncher, when the Source filter on the Modpacks tab is one of them.
+  const platformSite = tab === "modpacks" ? siteFromSource(source) : null;
+  // Every site's modpacks together.
+  const mixPacks = tab === "modpacks" && source === "Any Source";
+  // Those sites only list modpacks, so other tabs go back to any source.
+  const changeTab = (next: Tab) => {
+    setTab(next);
+    if (next !== "modpacks" && siteFromSource(source)) setSource("Any Source");
+  };
 
   // The loader, version, source and sort choices live behind one Filters button, so the
   // content tabs can take the full width of the page.
@@ -155,6 +212,9 @@ function MCDiscover({
   const { installing: installingPack, progress: packProgress, result: packResult, error: packError, install: installPack } = useModpackInstall();
   // The pack whose versions are on show, before one is picked to install.
   const [pickingPack, setPickingPack] = useState<CatalogItem | null>(null);
+  const [pickingPlatform, setPickingPlatform] = useState<PlatformPackItem | null>(null);
+  // FTB, Technic and ATLauncher's pages, when every site's modpacks are mixed.
+  const [sitePages, setSitePages] = useState<SitePage[]>([]);
 
   const [curseForgeReady, setCurseForgeReady] = useState(true);
 
@@ -186,10 +246,29 @@ function MCDiscover({
 
   /* ---------------- fetch one page ---------------- */
   useEffect(() => {
+    // Those sites' packs are listed by PlatformPacks instead.
+    if (platformSite) return;
     let active = true;
 
     async function loadPage() {
       setLoading(true);
+      const sites = mixPacks ? PLATFORM_SITES : [];
+      const fromSites = Promise.all(
+        sites.map((site) =>
+          window.instanceAPI
+            .searchPlatformPacks(site, {
+              query: debouncedSearch,
+              page,
+              loader: loader === "Any Loader" ? undefined : loader,
+              mcVersion: version === "Any Version" ? undefined : version,
+              perPage: MIX_PER_SITE,
+            })
+            .then(
+              (found): SitePage => ({ site, found, error: null }),
+              (err): SitePage => ({ site, found: null, error: plain(err) })
+            )
+        )
+      );
 
       try {
         const next = await window.launcherAPI.browseCatalog({
@@ -211,6 +290,9 @@ function MCDiscover({
         setLoadError(err instanceof Error ? err.message : String(err));
       }
 
+      const pages = await fromSites;
+      if (!active) return;
+      setSitePages(pages);
       setLoading(false);
       setLoadedKey(requestKey);
     }
@@ -220,7 +302,7 @@ function MCDiscover({
     return () => {
       active = false;
     };
-  }, [debouncedSearch, version, loader, tab, source, sort, page, requestKey]);
+  }, [debouncedSearch, version, loader, tab, source, sort, page, requestKey, platformSite, mixPacks]);
 
   useEffect(() => {
     listTop.current?.scrollIntoView({ block: "start" });
@@ -228,13 +310,24 @@ function MCDiscover({
 
   const items = result?.items ?? [];
   const totals = result?.totals;
+  // The sites' own pages count only when they're for this page (past their last, they repeat it).
+  const sitesHere = mixPacks ? sitePages.filter((entry) => entry.found && entry.found.page === page) : [];
+  const rows: Row[] = mixPacks
+    ? mixRows(result && result.page === page ? items : [], sitesHere.map((entry) => entry.found?.items ?? []), sort)
+    : items.map((item) => ({ kind: "catalog", item }));
+  const shownPage = mixPacks ? page : (result?.page ?? 1);
+  // FTB, Technic and ATLauncher's counts, as one figure to keep the bar short.
+  const otherSites = sitePages.reduce((sum, entry) => sum + (mixPacks ? (entry.found?.total ?? 0) : 0), 0);
+  const otherSitesDetail = sitePages.map((entry) => `${(entry.found?.total ?? 0).toLocaleString()} on ${PLATFORM_NAMES[entry.site]}`).join(", ");
+  const pageCount = Math.max(result?.pageCount ?? 1, ...(mixPacks ? sitePages.map((entry) => entry.found?.pageCount ?? 1) : []));
   const narrowed = [loader, version].filter((v) => !v.startsWith("Any "));
   const goToPage = (next: number) => setChosenPage({ filterKey, page: next });
 
   // The banner above says why CurseForge is off, so it isn't repeated below.
-  const warnings = (result?.warnings ?? []).filter(
-    (warning) => curseForgeReady || !warning.startsWith("CurseForge")
-  );
+  const warnings = [
+    ...(result?.warnings ?? []).filter((warning) => curseForgeReady || !warning.startsWith("CurseForge")),
+    ...(mixPacks ? sitePages.flatMap((entry) => (entry.error ? [`${PLATFORM_NAMES[entry.site]}: ${entry.error}`] : [])) : []),
+  ];
   const curseForgeOffReason =
     result?.warnings.find((warning) => warning.startsWith("CurseForge: "))?.slice("CurseForge: ".length) ??
     "CurseForge isn't available in this copy of the launcher yet.";
@@ -304,6 +397,7 @@ function MCDiscover({
                       <option>Any Source</option>
                       <option>Modrinth</option>
                       <option>CurseForge</option>
+                      {tab === "modpacks" && PLATFORM_SITES.map((site) => <option key={site}>{PLATFORM_NAMES[site]}</option>)}
                     </Select>
                   </label>
 
@@ -327,13 +421,14 @@ function MCDiscover({
                 </div>
               )}
             </div>
-            {totals && (
+            {totals && !platformSite && (
               <div data-testid="page-summary" className="dc-bar__count">
                 {source !== "CurseForge" && `${compact(totals.modrinth)} on Modrinth`}
                 {source === "Any Source" && curseForgeReady && " • "}
                 {source !== "Modrinth" && curseForgeReady &&
                   `${compact(totals.curseforge)}${totals.curseforgeCapped ? "+" : ""} on CurseForge`}
-                {` • Page ${result?.page.toLocaleString()} of ${result?.pageCount.toLocaleString()}`}
+                {otherSites > 0 && <span title={otherSitesDetail}>{` • ${compact(otherSites)} on other sites`}</span>}
+                {` • Page ${shownPage.toLocaleString()} of ${pageCount.toLocaleString()}`}
               </div>
             )}
           </div>
@@ -342,7 +437,7 @@ function MCDiscover({
               label="Content type"
               idBase="discover"
               value={tab}
-              onChange={setTab}
+              onChange={changeTab}
               tabs={(["all", "mods", "modpacks", "shaders", "datapacks", "resourcepacks"] as Tab[]).map((t) => ({ value: t, label: TAB_LABELS[t] }))}
             />
           </div>
@@ -361,8 +456,25 @@ function MCDiscover({
           {[...warnings, ...(loadError ? [loadError] : [])].map((warning) => (
             <Notice key={warning} tone="warning">{warning}</Notice>
           ))}
+          {mixPacks && loader !== "Any Loader" && (
+            <p className="dc-note">Technic and ATLauncher don't say which loader a pack uses, so with a loader chosen their packs are left out.</p>
+          )}
+          {platformSite && sort !== "Relevance" && (
+            <p className="dc-note">{PLATFORM_NAMES[platformSite]} packs are listed in {PLATFORM_NAMES[platformSite]}'s own order, so Sort doesn't apply.</p>
+          )}
         </div>
 
+        {platformSite ? (
+          <PlatformPacks
+            platform={platformSite}
+            query={debouncedSearch}
+            loader={loader === "Any Loader" ? undefined : loader}
+            mcVersion={version === "Any Version" ? undefined : version}
+            installing={installingPack}
+            onInstall={(item, picked) => void installPack({ source: item.source, projectId: item.id, name: item.name }, picked)}
+          />
+        ) : (
+        <>
         {pickingPack && (
           <PackVersionPicker
             source={pickingPack.source}
@@ -371,6 +483,19 @@ function MCDiscover({
             icon={pickingPack.icon}
             onPick={(version) => installModpack(pickingPack, version)}
             onClose={() => setPickingPack(null)}
+          />
+        )}
+        {pickingPlatform && (
+          <PackVersionPicker
+            source={pickingPlatform.source}
+            projectId={pickingPlatform.id}
+            name={pickingPlatform.name}
+            icon={pickingPlatform.icon}
+            onPick={(picked) => {
+              setPickingPlatform(null);
+              void installPack({ source: pickingPlatform.source, projectId: pickingPlatform.id, name: pickingPlatform.name }, picked);
+            }}
+            onClose={() => setPickingPlatform(null)}
           />
         )}
 
@@ -387,7 +512,7 @@ function MCDiscover({
               </div>
             ))}
           </div>
-        ) : items.length === 0 ? (
+        ) : rows.length === 0 ? (
           <EmptyState
             title={`No ${tab === "all" ? "content" : TAB_LABELS[tab].toLowerCase()} found${search.trim() ? ` for "${search.trim()}"` : ""}`}
             body={activeFilters > 0 ? "Try clearing the filters." : "Try a different search."}
@@ -395,8 +520,11 @@ function MCDiscover({
           />
         ) : (
           <div className="dc-list">
-            {items.map((item) => {
-              const downloads = item.sources.reduce((sum, s) => sum + s.downloads, 0) || item.downloads;
+            {rows.map((row) => {
+              if (row.kind === "platform")
+                return <PlatformPackRow key={`${row.item.source}-${row.item.id}`} item={row.item} installing={installingPack} onInstall={setPickingPlatform} />;
+              const item = row.item;
+              const downloads = downloadsOf(row);
               return (
                 <DiscoverRow
                   key={`${item.source}-${item.id}`}
@@ -473,20 +601,22 @@ function MCDiscover({
           </div>
         )}
 
-        {result && !loading && items.length > 0 && (
+        {(result || mixPacks) && !loading && rows.length > 0 && (
           <div className="dc-bottom">
-            <Pagination page={result.page} pageCount={result.pageCount} onChange={goToPage} />
+            <Pagination page={shownPage} pageCount={pageCount} onChange={goToPage} />
           </div>
         )}
+        </>
+        )}
 
-        {!curseForgeReady && (
+        {!curseForgeReady && !platformSite && (
           <p className="dc-foot dc-off" title={curseForgeOffReason} data-testid="curseforge-off">
             <KeyRound size={13} aria-hidden="true" />
             <span className="dc-off__text">CurseForge is off: add its key to include those results.</span>{" "}
             <button type="button" className="dc-link" onClick={goSettings}>Open Settings</button>
           </p>
         )}
-        {source !== "Modrinth" && curseForgeReady && totals?.curseforgeCapped && (
+        {source !== "Modrinth" && curseForgeReady && totals?.curseforgeCapped && !platformSite && (
           <p data-testid="curseforge-limit" className="dc-foot">
             CurseForge only lets apps reach the first 10,000 results of a search. Search or filter to get to the rest.
           </p>

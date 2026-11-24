@@ -6,7 +6,7 @@ import ChannelFilterBar from "./ChannelFilterBar";
 import "./packVersionPicker.css";
 
 type Props = {
-  source: "modrinth" | "curseforge";
+  source: "modrinth" | "curseforge" | PlatformPackSite;
   projectId: string;
   name: string;
   icon?: string | null;
@@ -40,13 +40,15 @@ export default function PackVersionPicker({ source, projectId, name, icon, versi
   useEffect(() => {
     if (given) return;
     let current = true;
-    window.launcherAPI
-      .getProject(source, projectId)
-      .then((project) => {
-        if (!current) return;
-        if (!project) throw new Error("Couldn't load this modpack's versions. Check your connection.");
-        setFetched(project.versions ?? []);
-      })
+    const load: Promise<PackVersion[]> =
+      source === "modrinth" || source === "curseforge"
+        ? window.launcherAPI.getProject(source, projectId).then((project) => {
+            if (!project) throw new Error("Couldn't load this modpack's versions. Check your connection.");
+            return project.versions ?? [];
+          })
+        : window.instanceAPI.platformPackVersions(source, projectId);
+    load
+      .then((list) => current && setFetched(list))
       .catch((err) => current && setLoadError(message(err)));
     return () => {
       current = false;

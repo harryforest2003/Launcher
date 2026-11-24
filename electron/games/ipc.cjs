@@ -24,6 +24,8 @@ const sets = require("./sets.cjs");
 const profiles = require("./profiles.cjs");
 const ini = require("./ini.cjs");
 const tools = require("./tools.cjs");
+const graphics = require("./graphics.cjs");
+const wabbajack = require("./wabbajack.cjs");
 const share = require("./share.cjs");
 const finder = require("./finder.cjs");
 const loot = require("./loot.cjs");
@@ -88,6 +90,8 @@ function summary(game) {
         updated: protect.updatedSince(game, loc),
         loadOrder: modorder.kindOf(game, loc),
         generic: Boolean(game.generic),
+        graphics: process.platform === "win32" && Boolean(graphics.TARGETS[game.id] || (game.generic && loc.launchChosen && loc.launchExe)),
+        modlists: wabbajack.hasLists(game),
         custom: Boolean(game.custom),
         modsDir: loc.modsDir ?? null,
         modsChosen: Boolean(loc.modsChosen),
@@ -178,6 +182,8 @@ function remember(gameId, entries) {
 async function handleNxm(link) {
     const parsed = nexus.parseNxm(link);
     if (!parsed) return;
+    // One a Wabbajack list is waiting for goes to the list's downloads instead.
+    if (await wabbajack.takeNxm(parsed).catch(() => null)) return;
     const game = allGames().find((g) => g.nexus === parsed.domain);
     if (!game) {
         send("games:nxm", { status: "failed", error: `Unity Launcher doesn't have a section for that game (${parsed.domain}) yet.` });
@@ -623,6 +629,107 @@ function registerGamesIpc() {
     ipcMain.handle("games:showAllTools", (_e, id) => tools.showAll(need(id).id));
     ipcMain.handle("games:runTool", (_e, id, toolId) => tools.run(need(id).id, String(toolId)));
 
+    // ReShade and ENB. The game is closed first: Windows doesn't let a loaded DLL be changed.
+    const graphicsClosed = async (game) => {
+        if (await require("./running.cjs").gameOpen(game.id)) throw new Error(`Close ${game.name} first: it has these files open while it runs.`);
+        return game.id;
+    };
+    ipcMain.handle("games:graphics", (_e, id) => graphics.status(need(id).id));
+    ipcMain.handle("games:reshadeInstall", async (_e, id, options) => {
+        const packages = Array.isArray(options?.packages) ? options.packages.map(String) : undefined;
+        return graphics.installReshade(await graphicsClosed(need(id)), { api: options?.api ? String(options.api) : undefined, packages });
+    });
+    ipcMain.handle("games:reshadeOn", async (_e, id, on) => graphics.setReshadeOn(await graphicsClosed(need(id)), on === true));
+    ipcMain.handle("games:reshadeRemove", async (_e, id) => graphics.removeReshade(await graphicsClosed(need(id))));
+    // fromDownloads: the ENB zip found in Downloads; otherwise one chosen here.
+    ipcMain.handle("games:enbInstall", async (event, id, fromDownloads) => {
+        const game = need(id);
+        let file = null;
+        if (fromDownloads === true) file = (await graphics.status(game.id)).enb?.download?.file ?? null;
+        if (!file) {
+            const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+                title: `ENB for ${game.name}`,
+                message: "Choose the ENB zip downloaded from enbdev.com.",
+                filters: [{ name: "ENB download", extensions: ["zip", "7z"] }],
+                properties: ["openFile"],
+            });
+            if (picked.canceled || !picked.filePaths.length) return null;
+            file = picked.filePaths[0];
+        }
+        return graphics.installEnb(await graphicsClosed(game), file);
+    });
+    ipcMain.handle("games:enbOn", async (_e, id, on) => graphics.setEnbOn(await graphicsClosed(need(id)), on === true));
+    ipcMain.handle("games:enbRemove", async (_e, id) => graphics.removeEnb(await graphicsClosed(need(id))));
+    ipcMain.handle("games:enbSite", () => {
+        if (!openExternalSafely(graphics.ENB_SITE)) throw new Error("Couldn't open enbdev.com.");
+    });
+    ipcMain.handle("games:openGraphicsFolder", async (_e, id) => {
+        const dir = (await graphics.status(need(id).id)).dir;
+        if (!dir || !fs.existsSync(dir)) throw new Error("The game's folder wasn't found.");
+        const failed = await shell.openPath(dir);
+        if (failed) throw new Error(failed);
+    });
+
+    // Wabbajack modlists.
+    wabbajack.events.on("progress", (payload) => send("games:modlist", payload));
+    const listKey = (key) => {
+        const text = String(key ?? "");
+        if (!text || text.length > 200) throw new Error("Unknown modlist.");
+        return text;
+    };
+    ipcMain.handle("games:modlists", async (_e, id) => {
+        const game = need(id);
+        return { gallery: await wabbajack.listsFor(game.id), mine: wabbajack.mine(game.id) };
+    });
+    ipcMain.handle("games:modlistGet", (_e, id, key) => wabbajack.fetchList(need(id).id, listKey(key)));
+    ipcMain.handle("games:modlistOpenFile", async (event, id) => {
+        const game = need(id);
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: `A Wabbajack modlist for ${game.name}`,
+            filters: [{ name: "Wabbajack modlist", extensions: ["wabbajack"] }],
+            properties: ["openFile"],
+        });
+        if (picked.canceled || !picked.filePaths.length) return null;
+        return wabbajack.openFile(game.id, picked.filePaths[0]);
+    });
+    ipcMain.handle("games:modlistPlan", (_e, key) => wabbajack.plan(listKey(key)));
+    ipcMain.handle("games:modlistDownload", (_e, key) => wabbajack.downloadMissing(listKey(key)));
+    // An archive's page: Nexus Mods' (its "Mod Manager Download" comes back here) or the site to get it from.
+    ipcMain.handle("games:modlistOpenArchive", async (_e, key, hash) => {
+        const archive = (await wabbajack.plan(listKey(key))).archives.find((a) => a.hash === String(hash));
+        if (!archive?.page) throw new Error("That archive has no page to get it from.");
+        if (!openExternalSafely(archive.page)) throw new Error("Couldn't open its page.");
+    });
+    ipcMain.handle("games:modlistChooseDir", async (event, key) => {
+        const current = await wabbajack.plan(listKey(key));
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: `Where to install ${current.title}`,
+            message: "Choose an empty folder for the list.",
+            defaultPath: current.dir,
+            properties: ["openDirectory", "createDirectory"],
+        });
+        if (picked.canceled || !picked.filePaths.length) return null;
+        return wabbajack.setDir(current.key, picked.filePaths[0]);
+    });
+    ipcMain.handle("games:modlistInstall", (_e, key) => wabbajack.install(listKey(key)));
+    ipcMain.handle("games:modlistCancel", (_e, key) => wabbajack.stop(listKey(key)));
+    ipcMain.handle("games:modlistForget", (_e, key) => wabbajack.forgetList(listKey(key)));
+    ipcMain.handle("games:modlistRun", (_e, key) => wabbajack.runMo2(listKey(key)));
+    ipcMain.handle("games:modlistOpenFolder", async (_e, key) => {
+        const failed = await shell.openPath(wabbajack.folderOf(listKey(key)));
+        if (failed) throw new Error(failed);
+    });
+    // A list's readme or website (as the gallery or the list gives it), or Wabbajack's own site.
+    ipcMain.handle("games:modlistLink", async (_e, id, key, which) => {
+        let url = null;
+        if (which === "wabbajack") url = wabbajack.WABBAJACK_SITE;
+        else if (which === "readme" || which === "website") {
+            const fromGallery = (await wabbajack.listsFor(need(id).id)).find((entry) => entry.key === String(key));
+            url = fromGallery?.[which] ?? (await wabbajack.plan(listKey(key)).catch(() => null))?.[which] ?? null;
+        }
+        if (!url || !/^https?:\/\//i.test(url) || !openExternalSafely(url)) throw new Error("Couldn't open the page.");
+    });
+
     // Skyrim's and Fallout 4's load order.
     // The order, and what fixing it would change (nothing, when it's fine). Missing masters
     // come with the Nexus mod that has each.
@@ -752,6 +859,8 @@ function registerGamesIpc() {
         await conflicts.resolve(gameId).catch(() => 0);
         return result;
     });
+    // Separate saves for each profile, on or off.
+    ipcMain.handle("games:profileSaves", (_e, id, on) => profiles.setSaves(need(id).id, on === true));
     ipcMain.handle("games:profileMember", (_e, id, profileId, key, member) => profiles.setMember(need(id).id, String(profileId), String(key), member === true));
     ipcMain.handle("games:useSet", (_e, id, setId) => {
         const set = sets.list(need(id).id).find((s) => s.id === setId);

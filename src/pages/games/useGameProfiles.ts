@@ -60,7 +60,7 @@ export default function useGameProfiles(gameId: GameId, mods: GameMod[], reload:
       const name = result.profiles.find((profile) => profile.id === id)?.name ?? "that profile";
       say({
         tone: result.problems.length ? "warn" : "good",
-        text: `Switched to ${name}${result.changed ? `: ${result.changed} mod${result.changed === 1 ? "" : "s"} moved in or out of the game` : ""}.`,
+        text: `Switched to ${name}${result.changed ? `: ${result.changed} mod${result.changed === 1 ? "" : "s"} moved in or out of the game` : ""}.${result.saves.on && result.saves.folder && !result.saves.pending ? " Its own saves are in the game's saves folder." : ""}`,
         notes: result.problems,
       });
     });
@@ -78,15 +78,27 @@ export default function useGameProfiles(gameId: GameId, mods: GameMod[], reload:
         // The first profile also makes "Default" of what's there now: it's chosen until this one is.
         const switched = await window.gamesAPI.switchProfile(gameId, result.created);
         setData(switched);
+        const saves = switched.saves.on ? (copy ? " It has a copy of the saves too." : " It starts with no saves.") : "";
         say({
           tone: switched.problems.length ? "warn" : "good",
-          text: copy ? `Made ${name}, a copy of ${active?.name ?? "Default"}, and switched to it.` : `Made ${name} and switched to it. Mods you add now go in it.`,
+          text: copy ? `Made ${name}, a copy of ${active?.name ?? "Default"}, and switched to it.${saves}` : `Made ${name} and switched to it. Mods you add now go in it.${saves}`,
           notes: switched.problems,
         });
       }),
     rename: (id: string, name: string) => run("rename", () => window.gamesAPI.saveProfile(gameId, { id, name })),
     remove: (id: string) => run("delete", () => window.gamesAPI.deleteProfile(gameId, id)),
     member: (id: string, key: string, member: boolean) => run("member", () => window.gamesAPI.profileMember(gameId, id, key, member)),
+    /* Whether each profile keeps its own saves (on unless turned off). */
+    saves: data?.saves ?? { on: true, folder: null, pending: false },
+    setSaves: (on: boolean) =>
+      run("saves", () => window.gamesAPI.profileSaves(gameId, on), () =>
+        say({
+          tone: "good",
+          text: on
+            ? `Each profile keeps its own saves now. The saves in the game's folder count as ${active?.name ?? "this profile"}'s.`
+            : "Profiles share the game's saves now. Other profiles' saves stay in the launcher until this is turned back on.",
+        })
+      ),
   };
 }
 

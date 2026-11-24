@@ -5,6 +5,7 @@ import "./gameDiscover.css";
 import Pagination from "../../components/Pagination";
 import DiscoverRow from "../DiscoverRow";
 import CollectionsList from "./CollectionsList";
+import ModlistsPanel from "./ModlistsPanel";
 import GameSites from "./GameSites";
 import { countText, errorText, installSummary, modSitesFor, shortDate } from "./shared";
 import { Badge, Button, EmptyState, Monogram, Notice, SearchField, Select, Skeleton, Tabs } from "../../components/ui";
@@ -65,7 +66,7 @@ type Offered = NonNullable<GameSearchPage["sources"]>;
  */
 export default function GameDiscover({ detail, openMod, afterInstall, openOnNexus, goLauncherSettings, goMods, openCollection }: Props) {
   // Single mods, Nexus Mods collections (whole lists of mods), or every website with mods for it.
-  const [showing, setShowing] = useState<"mods" | "collections" | "sites">("mods");
+  const [showing, setShowing] = useState<"mods" | "collections" | "modlists" | "sites">("mods");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   // Games on several sites start with all of them, mixed, as Minecraft's Discover does.
@@ -250,7 +251,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
           </div>
         )}
         <div className="dc-bar__row dc-bar__row--tabs">
-          <div className={`dc-tabs${detail.nexus ? " dc-tabs--three" : ""}`}><Tabs
+          <div className={`dc-tabs${detail.nexus ? (detail.modlists ? " dc-tabs--four" : " dc-tabs--three") : ""}`}><Tabs
             label="Discover"
             idBase="discover"
             value={showing}
@@ -258,6 +259,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
             tabs={[
               { value: "mods", label: "Mods" },
               ...(detail.nexus ? [{ value: "collections" as const, label: "Collections" }] : []),
+              ...(detail.modlists ? [{ value: "modlists" as const, label: "Modlists" }] : []),
               { value: "sites", label: "Sites", count: modSitesFor(detail.id, offered).length },
             ]}
           /></div>
@@ -283,6 +285,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
       </div>
       {showing === "collections" ? (
         <CollectionsList detail={detail} openCollection={openCollection} />
+      ) : showing === "modlists" ? (
+        <ModlistsPanel detail={detail} />
       ) : showing === "sites" ? (
         <GameSites detail={detail} sources={offered} checking={loading && !offered.length} goMods={goMods} />
       ) : (

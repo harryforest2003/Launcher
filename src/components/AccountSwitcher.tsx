@@ -4,6 +4,7 @@ import Monogram from "./ui/Monogram";
 import Select from "./ui/Select";
 import Button from "./ui/Button";
 import PlatformAccountAction from "./PlatformAccountAction";
+import OfflineAccountForm from "./OfflineAccountForm";
 import { ACCOUNTS_EVENT, watchAccountChanges } from "./ui/accountsSignal";
 import "./accountSwitcher.css";
 
@@ -20,6 +21,7 @@ type Props = {
 };
 
 const ADD = "__add__";
+const OFFLINE = "__offline__";
 
 const message = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
@@ -181,6 +183,7 @@ function MicrosoftAccounts({ compact, rail }: { compact: boolean; rail: boolean 
   const [operation, setOperation] = useState<"signin" | "switch" | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [naming, setNaming] = useState(false);
   const selectId = useId();
 
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -217,6 +220,13 @@ function MicrosoftAccounts({ compact, rail }: { compact: boolean; rail: boolean 
   const active = accounts.find((account) => account.active);
 
   async function choose(value: string) {
+    if (value === OFFLINE) {
+      setNaming(true);
+      setStatus(null);
+      setError(null);
+      return;
+    }
+    setNaming(false);
     setBusy(true);
     setOperation(value === ADD ? "signin" : "switch");
     setStatus(null);
@@ -244,12 +254,14 @@ function MicrosoftAccounts({ compact, rail }: { compact: boolean; rail: boolean 
       {!active && <option value="">{placeholder}</option>}
       {accounts.map((account) => (
         <option key={account.uuid} value={account.uuid}>
-          {account.name}
+          {account.offline ? `${account.name} (offline)` : account.name}
         </option>
       ))}
       <option value={ADD}>{accounts.length ? "Add another account..." : "Sign in with Microsoft..."}</option>
+      {!rail && <option value={OFFLINE}>Add offline test account...</option>}
     </>
   );
+  const kind = active?.offline ? "Offline test account" : "Microsoft account";
   const avatar = <Monogram name={active?.name ?? ""} icon={active ? undefined : <UserRound size={16} />} size={rail ? 32 : 28} />;
 
   const signedOut = !active && !loading && !loadError && accounts.length === 0;
@@ -312,6 +324,16 @@ function MicrosoftAccounts({ compact, rail }: { compact: boolean; rail: boolean 
 
   const notes = (
     <>
+      {naming && (
+        <OfflineAccountForm
+          onCancel={() => setNaming(false)}
+          onDone={(next, name) => {
+            setAccounts(next);
+            setNaming(false);
+            setStatus(`Minecraft will launch as ${name}, offline.`);
+          }}
+        />
+      )}
       {busy && <div className="ui-account__note" role="status">{operation === "signin" ? "Finish signing in in your browser." : "Switching Minecraft account…"}</div>}
       {!busy && status && <div className="ui-account__note" role="status">{status}</div>}
       {loadError && <div role="alert" className="ui-account__error">Couldn’t load Minecraft accounts: {loadError}<Button size="sm" variant="ghost" disabled={loading} onClick={() => setRefreshCount((value) => value + 1)}>Retry account check</Button></div>}
@@ -332,7 +354,7 @@ function MicrosoftAccounts({ compact, rail }: { compact: boolean; rail: boolean 
           <span className="ui-account__text">
             <strong className="ui-account__name">{active?.name ?? placeholder}</strong>
             <label className="ui-account__label" htmlFor={selectId}>
-              Microsoft account
+              {kind}
             </label>
           </span>
           <ChevronsUpDown className="ui-account__chevron" size={14} aria-hidden="true" />

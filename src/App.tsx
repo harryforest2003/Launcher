@@ -18,6 +18,7 @@ import { SidebarBackLabel } from "./components/ui/sidebarContext";
 import AppSidebar, { type ShellTarget } from "./components/ui/AppSidebar";
 import { ShellContext, navKey, type McPage, type PageNav, type Shell } from "./components/ui/shellContext";
 import Toaster from "./components/ui/Toaster";
+import FomodDialog from "./components/FomodDialog";
 import { leaveBlockbench } from "./components/leaveBlockbench";
 import { requestLaunch } from "./utils/launchRequests";
 
@@ -246,6 +247,8 @@ function App() {
           {/* The game sections' downloads carry on, and show, whichever page is open. */}
           <DownloadQueue />
           <Toaster />
+          {/* A game mod's installer options, asked while it installs. */}
+          <FomodDialog />
         </ShellContext.Provider>
       </DownloadsContext.Provider>
     </SkinBuilderNavContext.Provider>

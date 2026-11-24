@@ -28,7 +28,7 @@ type Listener = (data: any) => void;
 const STORAGE_KEY = "unity-web-preview-state";
 const PLAYER_NAME = "PreviewPlayer";
 
-type PreviewAccount = { name: string; uuid: string };
+type PreviewAccount = { name: string; uuid: string; offline?: boolean };
 
 type PreviewState = {
   instances: Instance[];
@@ -725,6 +725,45 @@ const instanceBridge = {
     };
   },
 
+  searchPlatformPacks: async (platform: PlatformPackSite, options: PlatformPackQuery): Promise<PlatformPackPage> => {
+    if (options?.loader && platform !== "ftb") return { platform, items: [], page: 1, pageCount: 1, total: 0, loaderUnknown: true };
+    const names: Record<PlatformPackSite, string[]> = {
+      ftb: ["FTB StoneBlock 3", "FTB Presents Direwolf20 1.21", "FTB Skies 2"],
+      technic: ["Yogbox 2.0", "The 1.7.10 Pack", "Tekkit Legends"],
+      atlauncher: ["Digital Reality", "All The Forge 10", "Pixelmon Mod"],
+    };
+    const query = (options?.query ?? "").toLowerCase();
+    const items = names[platform]
+      .filter((name) => name.toLowerCase().includes(query))
+      .map((name, index): PlatformPackItem => ({
+        source: platform,
+        id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+        name,
+        author: platform === "ftb" ? "FTB Team" : "",
+        summary: `A sample ${platform.toUpperCase()} modpack for the browser preview.`,
+        icon: null,
+        downloads: platform === "atlauncher" ? 0 : 250000 - index * 50000,
+        date: new Date(Date.now() - (index + 1) * 20 * 86400000).toISOString(),
+        url: "https://example.com",
+        mcVersion: ["1.21.1", "1.12.2", "1.7.10"][index] ?? null,
+        loader: platform === "ftb" ? (["neoforge", "forge", "forge"][index] ?? null) : null,
+        installable: true,
+      }))
+      .filter((item) => (!options?.mcVersion || item.mcVersion === options.mcVersion) && (!options?.loader || item.loader === options.loader.toLowerCase()));
+    return { platform, items, page: 1, pageCount: 1, total: items.length };
+  },
+  platformPackVersions: async (): Promise<PlatformPackVersion[]> => [
+    { id: "2", name: "1.1.0", version_type: "release", game_versions: ["1.21.1"], loaders: ["neoforge"], date_published: new Date().toISOString() },
+    { id: "1", name: "1.0.0", version_type: "release", game_versions: ["1.21.1"], loaders: ["neoforge"], date_published: new Date(Date.now() - 30 * 86400000).toISOString() },
+  ],
+  installPlatformPack: async (platform: PlatformPackSite, _id: string, _versionId: string, name?: string) => {
+    const created = await createInstance({ name: name ?? "Sample modpack", version: "1.21.1", loader: "neoforge", loaderVersion: "21.1.83" });
+    return {
+      ...created,
+      pack: { name: created.name, version: "1.1.0", fileCount: 0, blocked: [], failed: 0, firstError: null, notes: [], site: platform },
+    };
+  },
+
   // Native file dialogs have no browser equivalent here, so they act as cancelled.
   scanLaunchers: async () => [],
   pickFolder: async () => null,
@@ -801,6 +840,15 @@ const instanceBridge = {
     return previewAccounts();
   },
   removeAccount: async (uuid: string) => removePreviewAccount(uuid),
+  addOfflineAccount: async (value: string) => {
+    const name = value.trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) throw new Error("A player name is 3 to 16 letters, numbers or underscores.");
+    const uuid = `0ff1${Array.from(name.toLowerCase(), (c) => c.charCodeAt(0).toString(16)).join("")}`.padEnd(32, "0").slice(0, 32);
+    state.accounts = [...state.accounts.filter((account) => account.uuid !== uuid), { name, uuid, offline: true }];
+    state.active = uuid;
+    persist();
+    return previewAccounts();
+  },
 
   // Files, logs, Java, updates and exports belong to the desktop app; the preview shows
   // them empty.

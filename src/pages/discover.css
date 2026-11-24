@@ -1001,3 +1001,5 @@
   flex-direction: column;
   gap: var(--space-3);
 }
+
+/* The Modpacks tab's site switch: the shared catalog, FTB, Technic or ATLauncher. */

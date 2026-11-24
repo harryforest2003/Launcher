@@ -1,45 +1,68 @@
 import { useEffect, useState } from "react";
-import { FileText, FolderOpen, History, Pencil, Play, Plus, SlidersHorizontal, Wrench } from "lucide-react";
+import { FileText, FolderOpen, History, Pencil, Play, Plus, SlidersHorizontal, Sparkles, Wrench } from "lucide-react";
 import Toggle from "../../components/Toggle";
 import IconButton from "../../components/IconButton";
 import { BinIcon } from "../../components/Icons";
 import SettingsLayout, { SettingsHeader, type SettingsCategory } from "../../components/SettingsLayout";
 import { Badge, Button, Menu, Notice } from "../../components/ui";
 import { errorText, shortDate, sizeText } from "./shared";
+import GraphicsSection from "./GraphicsSection";
 
 type Say = (text: string | null, tone?: "good" | "bad") => void;
 
 const inputPad = { padding: "var(--space-2) var(--space-3)" };
 
 /*
- * A Bethesda game's tools page: its modding tools (xEdit, BodySlide, Nemesis, Pandora...),
- * started from here (through CrossOver on a Mac), and its INI files, with quick settings
- * for the usual changes and a plain editor that keeps a copy before each save.
+ * A game's tools page. For a Bethesda game: its modding tools (xEdit, BodySlide, Nemesis,
+ * Pandora...), started from here (through CrossOver on a Mac), and its INI files, with quick
+ * settings for the usual changes and a plain editor that keeps a copy before each save.
+ * For any game on Windows: ReShade, and ENB where there is one.
  */
 export default function GameTools({ detail }: { detail: GameDetail }) {
   const [message, setMessage] = useState<{ text: string; tone: "good" | "bad" } | null>(null);
   const say: Say = (text, tone = "good") => setMessage(text ? { text, tone } : null);
 
+  // Modding tools and INI files are for Bethesda games; ReShade and ENB for any game on Windows.
+  const bethesda = detail.loadOrder === "plugins";
   const categories: SettingsCategory[] = [
+    ...(bethesda
+      ? [
+          {
+            id: "tools",
+            label: "Modding tools",
+            group: "Tools",
+            icon: <Wrench size={16} aria-hidden="true" />,
+            content: <ToolsSection detail={detail} say={say} />,
+          },
+        ]
+      : []),
     {
-      id: "tools",
-      label: "Modding tools",
-      group: "Tools",
-      icon: <Wrench size={16} aria-hidden="true" />,
-      content: <ToolsSection detail={detail} say={say} />,
+      id: "graphics",
+      label: "ReShade & ENB",
+      group: "Graphics",
+      icon: <Sparkles size={16} aria-hidden="true" />,
+      content: <GraphicsSection detail={detail} say={say} />,
     },
-    {
-      id: "ini",
-      label: "INI files",
-      group: "Settings files",
-      icon: <SlidersHorizontal size={16} aria-hidden="true" />,
-      content: <IniSection detail={detail} say={say} />,
-    },
+    ...(bethesda
+      ? [
+          {
+            id: "ini",
+            label: "INI files",
+            group: "Settings files",
+            icon: <SlidersHorizontal size={16} aria-hidden="true" />,
+            content: <IniSection detail={detail} say={say} />,
+          },
+        ]
+      : []),
   ];
 
   return (
     <div className="set-page" data-testid="game-tools">
-      <SettingsHeader title={`${detail.name} tools`} lead="Modding tools and the game's INI files." status="INI edits save with the Save button" />
+      <SettingsHeader
+        title={`${detail.name} tools`}
+        lead={bethesda ? "Modding tools, ReShade and ENB, and the game's INI files." : "ReShade for the game's graphics, and ENB where it's made for the game."}
+        status={bethesda ? "INI edits save with the Save button" : undefined}
+      />
       {message && (
         <Notice tone={message.tone === "bad" ? "danger" : "success"} actions={<Button size="sm" variant="ghost" onClick={() => setMessage(null)}>Dismiss</Button>}>
           {message.text}

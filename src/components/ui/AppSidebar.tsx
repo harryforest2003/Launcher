@@ -61,7 +61,7 @@ const GAME_PAGES: { page: GamePageKey; label: string; icon: ReactNode; when?: "c
   { page: "discover", label: "Discover Mods", icon: <Compass size={15} /> },
   { page: "cc", label: "Custom Content (CC)", icon: <Sparkles size={15} />, when: "cc" },
   { page: "loadorder", label: "Load Order", icon: <ListOrdered size={15} />, when: "loadorder" },
-  { page: "tools", label: "Tools & INI", icon: <Wrench size={15} />, when: "tools" },
+  { page: "tools", label: "Tools", icon: <Wrench size={15} />, when: "tools" },
   { page: "settings", label: "Settings", icon: <SlidersHorizontal size={15} /> },
 ];
 

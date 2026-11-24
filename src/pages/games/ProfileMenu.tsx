@@ -1,4 +1,4 @@
-import { ChevronDown, Copy, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, Layers, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { Button, Menu, type MenuItem } from "../../components/ui";
 import type { GameProfilesApi, ProfileForm } from "./useGameProfiles";
 
@@ -15,17 +15,28 @@ export default function ProfileMenu({ api, onForm }: MenuProps) {
   const { profiles, active, busy } = api;
   const items: MenuItem[] = profiles.length
     ? [
-        ...profiles.map((profile) => ({
-          label: `${profile.id === active?.id ? "✓ " : ""}${profile.name} (${profile.keys.length})`,
-          disabled: Boolean(busy),
-          onSelect: () => {
-            if (profile.id !== active?.id) void api.switchTo(profile.id);
-          },
-        })),
+        ...profiles.map((profile) => {
+          const chosen = profile.id === active?.id;
+          // A switch cut short: picking the chosen profile again puts its saves back.
+          const unfinished = chosen && api.saves.on && api.saves.pending;
+          return {
+            label: `${chosen ? "✓ " : ""}${profile.name} (${profile.keys.length})${unfinished ? ": put its saves back" : ""}`,
+            disabled: Boolean(busy),
+            onSelect: () => {
+              if (!chosen || unfinished) void api.switchTo(profile.id);
+            },
+          };
+        }),
         "separator" as const,
         { label: "New empty profile...", icon: <Plus size={14} aria-hidden="true" />, onSelect: () => onForm({ kind: "new", name: "" }) },
         { label: `Copy ${active?.name ?? "this profile"}...`, icon: <Copy size={14} aria-hidden="true" />, onSelect: () => onForm({ kind: "copy", name: `${active?.name ?? "Profile"} copy` }) },
         { label: `Rename ${active?.name ?? "this profile"}...`, icon: <Pencil size={14} aria-hidden="true" />, onSelect: () => onForm({ kind: "rename", name: active?.name ?? "" }) },
+        {
+          label: `${api.saves.on ? "✓ " : ""}Separate saves for each profile`,
+          icon: <Save size={14} aria-hidden="true" />,
+          disabled: Boolean(busy),
+          onSelect: () => void api.setSaves(!api.saves.on),
+        },
         ...(profiles.length > 1
           ? profiles
               .filter((profile) => profile.id !== active?.id)
@@ -74,7 +85,7 @@ export function ProfileBar({ api, form, setForm }: BarProps) {
         <span className="gm-muted">
           {last
             ? "Stop using profiles? Your mods stay installed, on and off as they are now."
-            : `Delete ${gone.name}? Mods only it has move to ${active?.name ?? "the chosen profile"}, turned off. Nothing is uninstalled.`}
+            : `Delete ${gone.name}? Mods only it has move to ${active?.name ?? "the chosen profile"}, turned off. Nothing is uninstalled.${api.saves.on ? " Its saves are kept as a save backup." : ""}`}
         </span>
         <Button
           size="sm"
@@ -93,16 +104,25 @@ export function ProfileBar({ api, form, setForm }: BarProps) {
     );
   }
 
+  // Each profile's saves are its own, so a save isn't loaded with mods it wasn't made with.
+  const saves = !api.saves.on
+    ? ""
+    : form.kind === "new"
+      ? ` Its saves start empty${first ? "; yours stay with Default" : ""}.`
+      : ` It gets a copy of the saves too.`;
+  const cloud = api.saves.on ? " If the game syncs saves with Steam Cloud, turn that off for it, or it can bring another profile's saves back." : "";
   const hint =
     form.kind === "rename"
       ? null
-      : form.kind === "new"
-        ? first
-          ? "Your mods now become the Default profile. The new one starts with none: the game gets no mods until you add some to it."
-          : "Starts with no mods. Mods you add while it's chosen go in it."
-        : first
-          ? "Your mods now become the Default profile, and the new one starts as a copy you can change."
-          : `Starts with ${active?.name ?? "this profile"}'s mods, on and off the same.`;
+      : (form.kind === "new"
+          ? first
+            ? "Your mods now become the Default profile. The new one starts with none: the game gets no mods until you add some to it."
+            : "Starts with no mods. Mods you add while it's chosen go in it."
+          : first
+            ? "Your mods now become the Default profile, and the new one starts as a copy you can change."
+            : `Starts with ${active?.name ?? "this profile"}'s mods, on and off the same.`) +
+        saves +
+        (first ? cloud : "");
 
   return (
     <div className="gm-setbar" data-testid="profile-bar">

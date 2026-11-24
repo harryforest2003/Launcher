@@ -56,6 +56,44 @@ const safeFolder = (name) => {
     return /^\.*$/.test(clean) ? "Mod" : clean;
 };
 
+/* ---------------- ENB and ReShade presets ---------------- */
+
+// A preset's files go beside the game's exe: enbseries.ini and its folders, ReShade's
+// shaders and preset .ini files, and anything in an MO2-style "Root" folder.
+const PRESET_DIRS = new Set(["enbseries", "enbpalette", "enbcache", "reshade-shaders"]);
+const PRESET_FILE = /^(enbseries|enblocal)\.ini$/i;
+// ENB's and ReShade's own DLLs come from the game's Tools page, which keeps track of them.
+const GRAPHICS_DLL = /^(d3d11|d3d9|d3d12|dxgi|opengl32|d3dcompiler_46e|enbhost)\.(dll|exe)$/i;
+
+/* The preset files in a mod, as placements and skips; the rest is left for the game's own rules. */
+function presetPlan(files) {
+    // Stops at a game folder too, so a "root" deep inside textures/ isn't taken for one.
+    const prefix = wrapper(files, (top) => ["root", "data", "scripts", "mods"].includes(lower(top)) || PRESET_DIRS.has(lower(top)) || DATA_DIRS.has(lower(top)));
+    const rels = files.map((file) => ({ file, rel: under(file, prefix) })).filter((entry) => entry.rel !== null);
+    const isPreset = rels.some(({ rel }) => (rel.includes("/") ? PRESET_DIRS.has(lower(rel.split("/")[0])) : PRESET_FILE.test(rel)));
+    const placements = [];
+    const skipped = [];
+    for (const { file, rel } of rels) {
+        const parts = rel.split("/");
+        const top = lower(parts[0]);
+        let to = null;
+        if (parts.length > 1 && top === "root") to = parts.slice(1).join("/");
+        else if (isPreset && parts.length > 1 && PRESET_DIRS.has(top)) to = rel;
+        else if (isPreset && parts.length === 1 && /\.(ini|fx|fxh)$/i.test(rel)) to = rel;
+        else if (isPreset && parts.length === 1 && GRAPHICS_DLL.test(rel)) {
+            skipped.push({ file, reason: "ENB's or ReShade's own file: put it in from the game's Tools page" });
+            continue;
+        }
+        if (to === null) continue;
+        if (GRAPHICS_DLL.test(base(to)) && !to.includes("/")) {
+            skipped.push({ file, reason: "ENB's or ReShade's own file: put it in from the game's Tools page" });
+            continue;
+        }
+        placements.push({ from: file, base: "game", to });
+    }
+    return { placements, skipped, handled: new Set([...placements, ...skipped].map((entry) => entry.from ?? entry.file)) };
+}
+
 /* ---------------- The Sims 4 ---------------- */
 
 const SIMS_TRAY = new Set([".trayitem", ".blueprint", ".bpi", ".hhi", ".sgi", ".householdbinary", ".room", ".rmi"]);
@@ -105,8 +143,12 @@ function gtav(files, ctx) {
         if (at >= 0) anchors.add(parts.slice(0, at).join("/"));
     }
     const anchor = [...anchors].sort((a, b) => a.split("/").length - b.split("/").length || a.length - b.length)[0];
+    const preset = presetPlan(files);
+    result.placements.push(...preset.placements);
+    result.skipped.push(...preset.skipped);
 
     for (const file of files) {
+        if (preset.handled.has(file)) continue;
         const name = base(file);
         const kind = ext(file);
         const rel = anchor !== undefined ? under(file, anchor) : null;
@@ -191,8 +233,7 @@ const DATA_FILE = /\.(esp|esm|esl|bsa|ba2|ini)$/i;
 function bethesda(files, ctx) {
     const result = { placements: [], skipped: [], notes: [], plugins: [] };
     const extender = ctx.game.bethesda.extender;
-    const fomodConfig = files.find((file) => /(^|\/)fomod\/moduleconfig\.xml$/i.test(file));
-    if (fomodConfig) return fomod(files, ctx, fomodConfig);
+    if (files.some((file) => FOMOD_CONFIG.test(file))) return fomod(files, ctx);
 
     // The folder that matches the game's Data folder: one called Data, or one holding
     // plugins, archives or the usual folders (meshes, textures...).
@@ -211,8 +252,12 @@ function bethesda(files, ctx) {
     if (dataRoot === undefined) dataRoot = isDataLevel(prefix) ? prefix : null;
     // Script extenders: their loader and DLLs go beside the game's exe.
     const extenderFile = (name) => lower(name) === extender.loader || (lower(name).startsWith(extender.prefix) && /\.(dll|exe)$/i.test(name));
+    const preset = presetPlan(files);
+    result.placements.push(...preset.placements);
+    result.skipped.push(...preset.skipped);
 
     for (const file of files) {
+        if (preset.handled.has(file)) continue;
         const name = base(file);
         if (extenderFile(name)) {
             result.placements.push({ from: file, base: "game", to: name });
@@ -268,21 +313,160 @@ function parseXml(text) {
 const kids = (node, name) => (node?.children ?? []).filter((child) => lower(child.name) === lower(name));
 const kid = (node, name) => kids(node, name)[0] ?? null;
 
-function fomod(files, ctx, configFile) {
-    const result = { placements: [], skipped: [], notes: [], plugins: [] };
-    const root = dirOf(dirOf(configFile)); // The folder holding "fomod".
+const decode = (text) =>
+    String(text ?? "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+        .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+        .replace(/&amp;/g, "&")
+        .trim();
+
+const FOMOD_CONFIG = /(^|\/)fomod\/moduleconfig\.xml$/i;
+
+/* A mod's FOMOD config: { config, root } (root: the folder holding "fomod"), or null without one. */
+function readFomod(files, ctx) {
+    const configFile = files.find((file) => FOMOD_CONFIG.test(file));
+    if (!configFile) return null;
     let text = fs.readFileSync(path.join(ctx.dir, configFile));
     // FOMOD configs are often UTF-16.
     text = text[0] === 0xff && text[1] === 0xfe ? text.toString("utf16le") : text.toString("utf8");
-    const config = kid(parseXml(text.replace(/^﻿/, "")), "config");
+    return { root: dirOf(dirOf(configFile)), config: kid(parseXml(text.replace(/^﻿/, "")), "config") };
+}
+
+// Steps, groups and options come in name order unless the config says "Explicit" (FOMOD's default is "Ascending").
+function ordered(list, order) {
+    if (order === "Explicit") return list;
+    const sorted = [...list].sort((a, b) => String(a.attrs.name ?? "").localeCompare(String(b.attrs.name ?? ""), undefined, { numeric: true }));
+    return order === "Descending" ? sorted.reverse() : sorted;
+}
+const stepsOf = (config) => ordered(kids(kid(config, "installSteps"), "installStep"), kid(config, "installSteps")?.attrs.order);
+const groupsOf = (step) => ordered(kids(kid(step, "optionalFileGroups"), "group"), kid(step, "optionalFileGroups")?.attrs.order);
+const optionsOf = (group) => ordered(kids(kid(group, "plugins"), "plugin"), kid(group, "plugins")?.attrs.order);
+const nameOf = (node) => node.attrs.name ?? "Options";
+
+/*
+ * A FOMOD condition as plain data, for here and for the choice screen:
+ * { op: "And"|"Or", items } | { flag, value } | { bool }. Files the game has are checked
+ * now; flags depend on the options picked, so they're checked as the choices are made.
+ */
+function condOf(node, ctx) {
+    if (!node) return null;
+    const items = node.children.map((child) => {
+        const name = lower(child.name);
+        if (name === "flagdependency") return { flag: child.attrs.flag ?? "", value: child.attrs.value ?? "" };
+        if (name === "filedependency") {
+            const has = Boolean(ctx.gameHas?.(`Data/${String(child.attrs.file ?? "").replace(/\\/g, "/")}`));
+            return { bool: child.attrs.state === "Missing" ? !has : has };
+        }
+        if (name === "dependencies") return condOf(child, ctx);
+        return { bool: true }; // Game or mod manager versions: assumed fine.
+    });
+    return { op: node.attrs.operator === "Or" ? "Or" : "And", items };
+}
+
+function test(cond, flags) {
+    if (!cond) return true;
+    if ("bool" in cond) return cond.bool;
+    if ("flag" in cond) return (flags.get(cond.flag) ?? "") === cond.value;
+    if (!cond.items.length) return true;
+    const results = cond.items.map((item) => test(item, flags));
+    return cond.op === "Or" ? results.some(Boolean) : results.every(Boolean);
+}
+
+// An option's type (Required, Recommended, Optional, CouldBeUsable, NotUsable), which can depend on flags.
+function typeInfo(plugin, ctx) {
+    const descriptor = kid(plugin, "typeDescriptor");
+    const fixed = kid(descriptor, "type")?.attrs.name;
+    if (fixed) return { type: fixed, typePatterns: [] };
+    const dependent = kid(descriptor, "dependencyType");
+    return {
+        type: kid(dependent, "defaultType")?.attrs.name ?? "Optional",
+        typePatterns: kids(kid(dependent, "patterns"), "pattern").map((pattern) => ({ when: condOf(kid(pattern, "dependencies"), ctx), type: kid(pattern, "type")?.attrs.name ?? "Optional" })),
+    };
+}
+const typeNow = (info, flags) => info.typePatterns.find((pattern) => test(pattern.when, flags))?.type ?? info.type;
+
+// The options a group takes with nothing chosen: what the installer marks Required or Recommended.
+function recommended(type, usable, typeOfOption) {
+    const marked = usable.filter((option) => /^(Required|Recommended)$/.test(typeOfOption(option)));
+    if (type === "SelectAll") return usable;
+    if (type === "SelectExactlyOne") return [marked[0] ?? usable[0]].filter(Boolean);
+    if (type === "SelectAtLeastOne") return marked.length ? marked : usable.slice(0, 1);
+    if (type === "SelectAtMostOne") return marked.slice(0, 1);
+    return marked;
+}
+
+const IMAGE_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp" };
+
+/*
+ * What a mod's FOMOD installer asks, for the choice screen, or null without one:
+ * { name, image, steps: [{ name, visible, groups: [{ name, type, options: [{ name, description,
+ * image, type, typePatterns, flags }] }] }] }. Pictures come as data URLs (up to 1 MB each,
+ * 8 MB in all).
+ */
+function fomodInfo(files, ctx) {
+    const found = readFomod(files, ctx);
+    if (!found?.config) return null;
+    const { config, root } = found;
+    const byLower = new Map(files.map((file) => [lower(file), file]));
+    let budget = 8 * 1024 * 1024;
+    const picture = (rel) => {
+        const clean = String(rel ?? "").replace(/\\/g, "/").replace(/^\/+/, "");
+        const real = clean && byLower.get(lower(root ? `${root}/${clean}` : clean));
+        const mime = IMAGE_TYPES[lower(path.extname(clean).slice(1))];
+        if (!real || !mime) return null;
+        try {
+            const full = path.join(ctx.dir, real);
+            const size = fs.statSync(full).size;
+            if (size > 1024 * 1024 || size > budget) return null;
+            budget -= size;
+            return `data:${mime};base64,${fs.readFileSync(full).toString("base64")}`;
+        } catch {
+            return null;
+        }
+    };
+    return {
+        name: decode(kid(config, "moduleName")?.text) || ctx.modName,
+        image: picture(kid(config, "moduleImage")?.attrs.path),
+        steps: stepsOf(config).map((step) => ({
+            name: nameOf(step),
+            visible: condOf(kid(step, "visible"), ctx),
+            groups: groupsOf(step).map((group) => ({
+                name: nameOf(group),
+                type: group.attrs.type ?? "SelectAny",
+                options: optionsOf(group).map((plugin) => ({
+                    name: plugin.attrs.name ?? "",
+                    description: decode(kid(plugin, "description")?.text),
+                    image: picture(kid(plugin, "image")?.attrs.path),
+                    ...typeInfo(plugin, ctx),
+                    flags: Object.fromEntries(kids(kid(plugin, "conditionFlags"), "flag").map((flag) => [flag.attrs.name ?? "", decode(flag.text)])),
+                })),
+            })),
+        })),
+    };
+}
+
+/*
+ * Installs what a FOMOD installer would. ctx.fomodChoices ([{ step, group, options: [names] }])
+ * are the options picked on the choice screen; a group without a choice takes the installer's
+ * recommended options. The result's fomod.choices are the ones used, to offer next time.
+ */
+function fomod(files, ctx) {
+    const result = { placements: [], skipped: [], notes: [], plugins: [], fomod: null };
+    const found = readFomod(files, ctx);
+    const config = found?.config;
     if (!config) {
         result.notes.push("Its installer (FOMOD) couldn't be read.");
         return result;
     }
+    const { root } = found;
 
     const byLower = new Map(files.map((file) => [lower(file), file]));
     const flags = new Map();
-    const chosen = [];
+    const used = [];
     const add = (entry) => {
         const source = (entry.attrs.source ?? "").replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
         const destination = (entry.attrs.destination ?? (lower(entry.name) === "file" ? base(source) : "")).replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
@@ -304,41 +488,34 @@ function fomod(files, ctx, configFile) {
 
     install(kid(config, "requiredInstallFiles"));
 
-    // Each group's options, chosen as the installer recommends.
-    const typeOf = (plugin) => kid(kid(plugin, "typeDescriptor"), "type")?.attrs.name ?? kid(kid(kid(plugin, "typeDescriptor"), "dependencyType"), "defaultType")?.attrs.name ?? "Optional";
-    for (const step of kids(kid(config, "installSteps"), "installStep")) {
-        for (const group of kids(kid(step, "optionalFileGroups"), "group")) {
-            const plugins = kids(kid(group, "plugins"), "plugin");
+    const choices = Array.isArray(ctx.fomodChoices) ? ctx.fomodChoices : null;
+    const typeOf = (plugin) => typeNow(typeInfo(plugin, ctx), flags);
+    for (const step of stepsOf(config)) {
+        // A step shows only when the options picked so far set the flags it needs.
+        if (!test(condOf(kid(step, "visible"), ctx), flags)) continue;
+        for (const group of groupsOf(step)) {
             const type = group.attrs.type ?? "SelectAny";
-            const usable = plugins.filter((p) => typeOf(p) !== "NotUsable");
-            const marked = usable.filter((p) => /^(Required|Recommended)$/.test(typeOf(p)));
+            const usable = optionsOf(group).filter((plugin) => typeOf(plugin) !== "NotUsable");
+            const choice = choices?.find((c) => c.step === nameOf(step) && c.group === nameOf(group));
             let picks;
-            if (type === "SelectAll") picks = usable;
-            else if (type === "SelectExactlyOne") picks = [marked[0] ?? usable[0]].filter(Boolean);
-            else if (type === "SelectAtLeastOne") picks = marked.length ? marked : usable.slice(0, 1);
-            else if (type === "SelectAtMostOne") picks = marked.slice(0, 1);
-            else picks = marked;
+            if (type === "SelectAll" || !choice) picks = recommended(type, usable, typeOf);
+            else {
+                const names = new Set(choice.options);
+                picks = usable.filter((plugin) => names.has(plugin.attrs.name ?? "") || typeOf(plugin) === "Required");
+                if (/^(SelectExactlyOne|SelectAtMostOne)$/.test(type)) picks = picks.slice(0, 1);
+                if (!picks.length && /^(SelectExactlyOne|SelectAtLeastOne)$/.test(type)) picks = recommended(type, usable, typeOf);
+            }
             for (const plugin of picks) {
                 install(kid(plugin, "files"));
-                for (const flag of kids(kid(plugin, "conditionFlags"), "flag")) flags.set(flag.attrs.name, (flag.text ?? "").trim());
-                chosen.push(`${group.attrs.name ?? "Options"}: ${plugin.attrs.name}`);
+                for (const flag of kids(kid(plugin, "conditionFlags"), "flag")) flags.set(flag.attrs.name, decode(flag.text));
             }
+            used.push({ step: nameOf(step), group: nameOf(group), options: picks.map((plugin) => plugin.attrs.name ?? "") });
         }
     }
 
-    // Files installed when chosen options set flags.
-    const met = (deps) => {
-        if (!deps) return true;
-        const checks = deps.children.map((child) => {
-            if (lower(child.name) === "flagdependency") return (flags.get(child.attrs.flag) ?? "") === (child.attrs.value ?? "");
-            if (lower(child.name) === "filedependency") return child.attrs.state !== "Active" || Boolean(ctx.gameHas?.(`Data/${child.attrs.file}`));
-            if (lower(child.name) === "dependencies") return met(child);
-            return true; // Game or mod manager versions: assumed fine.
-        });
-        return deps.attrs.operator === "Or" ? checks.some(Boolean) : checks.every(Boolean);
-    };
+    // Files installed when the chosen options set flags.
     for (const pattern of kids(kid(kid(config, "conditionalFileInstalls"), "patterns"), "pattern")) {
-        if (met(kid(pattern, "dependencies"))) install(kid(pattern, "files"));
+        if (test(condOf(kid(pattern, "dependencies"), ctx), flags)) install(kid(pattern, "files"));
     }
 
     // Later options overwrite earlier ones, as in the game's own mod managers.
@@ -346,8 +523,10 @@ function fomod(files, ctx, configFile) {
     for (const placement of result.placements) last.set(lower(placement.to), placement);
     result.placements = [...last.values()];
     result.plugins = result.placements.map((p) => p.to.slice(5)).filter((rel) => !rel.includes("/") && PLUGIN.test(rel));
-    if (chosen.length) result.notes.push(`Its installer's recommended options were chosen: ${chosen.join("; ")}.`);
-    if (!result.placements.length) result.notes.push("Its installer (FOMOD) had nothing to install with the recommended options.");
+    result.fomod = { choices: used };
+    const summary = used.filter((c) => c.options.length).map((c) => `${c.group}: ${c.options.join(", ")}`);
+    if (summary.length) result.notes.push(`${choices ? "Installer options" : "Its installer's recommended options were chosen"}: ${summary.join("; ")}.`);
+    if (!result.placements.length) result.notes.push(`Its installer (FOMOD) had nothing to install with ${choices ? "those" : "the recommended"} options.`);
     extenderNote(result, ctx);
     return result;
 }
@@ -686,4 +865,4 @@ function plan(game, files, ctx) {
     return planner(files, { ...ctx, game });
 }
 
-module.exports = { plan, nameFromFile, parseXml, wrapper };
+module.exports = { plan, nameFromFile, parseXml, wrapper, fomodInfo };

@@ -82,7 +82,8 @@ async function settle(changed) {
 }
 
 async function getProfile() {
-    if (!account.readAccount()) return null;
+    const stored = account.readAccount();
+    if (!stored || stored.type === "offline") return null;
     return settle(await call("GET", ""));
 }
 

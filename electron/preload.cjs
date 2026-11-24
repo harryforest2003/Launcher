@@ -171,6 +171,10 @@ expose("instanceAPI", {
     installModpack: (payload) =>
         ipcRenderer.invoke("instance:installModpack", payload),
 
+    searchPlatformPacks: (platform, options) => ipcRenderer.invoke("platformPacks:search", platform, options),
+    platformPackVersions: (platform, id) => ipcRenderer.invoke("platformPacks:versions", platform, id),
+    installPlatformPack: (platform, id, versionId, name) => ipcRenderer.invoke("platformPacks:install", platform, id, versionId, name),
+
     // ----- importing -----
     scanLaunchers: () => ipcRenderer.invoke("import:scan"),
     pickFolder: () => ipcRenderer.invoke("import:pickFolder"),
@@ -206,6 +210,8 @@ expose("instanceAPI", {
     listAccounts: () => ipcRenderer.invoke("account:list"),
     switchAccount: (uuid) => ipcRenderer.invoke("account:switch", uuid),
     removeAccount: (uuid) => ipcRenderer.invoke("account:remove", uuid),
+    // A test account without Microsoft; it becomes the active one.
+    addOfflineAccount: (name) => ipcRenderer.invoke("account:addOffline", name),
     onAccountsChanged: (cb) => {
         const h = (_e, list) => cb(list);
         ipcRenderer.on("account:changed", h);
@@ -447,6 +453,7 @@ expose("gamesAPI", {
     deleteProfile: (id, profileId) => ipcRenderer.invoke("games:deleteProfile", id, profileId),
     switchProfile: (id, profileId) => ipcRenderer.invoke("games:switchProfile", id, profileId),
     profileMember: (id, profileId, key, member) => ipcRenderer.invoke("games:profileMember", id, profileId, key, member),
+    profileSaves: (id, on) => ipcRenderer.invoke("games:profileSaves", id, on),
     iniList: (id) => ipcRenderer.invoke("games:iniList", id),
     iniRead: (id, name) => ipcRenderer.invoke("games:iniRead", id, name),
     iniSave: (id, name, text) => ipcRenderer.invoke("games:iniSave", id, name, text),
@@ -459,6 +466,29 @@ expose("gamesAPI", {
     removeTool: (id, toolId) => ipcRenderer.invoke("games:removeTool", id, toolId),
     showAllTools: (id) => ipcRenderer.invoke("games:showAllTools", id),
     runTool: (id, toolId) => ipcRenderer.invoke("games:runTool", id, toolId),
+    graphics: (id) => ipcRenderer.invoke("games:graphics", id),
+    reshadeInstall: (id, options) => ipcRenderer.invoke("games:reshadeInstall", id, options),
+    reshadeOn: (id, on) => ipcRenderer.invoke("games:reshadeOn", id, on),
+    reshadeRemove: (id) => ipcRenderer.invoke("games:reshadeRemove", id),
+    enbInstall: (id, fromDownloads) => ipcRenderer.invoke("games:enbInstall", id, fromDownloads),
+    enbOn: (id, on) => ipcRenderer.invoke("games:enbOn", id, on),
+    enbRemove: (id) => ipcRenderer.invoke("games:enbRemove", id),
+    enbSite: () => ipcRenderer.invoke("games:enbSite"),
+    openGraphicsFolder: (id) => ipcRenderer.invoke("games:openGraphicsFolder", id),
+    modlists: (id) => ipcRenderer.invoke("games:modlists", id),
+    modlistGet: (id, key) => ipcRenderer.invoke("games:modlistGet", id, key),
+    modlistOpenFile: (id) => ipcRenderer.invoke("games:modlistOpenFile", id),
+    modlistPlan: (key) => ipcRenderer.invoke("games:modlistPlan", key),
+    modlistDownload: (key) => ipcRenderer.invoke("games:modlistDownload", key),
+    modlistOpenArchive: (key, hash) => ipcRenderer.invoke("games:modlistOpenArchive", key, hash),
+    modlistChooseDir: (key) => ipcRenderer.invoke("games:modlistChooseDir", key),
+    modlistInstall: (key) => ipcRenderer.invoke("games:modlistInstall", key),
+    modlistCancel: (key) => ipcRenderer.invoke("games:modlistCancel", key),
+    modlistForget: (key) => ipcRenderer.invoke("games:modlistForget", key),
+    modlistRun: (key) => ipcRenderer.invoke("games:modlistRun", key),
+    modlistOpenFolder: (key) => ipcRenderer.invoke("games:modlistOpenFolder", key),
+    modlistLink: (id, key, which) => ipcRenderer.invoke("games:modlistLink", id, key, which),
+    onModlist: listen("games:modlist"),
 
     finder: (id) => ipcRenderer.invoke("games:finder", id),
     finderStart: (id) => ipcRenderer.invoke("games:finderStart", id),
@@ -485,6 +515,9 @@ expose("gamesAPI", {
 
     onProgress: listen("games:progress"),
     onNxm: listen("games:nxm"),
+    /* A mod's FOMOD installer asks which options to install; answer with answerFomod. */
+    onFomod: listen("games:fomod"),
+    answerFomod: (id, choices) => ipcRenderer.invoke("games:fomodAnswer", id, choices),
 });
 
 /* Home's dashboard: play time, recent activity, news (Minecraft or general gaming) and Steam deals. */

@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { app, safeStorage } = require("electron");
@@ -63,6 +64,34 @@ function saveAccount(login) {
     writeStore({ active: account.uuid, accounts: [...store.accounts.filter((entry) => entry.uuid !== account.uuid), account] });
     return account;
 }
+
+/*
+ * The id offline servers and other launchers give a name: a version 3 UUID of
+ * "OfflinePlayer:<name>", so worlds keep the same player data between launchers.
+ */
+function offlineUuid(name) {
+    const bytes = crypto.createHash("md5").update(`OfflinePlayer:${name}`, "utf8").digest();
+    bytes[6] = (bytes[6] & 0x0f) | 0x30;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    return bytes.toString("hex");
+}
+
+/*
+ * A test account without Microsoft: plays single-player and offline-mode servers under this
+ * name, with no skin and no token. Made active, like a sign-in.
+ */
+function addOfflineAccount(value) {
+    const name = typeof value === "string" ? value.trim() : "";
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(name)) {
+        throw new Error("A player name is 3 to 16 letters, numbers or underscores.");
+    }
+    const account = { name, uuid: offlineUuid(name), skin: null, type: "offline", savedAt: new Date().toISOString() };
+    const store = readStore();
+    writeStore({ active: account.uuid, accounts: [...store.accounts.filter((entry) => entry.uuid !== account.uuid), account] });
+    return account;
+}
+
+const isOffline = (entry) => entry?.type === "offline";
 
 /* Renewed tokens for one account, without changing which is active. */
 function replaceAccount(account) {
@@ -144,6 +173,9 @@ async function renew(stored) {
 async function minecraftAccessToken() {
     const stored = readAccount();
 
+    if (isOffline(stored)) {
+        throw new Error(`${stored.name} is an offline test account, so it has no skin or profile to change. Use a Microsoft account for that.`);
+    }
     if (!stored?.accessToken) {
         throw new Error("Sign in with Microsoft on the Minecraft page first.");
     }
@@ -173,6 +205,12 @@ async function accountForLaunch(fallbackName = "Player", accountId = null) {
     const stored = accountId ? store.accounts.find((entry) => entry.uuid === accountId) : activeOf(store);
     if (accountId && !stored) throw new Error("That account isn't signed in any more.");
 
+    if (isOffline(stored)) {
+        // Its own id, so a page can tell which account a game plays as; online stays false
+        // so it's never held to one game at a time.
+        return { id: stored.uuid, name: stored.name, uuid: stored.uuid, accessToken: "0", type: "legacy", online: false };
+    }
+
     if (stored?.accessToken && stored.uuid) {
         const account = await freshAccount(stored);
 
@@ -198,7 +236,7 @@ async function accountForLaunch(fallbackName = "Player", accountId = null) {
 }
 
 // Never expose tokens to the page.
-const publicOf = (entry, active) => ({ name: entry.name, uuid: entry.uuid, skin: entry.skin, savedAt: entry.savedAt, active });
+const publicOf = (entry, active) => ({ name: entry.name, uuid: entry.uuid, skin: entry.skin, savedAt: entry.savedAt, active, ...(isOffline(entry) ? { offline: true } : {}) });
 
 function publicAccount() {
     const stored = readAccount();
@@ -212,6 +250,8 @@ function listAccounts() {
 
 module.exports = {
     saveAccount,
+    addOfflineAccount,
+    offlineUuid,
     readAccount,
     clearAccount,
     accountForLaunch,

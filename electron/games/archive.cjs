@@ -43,10 +43,10 @@ async function unzip(file, into) {
     });
 }
 
-async function untar(file, into) {
+async function untar(file, into, { timeout = 10 * 60 * 1000 } = {}) {
     const tar = process.platform === "win32" ? path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe") : "tar";
     try {
-        await run(tar, ["-xf", file, "-C", into], { timeout: 10 * 60 * 1000, maxBuffer: 16 * 1024 * 1024 });
+        await run(tar, ["-xf", file, "-C", into], { timeout, maxBuffer: 16 * 1024 * 1024 });
     } catch (err) {
         const kind = path.extname(file).slice(1).toUpperCase();
         throw new Error(`This ${kind} file couldn't be unpacked (${String(err.stderr || err.message).trim().split("\n")[0]}). Unpack it yourself and choose the files inside.`);
@@ -141,4 +141,4 @@ function listFiles(root) {
     return out;
 }
 
-module.exports = { unpack, unzip, contents, listFiles, isArchive, tempDir, ARCHIVES };
+module.exports = { unpack, unzip, untar, insideOf, contents, listFiles, isArchive, tempDir, ARCHIVES };

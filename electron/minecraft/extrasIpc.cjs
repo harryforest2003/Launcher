@@ -10,6 +10,7 @@ const discord = require("./discord.cjs");
 const modpackUpdate = require("./modpackUpdate.cjs");
 const packExports = require("./packExports.cjs");
 const instanceShare = require("./instanceShare.cjs");
+const platformPacks = require("./platformPacks.cjs");
 const { fetchJson, sha1 } = require("./net.cjs");
 const { desktopShortcut } = require("./shortcuts.cjs");
 
@@ -199,6 +200,41 @@ function registerExtrasIpc() {
     discord.startDiscordStatus();
     ipcMain.handle("discord:test", (_e, clientId) => discord.testDiscord(clientId));
     ipcMain.handle("discord:state", () => discord.discordState());
+
+    /* ---------------- FTB, Technic and ATLauncher modpacks ---------------- */
+
+    ipcMain.handle("platformPacks:search", (_e, platform, options = {}) =>
+        platformPacks.search(String(platform ?? ""), {
+            query: String(options?.query ?? ""),
+            page: Number(options?.page) || 1,
+            mcVersion: typeof options?.mcVersion === "string" ? options.mcVersion : null,
+            loader: typeof options?.loader === "string" ? options.loader : null,
+            perPage: Number(options?.perPage) || undefined,
+        })
+    );
+
+    ipcMain.handle("platformPacks:versions", (_e, platform, id) => platformPacks.versions(String(platform ?? ""), String(id ?? "")));
+
+    ipcMain.handle("platformPacks:install", (event, platform, id, versionId, name) =>
+        platformPacks.install(String(platform ?? ""), String(id ?? ""), String(versionId ?? ""), name ? String(name) : "", {
+            createInstanceFrom: instanceManager.createInstanceFrom,
+            uniqueName: instanceManager.uniqueName,
+            onProgress: (progress) => {
+                if (!event.sender.isDestroyed()) event.sender.send("instance:progress", progress);
+            },
+        })
+    );
+
+    /* ---------------- offline test accounts ---------------- */
+
+    // A player name without Microsoft, for testing; it becomes the active account.
+    ipcMain.handle("account:addOffline", (_e, name) => {
+        const account = require("./account.cjs");
+        account.addOfflineAccount(name);
+        const accounts = account.listAccounts();
+        for (const win of BrowserWindow.getAllWindows()) win.webContents.send("account:changed", accounts);
+        return accounts;
+    });
 }
 
 module.exports = { registerExtrasIpc };

@@ -43,6 +43,10 @@ declare global {
         loadOrder?: GameOrderKind | null;
         /** Every other game: mods go in one folder, chosen in its Settings. */
         generic?: boolean;
+        /** ReShade (and ENB for some) can go in: a Windows game whose exe folder is known. */
+        graphics?: boolean;
+        /** Wabbajack has modlists for the game. */
+        modlists?: boolean;
         /** Kept from a search, so it can be taken off again. */
         custom?: boolean;
         /** Found on this computer (Steam, Epic) with no page of its own: built from what's here. */
@@ -291,7 +295,16 @@ declare global {
     /* A separate setup of a game's mods; only the chosen one's mods are in the game's folder. */
     type GameProfile = { id: string; name: string; keys: string[] };
     /* active is null while the game has just its one setup. */
-    type GameProfiles = { active: string | null; profiles: GameProfile[]; turnedOff: number };
+    type GameProfiles = {
+        active: string | null;
+        profiles: GameProfile[];
+        turnedOff: number;
+        /*
+         * Whether each profile has its own saves, the game's saves folder (null when not found),
+         * and whether the chosen profile's saves aren't all back in it yet (a switch cut short).
+         */
+        saves: { on: boolean; folder: string | null; pending: boolean };
+    };
     /** A Bethesda game's INI files in its My Games folder, and the presets that set a few well-known lines. */
     type IniPreset = { id: string; label: string; detail: string; file: string; state: "on" | "off" | "partial" };
     type IniFiles = {
@@ -306,6 +319,95 @@ declare global {
     type ModTool = { id: string; name: string; kind: string; about: string | null; exe: string; args: string; found: boolean; exists: boolean };
     /** howToRun: why tools can't start from the launcher here, or null. hidden: found ones taken off the list. */
     type ModTools = { tools: ModTool[]; hidden: number; howToRun: string | null };
+
+    /** ReShade as the launcher put it in: dll is the file name in the game's folder (dxgi.dll...). */
+    type ReshadeInstalled = { version: string; api: string; dir: string; dll: string; packages: string[]; files: string[]; off: boolean; at: string };
+    /** ENB as the launcher put it in. kept: its settings files, which stay when it's removed. */
+    type EnbInstalled = { version: string | null; dir: string; files: string[]; kept: string[]; off: boolean; from: string; at: string };
+    /**
+     * ReShade and ENB for a game. supported is false off Windows, or for a game without a known exe (why says).
+     * taken: graphics DLLs in the game's folder that something else put there. byHand: one looks put in by hand.
+     */
+    /** A list in Wabbajack's gallery. here: what's been done with it on this computer. */
+    type WabbajackListing = {
+        key: string;
+        title: string;
+        author: string;
+        description: string;
+        game: string | null;
+        version: string | null;
+        official: boolean;
+        tags: string[];
+        image: string | null;
+        readme: string | null;
+        website: string | null;
+        download: string;
+        size: { list: number | null; archives: number | null; installed: number | null; count: number | null };
+        updated: string | null;
+        here: { fetched: boolean; installed: WabbajackInstalled | null } | null;
+    };
+    type WabbajackInstalled = { version: string | null; at: string; files: number };
+    /** A list got on this computer (from the gallery, or a .wabbajack file). */
+    type WabbajackMine = { key: string; title: string; version: string | null; image: string | null; installed: WabbajackInstalled | null; dir: string | null };
+    type WabbajackArchiveKind = "nexus" | "http" | "cdn" | "game" | "manual";
+    type WabbajackArchive = {
+        hash: string;
+        name: string;
+        size: number;
+        kind: WabbajackArchiveKind;
+        label: string;
+        page?: string | null;
+        prompt?: string | null;
+        file?: string;
+        have: boolean;
+        where: string | null;
+        used: number;
+    };
+    /** What installing a list takes, and where it would go. unsupported: steps only the Wabbajack app does. */
+    type WabbajackPlan = {
+        key: string;
+        gameId: GameId;
+        title: string;
+        author: string;
+        version: string | null;
+        description: string;
+        readme: string | null;
+        website: string | null;
+        wabbajackVersion: string | null;
+        archives: WabbajackArchive[];
+        missing: { count: number; size: number };
+        automatic: number;
+        installSize: number;
+        files: number;
+        unsupported: { type: string; count: number; why: string }[];
+        problems: string[];
+        dir: string;
+        dirProblem: string | null;
+        installed: WabbajackInstalled | null;
+        busy: string | null;
+        wabbajackSite: string;
+        /** After downloading: what failed, and whether Nexus Mods files are left to get one by one. */
+        failed?: string[];
+        nexusByHand?: boolean;
+    };
+    type WabbajackProgress = { key: string; stage: string; done?: number; total?: number | null; detail?: string | null; error?: string; changed?: boolean };
+
+    type GameGraphics = {
+        supported: boolean;
+        why: string | null;
+        dir: string | null;
+        api?: string;
+        apis: Record<string, string>;
+        packages: Record<string, { name: string; url: string }>;
+        taken?: string[];
+        byHand?: { reshade: boolean; enb: boolean };
+        latest?: string | null;
+        reshade: ReshadeInstalled | null;
+        /** null: no ENB for this game. download: the newest ENB zip for it found in Downloads. */
+        enb: { offered: true; site: string; installed: EnbInstalled | null; download: { file: string; name: string; version: string | null } | null } | null;
+        /** After a remove: files left because they'd changed since they were put in. */
+        left?: string[];
+    };
 
     /* Mods changing the same thing inside the game: tuning, a CC item, script modules (Sims), records (Skyrim, Fallout 4), redscript functions (Cyberpunk), loaded assets (Stardew). */
     type GameClash = {
@@ -428,6 +530,36 @@ declare global {
         files: GameModFile[];
     };
 
+    /* A FOMOD condition: all or any of its items, a flag an earlier option set, or already decided. */
+    type FomodCond = { op: "And" | "Or"; items: FomodCond[] } | { flag: string; value: string } | { bool: boolean };
+    type FomodOption = {
+        name: string;
+        description: string;
+        /* A data URL, or null. */
+        image: string | null;
+        /* Required, Recommended, Optional, CouldBeUsable or NotUsable; a matching pattern overrides it. */
+        type: string;
+        typePatterns: { when: FomodCond | null; type: string }[];
+        /* The flags picking it sets. */
+        flags: Record<string, string>;
+    };
+    type FomodGroup = {
+        name: string;
+        type: "SelectExactlyOne" | "SelectAtMostOne" | "SelectAtLeastOne" | "SelectAny" | "SelectAll" | string;
+        options: FomodOption[];
+    };
+    type FomodStep = { name: string; visible: FomodCond | null; groups: FomodGroup[] };
+    type FomodInfo = { name: string; image: string | null; steps: FomodStep[] };
+    type FomodChoice = { step: string; group: string; options: string[] };
+    type FomodRequest = {
+        id: string;
+        gameId: GameId;
+        modName: string;
+        info: FomodInfo;
+        /* What was picked when this mod was installed before. */
+        preset: FomodChoice[] | null;
+    };
+
     type GameNxmEvent = {
         status: "started" | "working" | "installed" | "failed";
         gameId?: GameId;
@@ -545,6 +677,8 @@ declare global {
             deleteProfile: (id: GameId, profileId: string) => Promise<GameProfiles>;
             switchProfile: (id: GameId, profileId: string) => Promise<GameProfiles & { changed: number; problems: string[] }>;
             profileMember: (id: GameId, profileId: string, key: string, member: boolean) => Promise<GameProfiles>;
+            /* Separate saves for each profile, on or off. */
+            profileSaves: (id: GameId, on: boolean) => Promise<GameProfiles>;
             iniList: (id: GameId) => Promise<IniFiles>;
             iniRead: (id: GameId, name: string) => Promise<IniFile>;
             iniSave: (id: GameId, name: string, text: string) => Promise<IniFile>;
@@ -557,6 +691,31 @@ declare global {
             removeTool: (id: GameId, toolId: string) => Promise<ModTools>;
             showAllTools: (id: GameId) => Promise<ModTools>;
             runTool: (id: GameId, toolId: string) => Promise<{ started: string; bottle?: string }>;
+            graphics: (id: GameId) => Promise<GameGraphics>;
+            reshadeInstall: (id: GameId, options: { api?: string; packages?: string[] }) => Promise<GameGraphics>;
+            reshadeOn: (id: GameId, on: boolean) => Promise<GameGraphics>;
+            reshadeRemove: (id: GameId) => Promise<GameGraphics>;
+            /** fromDownloads: the ENB zip found in Downloads; otherwise a file picker. null when the picker's closed. */
+            enbInstall: (id: GameId, fromDownloads: boolean) => Promise<GameGraphics | null>;
+            enbOn: (id: GameId, on: boolean) => Promise<GameGraphics>;
+            enbRemove: (id: GameId) => Promise<GameGraphics>;
+            enbSite: () => Promise<void>;
+            openGraphicsFolder: (id: GameId) => Promise<void>;
+            modlists: (id: GameId) => Promise<{ gallery: WabbajackListing[]; mine: WabbajackMine[] }>;
+            modlistGet: (id: GameId, key: string) => Promise<WabbajackPlan>;
+            /** null when the picker's closed. */
+            modlistOpenFile: (id: GameId) => Promise<WabbajackPlan | null>;
+            modlistPlan: (key: string) => Promise<WabbajackPlan>;
+            modlistDownload: (key: string) => Promise<WabbajackPlan>;
+            modlistOpenArchive: (key: string, hash: string) => Promise<void>;
+            modlistChooseDir: (key: string) => Promise<WabbajackPlan | null>;
+            modlistInstall: (key: string) => Promise<WabbajackPlan>;
+            modlistCancel: (key: string) => Promise<boolean>;
+            modlistForget: (key: string) => Promise<boolean>;
+            modlistRun: (key: string) => Promise<unknown>;
+            modlistOpenFolder: (key: string) => Promise<void>;
+            modlistLink: (id: GameId, key: string | null, which: "readme" | "website" | "wabbajack") => Promise<void>;
+            onModlist: (callback: (payload: WabbajackProgress) => void) => () => void;
 
             finder: (id: GameId) => Promise<GameFinder>;
             finderStart: (id: GameId) => Promise<GameFinder>;
@@ -588,6 +747,10 @@ declare global {
 
             onProgress: (callback: (data: { gameId: GameId; detail: string }) => void) => () => void;
             onNxm: (callback: (event: GameNxmEvent) => void) => () => void;
+            /* A mod's FOMOD installer asks which options to install. */
+            onFomod: (callback: (request: FomodRequest) => void) => () => void;
+            /* choices null cancels the install. -> false when that install stopped waiting. */
+            answerFomod: (id: string, choices: FomodChoice[] | null) => Promise<boolean>;
         };
     }
 }

@@ -97,7 +97,8 @@ declare global {
 
     type JavaTuning = "performance" | "standard";
 
-    type MinecraftAccount = { name: string; uuid: string; skin: string | null; savedAt: string; active: boolean };
+    /** offline: a test account without Microsoft (single-player and offline servers, no skin). */
+    type MinecraftAccount = { name: string; uuid: string; skin: string | null; savedAt: string; active: boolean; offline?: boolean };
 
     /** The signed-in account an open game plays as: id is its MinecraftAccount uuid. */
     type GamePlayer = { id: string; name: string };
@@ -420,6 +421,38 @@ declare global {
         pageSize: number;
         totals: { modrinth: number; curseforge: number; curseforgeCapped: boolean };
         warnings: string[];
+    };
+
+    /** Modpack sites with launchers of their own. */
+    type PlatformPackSite = "ftb" | "technic" | "atlauncher";
+
+    type PlatformPackItem = {
+        source: PlatformPackSite;
+        id: string;
+        name: string;
+        author: string;
+        summary: string;
+        icon: string | null;
+        downloads: number;
+        date?: string;
+        url: string;
+        mcVersion: string | null;
+        loader: string | null;
+        installable: boolean;
+    };
+
+    type PlatformPackQuery = { query?: string; page?: number; mcVersion?: string; loader?: string; perPage?: number };
+
+    /** loaderUnknown: the site doesn't say which loader its packs use, so a loader filter leaves nothing. */
+    type PlatformPackPage = { platform: PlatformPackSite; items: PlatformPackItem[]; page: number; pageCount: number; total: number; loaderUnknown?: boolean };
+
+    type PlatformPackVersion = {
+        id: string;
+        name: string;
+        version_type: string;
+        game_versions: string[];
+        loaders?: string[];
+        date_published?: string;
     };
 
     type ImportCandidate = {
@@ -784,6 +817,24 @@ declare global {
                 };
             }>;
 
+            searchPlatformPacks(platform: PlatformPackSite, options: PlatformPackQuery): Promise<PlatformPackPage>;
+
+            platformPackVersions(platform: PlatformPackSite, id: string): Promise<PlatformPackVersion[]>;
+
+            /** Creates an instance from an FTB, Technic or ATLauncher pack; progress comes through onProgress. */
+            installPlatformPack(platform: PlatformPackSite, id: string, versionId: string, name?: string): Promise<Instance & {
+                pack: {
+                    name: string;
+                    version: string;
+                    fileCount: number;
+                    blocked: string[];
+                    failed: number;
+                    firstError: string | null;
+                    notes: string[];
+                    site: string;
+                };
+            }>;
+
             scanLaunchers(): Promise<ImportCandidate[]>;
 
             pickFolder(): Promise<ImportCandidate | null>;
@@ -848,6 +899,8 @@ declare global {
             switchAccount(uuid: string): Promise<MinecraftAccount[]>;
             /** Signs one account out. */
             removeAccount(uuid: string): Promise<MinecraftAccount[]>;
+            /** Adds a test account without Microsoft under this player name, and makes it active. */
+            addOfflineAccount(name: string): Promise<MinecraftAccount[]>;
             onAccountsChanged(cb: (accounts: MinecraftAccount[]) => void): () => void;
 
             onProgress(cb: (p: InstallProgress) => void): () => void;

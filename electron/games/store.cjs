@@ -314,23 +314,6 @@ async function install(gameId, filePath, meta = {}) {
                 return [];
             }
         };
-        const planned = layouts.plan(game, files, {
-            modName,
-            dir: unpacked.dir,
-            gameHas,
-            listGame,
-            hasGameDir: Boolean(loc.gameDir),
-            modsDir: loc.modsDir,
-            modsChosen: Boolean(loc.modsChosen),
-        });
-
-        if (!planned.placements.length) {
-            const why = planned.skipped.length ? planned.skipped.slice(0, 3).map((s) => `${path.posix.basename(s.file)} (${s.reason})`).join("; ") : "it had no files for this game";
-            const error = new Error(`Nothing from ${modName} could be installed: ${why}.`);
-            error.notes = planned.notes;
-            throw error;
-        }
-
         const state = readState(gameId);
         // A newer copy of the same mod replaces the old one, which is kept for Undo.
         // A Nexus download added from Downloads replaces the mod it's a newer copy of.
@@ -343,6 +326,37 @@ async function install(gameId, filePath, meta = {}) {
                       (nexusId && String(mod.source?.nexus?.modId ?? "") === nexusId) ||
                       (!meta.source?.modId && mod.name === modName)
               );
+
+        const ctx = {
+            modName,
+            dir: unpacked.dir,
+            gameHas,
+            listGame,
+            hasGameDir: Boolean(loc.gameDir),
+            modsDir: loc.modsDir,
+            modsChosen: Boolean(loc.modsChosen),
+            game,
+        };
+        // A FOMOD installer's options are picked in the app, starting from last time's picks.
+        let fomodChoices = Array.isArray(meta.fomodChoices) ? meta.fomodChoices : undefined;
+        if (!fomodChoices && game.layout === "bethesda") {
+            const info = layouts.fomodInfo(files, ctx);
+            if (info?.steps.some((step) => step.groups.length)) {
+                const preset = previous?.fomod?.choices;
+                const answer = meta.auto ? undefined : await require("./fomodAsk.cjs").ask({ gameId, modName, info, preset: preset ?? null });
+                if (answer === null) throw new Error("Install cancelled.");
+                fomodChoices = answer ?? preset;
+            }
+        }
+        const planned = layouts.plan(game, files, { ...ctx, fomodChoices });
+
+        if (!planned.placements.length) {
+            const why = planned.skipped.length ? planned.skipped.slice(0, 3).map((s) => `${path.posix.basename(s.file)} (${s.reason})`).join("; ") : "it had no files for this game";
+            const error = new Error(`Nothing from ${modName} could be installed: ${why}.`);
+            error.notes = planned.notes;
+            throw error;
+        }
+
         const id = newId();
         if (previous) {
             setAside(gameId, previous, id);
@@ -372,6 +386,7 @@ async function install(gameId, filePath, meta = {}) {
             installedAt: new Date().toISOString(),
             notes: planned.notes,
         };
+        if (planned.fomod) mod.fomod = planned.fomod;
 
         const owner = ownerMap(fresh);
         for (const placement of planned.placements) {

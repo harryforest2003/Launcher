@@ -230,14 +230,16 @@ const setsByGame: Partial<Record<GameId, GameSet[]>> = { sims4: [{ id: "s1", nam
 // Mod profiles, as the launcher keeps them: each with the mods that were on when it was left.
 type MockProfiles = { active: string; list: (GameProfile & { on: string[] })[] };
 const profilesByGame: Partial<Record<GameId, MockProfiles>> = {};
+const profileSavesOff = new Set<GameId>();
 function profilesNow(id: GameId): GameProfiles {
   const data = profilesByGame[id];
-  if (!data) return { active: null, profiles: [], turnedOff: 0 };
+  const saves = { on: !profileSavesOff.has(id), folder: id === "sims4" ? "C:/Users/You/Documents/Electronic Arts/The Sims 4/Saves" : null, pending: false };
+  if (!data) return { active: null, profiles: [], turnedOff: 0, saves };
   const have = new Set((MODS[id] ?? []).map((m) => m.key));
   const anywhere = new Set(data.list.flatMap((p) => p.keys));
   const active = data.list.find((p) => p.id === data.active)!;
   for (const key of have) if (!anywhere.has(key)) active.keys.push(key);
-  return { active: data.active, profiles: data.list.map((p) => ({ id: p.id, name: p.name, keys: p.keys.filter((k) => have.has(k)) })), turnedOff: 0 };
+  return { active: data.active, profiles: data.list.map((p) => ({ id: p.id, name: p.name, keys: p.keys.filter((k) => have.has(k)) })), turnedOff: 0, saves };
 }
 // A Bethesda game's INI files and modding tools, for the preview.
 const INI_TEXT: Record<string, string> = {
@@ -274,6 +276,85 @@ const toolsByGame: Partial<Record<GameId, ModTool[]>> = {
     { id: "t3", name: "Nemesis", kind: "nemesis", about: "Builds animation behaviour files: run after adding or removing animation mods.", exe: `${SSE_BOTTLE}/Data/Nemesis_Engine/Nemesis Unlimited Behavior Engine.exe`, args: "", found: true, exists: true },
   ],
 };
+// ReShade and ENB as if on Windows; Stardew shows the "not here" state.
+const graphicsByGame: Record<string, { reshade: ReshadeInstalled | null; enb: EnbInstalled | null }> = {};
+const graphicsNow = (id: GameId): GameGraphics => {
+  const apis = { dxgi: "DirectX 10, 11 or 12", d3d11: "DirectX 11 (when dxgi.dll is taken)", d3d12: "DirectX 12", d3d9: "DirectX 9", opengl32: "OpenGL" };
+  const packages = {
+    standard: { name: "Standard effects", url: "https://github.com/crosire/reshade-shaders/archive/refs/heads/slim.zip" },
+    sweetfx: { name: "SweetFX (SMAA, Vibrance, LumaSharpen, Curves...)", url: "https://github.com/CeeJayDK/SweetFX/archive/refs/heads/master.zip" },
+  };
+  const state = (graphicsByGame[id] ??= { reshade: null, enb: null });
+  if (id === "stardew") return { supported: false, why: "ReShade and ENB work only with games on Windows.", dir: null, apis, packages, reshade: null, enb: null };
+  const enb = id === "skyrimse" || id === "gtav" || id === "fallout4";
+  return {
+    supported: true,
+    why: null,
+    dir: `C:\\Games\\${id}`,
+    api: "dxgi",
+    apis,
+    packages,
+    taken: [],
+    byHand: { reshade: false, enb: false },
+    latest: "6.8.0",
+    reshade: state.reshade,
+    enb: enb ? { offered: true, site: "http://enbdev.com", installed: state.enb, download: id === "skyrimse" ? { file: "/Users/you/Downloads/enbseries_skyrimse_v0503.zip", name: "enbseries_skyrimse_v0503.zip", version: "0.503" } : null } : null,
+  };
+};
+
+// Wabbajack: a small gallery, and one list that's half downloaded.
+const MODLIST_GALLERY: Record<string, WabbajackListing[]> = {
+  skyrimse: [
+    { key: "Keizaal/keizaal", title: "Keizaal", author: "Gate", description: "A vanilla-plus list that keeps Skyrim's feel while fixing and filling it out.", game: "skyrimspecialedition", version: "9.3.1", official: true, tags: ["Vanilla+", "Gameplay"], image: null, readme: "https://github.com/Keizaal/Keizaal", website: null, download: "", size: { list: 48_000_000, archives: 61_000_000_000, installed: 98_000_000_000, count: 912 }, updated: "2026-11-02T00:00:00Z", here: null },
+    { key: "mo2077/tiny", title: "Little Fixes", author: "Someone", description: "A few dozen fixes and nothing that changes how the game plays.", game: "skyrimspecialedition", version: "1.2.0", official: false, tags: ["Lightweight"], image: null, readme: null, website: null, download: "", size: { list: 900_000, archives: 1_800_000_000, installed: 2_400_000_000, count: 42 }, updated: "2026-10-15T00:00:00Z", here: null },
+  ],
+};
+const modlistPlans: Record<string, WabbajackPlan> = {};
+const modlistListeners = new Set<(payload: WabbajackProgress) => void>();
+const modlistSay = (payload: WabbajackProgress) => modlistListeners.forEach((fn) => fn(payload));
+const mockPlan = (gameId: GameId, listing: WabbajackListing): WabbajackPlan => {
+  const archives: WabbajackArchive[] = [
+    { hash: "a1", name: "Mod.Organizer-2.4.4.7z", size: 90_051_560, kind: "http", label: "github.com", page: "https://github.com/ModOrganizer2/modorganizer/releases", have: true, where: "/Users/you/Downloads/Mod.Organizer-2.4.4.7z", used: 1200 },
+    { hash: "a2", name: "SkyUI_5_2_SE-12604-5-2SE.7z", size: 6_000_000, kind: "nexus", label: "Nexus Mods", page: "https://www.nexusmods.com/skyrimspecialedition/mods/12604?tab=files&file_id=35407&nmm=1", have: false, where: null, used: 300 },
+    { hash: "a3", name: "Unofficial Skyrim Special Edition Patch-266-4-3-2.7z", size: 61_000_000, kind: "nexus", label: "Nexus Mods", page: "https://www.nexusmods.com/skyrimspecialedition/mods/266?tab=files&nmm=1", have: false, where: null, used: 5 },
+    { hash: "a4", name: "Skyrim.ccc", size: 1_200, kind: "game", label: "Your game", file: "Skyrim.ccc", have: true, where: "C:\\Games\\Skyrim\\Skyrim.ccc", used: 1 },
+    { hash: "a5", name: "Community Shaders.7z", size: 12_000_000, kind: "manual", label: "github.com", page: "https://github.com/doodlum/skyrim-community-shaders/releases", have: false, where: null, used: 40 },
+  ];
+  const missing = archives.filter((a) => !a.have && a.kind !== "game");
+  return {
+    key: listing.key,
+    gameId,
+    title: listing.title,
+    author: listing.author,
+    version: listing.version,
+    description: listing.description,
+    readme: listing.readme,
+    website: listing.website,
+    wabbajackVersion: "3.7.5.3",
+    archives,
+    missing: { count: missing.length, size: missing.reduce((n, a) => n + a.size, 0) },
+    automatic: missing.filter((a) => a.kind !== "manual").length,
+    installSize: listing.size.installed ?? 0,
+    files: 1546,
+    unsupported: listing.key === "Keizaal/keizaal" ? [{ type: "CreateBSA", count: 12, why: "builds BSA/BA2 archives" }] : [],
+    problems: [],
+    dir: `/Users/you/Library/Application Support/CrossOver/Bottles/Skyrim/drive_c/Modlists/${listing.title}`,
+    dirProblem: null,
+    installed: null,
+    busy: null,
+    wabbajackSite: "https://www.wabbajack.org/",
+  };
+};
+const modlistRun = async (key: string, stage: string, total: number, then: (plan: WabbajackPlan) => WabbajackPlan) => {
+  for (let done = 0; done <= total; done += total / 8) {
+    modlistSay({ key, stage, done, total, detail: stage === "installing" ? `${Math.round((done / total) * 5)} of 5: Mod.Organizer-2.4.4.7z` : "Downloading" });
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  modlistSay({ key, stage: "idle" });
+  modlistPlans[key] = then(modlistPlans[key]);
+  return modlistPlans[key];
+};
+
 const toolsNow = (id: GameId): ModTools => ({ tools: toolsByGame[id] ?? [], hidden: 0, howToRun: id === "skyrimse" ? null : "The game isn't in a CrossOver bottle yet." });
 let finderState: { phase: GameFinder["phase"]; suspects: string[]; testing: string[]; round: number } | null = null;
 const finderStatus = (id: GameId): GameFinder => {
@@ -298,6 +379,56 @@ const updatable = new Set(["m:mccc", "m:ww"]);
 // The downloads queue, simulated: "Skip this one" stands in for pressing Nexus' download button.
 const queueItems: GameQueueItem[] = [];
 const queueListeners = new Set<(q: GameQueue) => void>();
+
+/* A sample FOMOD installer for the choice screen; window.__mockFomod() shows it in the preview. */
+const fomodListeners = new Set<(request: FomodRequest) => void>();
+const SAMPLE_FOMOD: FomodInfo = {
+  name: "Sample Lighting Overhaul",
+  image: null,
+  steps: [
+    {
+      name: "Main",
+      visible: null,
+      groups: [
+        {
+          name: "Brightness",
+          type: "SelectExactlyOne",
+          options: [
+            { name: "Vanilla", description: "Keeps the game's own light levels.", image: null, type: "Optional", typePatterns: [], flags: { bright: "0" } },
+            { name: "Darker nights", description: "Nights are darker; carry a torch.\nRecommended with an ENB.", image: null, type: "Recommended", typePatterns: [], flags: { bright: "dark" } },
+          ],
+        },
+        {
+          name: "Extras",
+          type: "SelectAny",
+          options: [
+            { name: "Core files", description: "Always installed.", image: null, type: "Required", typePatterns: [], flags: {} },
+            { name: "Candle flicker", description: "Candles and torches flicker.", image: null, type: "Optional", typePatterns: [], flags: {} },
+            { name: "Old patch", description: "For an old version of the game.", image: null, type: "NotUsable", typePatterns: [], flags: {} },
+          ],
+        },
+      ],
+    },
+    {
+      name: "Night options",
+      visible: { op: "And", items: [{ flag: "bright", value: "dark" }] },
+      groups: [
+        {
+          name: "Interiors",
+          type: "SelectAtLeastOne",
+          options: [
+            { name: "Dark dungeons", description: "Dungeons get darker too.", image: null, type: "Recommended", typePatterns: [], flags: {} },
+            { name: "Dark houses", description: "Houses get darker too.", image: null, type: "Optional", typePatterns: [], flags: {} },
+          ],
+        },
+      ],
+    },
+  ],
+};
+(window as unknown as { __mockFomod?: () => void }).__mockFomod = () => {
+  const request: FomodRequest = { id: `mock-${Date.now()}`, gameId: "skyrimse", modName: SAMPLE_FOMOD.name, info: SAMPLE_FOMOD, preset: null };
+  for (const listener of fomodListeners) listener(request);
+};
 const queueSnap = (): GameQueue => ({
   items: [...queueItems],
   current: queueItems.find((i) => i.status === "website" || i.status === "working") ?? null,
@@ -465,6 +596,9 @@ export const gamesBridge = {
     const game = summary(need(id));
     return {
       ...game,
+      // As if on Windows, so the Graphics section can be seen.
+      graphics: ["sims4", "gtav", "skyrimse", "fallout4", "cyberpunk2077"].includes(id),
+      modlists: ["skyrimse", "fallout4", "cyberpunk2077", "stardew"].includes(id),
       platform: "darwin",
       version: id === "sims4" ? "1.112.519.1020" : null,
       lastPlayed: id === "sims4" ? daysAgo(75) : null,
@@ -848,6 +982,11 @@ export const gamesBridge = {
     }
     return { ...profilesNow(id), changed, problems: [] };
   },
+  profileSaves: async (id: GameId, on: boolean) => {
+    if (on) profileSavesOff.delete(id);
+    else profileSavesOff.add(id);
+    return profilesNow(id);
+  },
   profileMember: async (id: GameId, profileId: string, key: string, member: boolean) => {
     const data = profilesByGame[id];
     const profile = data?.list.find((p) => p.id === profileId);
@@ -901,6 +1040,93 @@ export const gamesBridge = {
     const tool = toolsByGame[id]?.find((entry) => entry.id === toolId);
     if (!tool) throw new Error("That tool isn't on the list any more.");
     return { started: tool.name, bottle: "Steam" };
+  },
+  graphics: async (id: GameId) => graphicsNow(id),
+  reshadeInstall: async (id: GameId, options: { api?: string; packages?: string[] }) => {
+    const api = options.api ?? "dxgi";
+    graphicsNow(id);
+    graphicsByGame[id].reshade = { version: "6.8.0", api, dir: "", dll: `${api}.dll`, packages: options.packages ?? ["standard", "sweetfx"], files: [`${api}.dll`, "reshade-shaders"], off: false, at: new Date().toISOString() };
+    return graphicsNow(id);
+  },
+  reshadeOn: async (id: GameId, on: boolean) => {
+    const r = graphicsByGame[id]?.reshade;
+    if (r) r.off = !on;
+    return graphicsNow(id);
+  },
+  reshadeRemove: async (id: GameId) => {
+    if (graphicsByGame[id]) graphicsByGame[id].reshade = null;
+    return { ...graphicsNow(id), left: [] };
+  },
+  enbInstall: async (id: GameId) => {
+    graphicsNow(id);
+    graphicsByGame[id].enb = { version: "0.503", dir: "", files: ["d3d11.dll", "d3dcompiler_46e.dll"], kept: ["enblocal.ini", "enbseries.ini"], off: false, from: "enbseries_skyrimse_v0503.zip", at: new Date().toISOString() };
+    return graphicsNow(id);
+  },
+  enbOn: async (id: GameId, on: boolean) => {
+    const e = graphicsByGame[id]?.enb;
+    if (e) e.off = !on;
+    return graphicsNow(id);
+  },
+  enbRemove: async (id: GameId) => {
+    if (graphicsByGame[id]) graphicsByGame[id].enb = null;
+    return { ...graphicsNow(id), left: [] };
+  },
+  enbSite: async () => undefined,
+  openGraphicsFolder: async () => undefined,
+  modlists: async (id: GameId) => ({
+    gallery: (MODLIST_GALLERY[id] ?? []).map((entry) => ({ ...entry, here: modlistPlans[entry.key] ? { fetched: true, installed: modlistPlans[entry.key].installed } : null })),
+    mine: Object.values(modlistPlans)
+      .filter((plan) => plan.gameId === id)
+      .map((plan) => ({ key: plan.key, title: plan.title, version: plan.version, image: null, installed: plan.installed, dir: plan.dir })),
+  }),
+  modlistGet: async (id: GameId, key: string) => {
+    const listing = (MODLIST_GALLERY[id] ?? []).find((entry) => entry.key === key);
+    if (!listing) throw new Error("That list isn't in Wabbajack's gallery any more.");
+    if (!modlistPlans[key]) {
+      await modlistRun(key, "fetching", listing.size.list ?? 1, (plan) => plan);
+      modlistPlans[key] = mockPlan(id, listing);
+    }
+    return modlistPlans[key];
+  },
+  modlistOpenFile: async () => null,
+  modlistPlan: async (key: string) => {
+    if (!modlistPlans[key]) throw new Error("Get the list first.");
+    return modlistPlans[key];
+  },
+  modlistDownload: async (key: string) =>
+    modlistRun(key, "downloading", 6_000_000, (plan) => {
+      const archives = plan.archives.map((a) => (a.kind === "http" || a.kind === "cdn" ? { ...a, have: true } : a));
+      const missing = archives.filter((a) => !a.have && a.kind !== "game");
+      return { ...plan, archives, missing: { count: missing.length, size: missing.reduce((n, a) => n + a.size, 0) }, nexusByHand: missing.some((a) => a.kind === "nexus"), failed: [] };
+    }),
+  modlistOpenArchive: async (key: string, hash: string) => {
+    // As if the page's download came straight back.
+    setTimeout(() => {
+      const plan = modlistPlans[key];
+      const archives = plan.archives.map((a) => (a.hash === hash ? { ...a, have: true } : a));
+      const missing = archives.filter((a) => !a.have && a.kind !== "game");
+      modlistPlans[key] = { ...plan, archives, missing: { count: missing.length, size: missing.reduce((n, a) => n + a.size, 0) } };
+      modlistSay({ key, stage: "idle", changed: true, detail: `${plan.archives.find((a) => a.hash === hash)?.name} downloaded.` });
+    }, 1200);
+  },
+  modlistChooseDir: async () => null,
+  modlistInstall: async (key: string) => {
+    const plan = modlistPlans[key];
+    if (plan.unsupported.length) throw new Error(`This list ${plan.unsupported.map((u) => u.why).join(" and ")}, which only the Wabbajack app does.`);
+    if (plan.missing.count) throw new Error(`${plan.missing.count} archives still need downloading.`);
+    return modlistRun(key, "installing", plan.installSize, (p) => ({ ...p, installed: { version: p.version, at: new Date().toISOString(), files: p.files } }));
+  },
+  modlistCancel: async () => true,
+  modlistForget: async (key: string) => {
+    delete modlistPlans[key];
+    return true;
+  },
+  modlistRun: async () => ({ started: "ModOrganizer.exe" }),
+  modlistOpenFolder: async () => undefined,
+  modlistLink: async () => undefined,
+  onModlist: (callback: (payload: WabbajackProgress) => void) => {
+    modlistListeners.add(callback);
+    return () => modlistListeners.delete(callback);
   },
 
   finder: async (id: GameId) => finderStatus(id),
@@ -957,4 +1183,12 @@ export const gamesBridge = {
   onModsChanged: () => () => {},
   onProgress: () => () => {},
   onNxm: () => () => {},
+  onFomod: (callback: (request: FomodRequest) => void) => {
+    fomodListeners.add(callback);
+    return () => fomodListeners.delete(callback);
+  },
+  answerFomod: async (id: string, choices: FomodChoice[] | null) => {
+    console.info("FOMOD answer", id, choices);
+    return true;
+  },
 };

@@ -16,6 +16,7 @@ function harness({ backup = async () => null, open = async () => {}, target = "s
         "./store.cjs": { readState: () => ({}) },
         "./finder.cjs": { read: () => null },
         "./saves.cjs": { backup },
+        "./wabbajack.cjs": { events: { on() {} }, hasLists: () => false, takeNxm: async () => null },
         "./launch.cjs": { launch: async (_game, _loc, options) => { await options.open(target); return { how: "Steam", safe: false }; } },
     };
     // The real link checks, opening through the mocked shell.

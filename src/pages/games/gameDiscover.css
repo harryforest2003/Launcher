@@ -226,6 +226,7 @@
 
 /* Mods, Collections and Sites. */
 .gd-page .dc-bar__row--tabs .dc-tabs--three { width: 340px; }
+.gd-page .dc-bar__row--tabs .dc-tabs--four { width: 440px; }
 
 /* The Sites tab: one line above the list of sites. */
 .gd-sites-note {

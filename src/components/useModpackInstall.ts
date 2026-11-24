@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { versionLabel, type PackVersion } from "./packVersions";
 
-type Pack = { source: "modrinth" | "curseforge"; projectId: string; name: string };
+type Pack = { source: "modrinth" | "curseforge" | PlatformPackSite; projectId: string; name: string };
+
+const PLATFORM_SITES: string[] = ["ftb", "technic", "atlauncher"];
+const isPlatform = (source: Pack["source"]): source is PlatformPackSite => PLATFORM_SITES.includes(source);
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 const plain = (err: unknown) =>
   (err instanceof Error ? err.message : String(err)).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
@@ -27,6 +31,24 @@ export function useModpackInstall() {
     setProgress(null);
 
     try {
+      // FTB, Technic and ATLauncher packs: installed from their own sites, not kept up to date.
+      if (isPlatform(pack.source)) {
+        const created = await window.instanceAPI.installPlatformPack(pack.source, pack.projectId, String(version.id), pack.name);
+        const { blocked, failed, firstError, notes } = created.pack;
+        setResult(
+          [
+            `Created instance "${created.name}" from ${versionLabel(version)}: Minecraft ${created.version}, ${created.loader} ${created.loaderVersion}, ${created.ram} GB RAM.`,
+            blocked.length ? `${plural(blocked.length, "file")} couldn't be downloaded automatically: ${blocked.slice(0, 3).join(", ")}${blocked.length > 3 ? "..." : ""}.` : "",
+            failed ? `${plural(failed, "file")} failed to download${firstError ? ` (${firstError})` : ""}.` : "",
+            ...notes,
+          ]
+            .filter(Boolean)
+            .join(" ")
+        );
+        setInstalling(null);
+        setProgress(null);
+        return;
+      }
       const created = await window.instanceAPI.installModpack({
         source: pack.source,
         projectId: pack.projectId,

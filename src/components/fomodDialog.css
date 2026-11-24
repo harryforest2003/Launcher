@@ -1,0 +1,70 @@
+/* A mod's FOMOD installer options: the groups on the left, what the pointed-at option does on the right. */
+.fomod {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  min-height: 260px;
+}
+
+.fomod__groups { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+
+.fomod__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.fomod__group legend {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+  padding: 0;
+}
+
+.fomod__group-name { font-weight: var(--weight-semibold); color: var(--color-text); }
+.fomod__rule { font-size: var(--font-size-xs, 12px); color: var(--color-text-muted); }
+
+.fomod__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1-5, 6px) var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--ui-radius-control);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.fomod__option:hover { background: var(--color-hover); }
+.fomod__option.is-on { border-color: var(--color-accent-line, var(--color-accent)); background: var(--color-accent-subtle); }
+.fomod__option.is-off { opacity: 0.55; cursor: not-allowed; }
+.fomod__option input { margin: 0; accent-color: var(--color-accent); }
+.fomod__option-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fomod__badge { flex-shrink: 0; }
+
+.fomod__missing { margin: 0; color: var(--color-warning-text); }
+
+.fomod__about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+  border-radius: var(--ui-radius-control);
+  background: var(--color-surface-sunken);
+}
+
+.fomod__image {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: var(--ui-radius-control);
+}
+
+.fomod__about-name { margin: 0; font-size: var(--font-size-md, 14px); color: var(--color-text); }
+.fomod__description { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fomod__spacer { flex: 1; }

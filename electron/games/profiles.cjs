@@ -1,6 +1,7 @@
 const { getGame } = require("./registry.cjs");
 const { locate } = require("./detect.cjs");
 const { readSettings, writeSettings } = require("./storage.cjs");
+const profileSaves = require("./profileSaves.cjs");
 
 /*
  * Mod profiles: several setups of one game's mods ("Story", "Build mode", "Vanilla+").
@@ -8,7 +9,9 @@ const { readSettings, writeSettings } = require("./storage.cjs");
  * game's mods folder; the rest wait in the launcher's own folder until their profile is
  * picked. Mods installed while a profile is chosen go in that profile.
  *
- *   settings.profiles[gameId] = { active, list: [{ id, name, keys: [mod keys], on: [keys turned on when last left] }] }
+ *   settings.profiles[gameId] = { active, savesHere, list: [{ id, name, keys: [mod keys], on: [keys turned on when last left] }] }
+ *
+ * Each profile has its own saves too (profileSaves.cjs), unless that's turned off.
  */
 
 const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -74,7 +77,9 @@ function outside(data) {
 function list(gameId) {
     let mods = store().list(gameId).mods;
     const data = current(gameId, mods);
-    if (!data) return { active: null, profiles: [], turnedOff: 0 };
+    // pending: the chosen profile's saves aren't all back in the game's folder (a switch cut short).
+    const saves = { on: profileSaves.isOn(gameId), folder: profileSaves.folder(gameId), pending: Boolean(data && profileSaves.pending(gameId, data, data.active)) };
+    if (!data) return { active: null, profiles: [], turnedOff: 0, saves };
     const away = outside(data);
     const strays = mods.filter((mod) => mod.enabled && away.has(mod.key));
     if (strays.length) {
@@ -96,6 +101,7 @@ function list(gameId) {
         active: data.active,
         profiles: data.list.map((p) => ({ id: p.id, name: p.name, keys: p.keys.filter((key) => have.has(key)) })),
         turnedOff: strays.length,
+        saves,
     };
 }
 
@@ -128,6 +134,8 @@ function create(gameId, { name, copyOf = null }) {
     const from = fromId && data.list.find((p) => p.id === fromId);
     const on = from ? (from.id === data.active ? mods.filter((m) => m.enabled && from.keys.includes(m.key)).map((m) => m.key) : from.on) : [];
     const profile = { id: newId(), name: clean, keys: from ? [...from.keys] : [], on: [...on] };
+    // A copy starts with a copy of the saves too; an empty one with none.
+    if (from) profileSaves.copy(gameId, data, from.id, profile.id);
     data.list.push(profile);
     write(gameId, data);
     return { ...list(gameId), created: profile.id };
@@ -155,9 +163,13 @@ function remove(gameId, id) {
     const gone = data.list.find((p) => p.id === id);
     data.list = data.list.filter((p) => p.id !== id);
     if (!data.list.length) {
+        // Back to one setup: saves still waiting to go in (a switch cut short) go in.
+        profileSaves.unstash(gameId, id);
         write(gameId, null);
         return list(gameId);
     }
+    // Its saves are kept as a save backup.
+    if (gone) profileSaves.retire(gameId, gone.id, gone.name);
     const active = data.list.find((p) => p.id === data.active);
     const anywhere = new Set(data.list.flatMap((p) => p.keys));
     for (const key of gone?.keys ?? []) if (!anywhere.has(key)) active.keys.push(key);
@@ -196,8 +208,18 @@ async function use(gameId, id) {
     const data = current(gameId);
     const target = data?.list.find((p) => p.id === id);
     if (!target) throw new Error("That profile isn't there any more.");
-    if (data.active === id) return { ...list(gameId), changed: 0, problems: [] };
+    if (data.active === id && !profileSaves.pending(gameId, data, id)) return { ...list(gameId), changed: 0, problems: [] };
     if (await gameOpen(gameId)) throw new Error("Close the game before switching profiles: it reads its mods while it runs.");
+
+    // The saves first: the ones in the game's folder go away with the profile they're from,
+    // and the chosen profile's come back. A switch cut short is finished by picking it again.
+    profileSaves.stash(gameId, data);
+    data.savesHere = target.id;
+    if (data.active === id) {
+        write(gameId, data);
+        const problems = profileSaves.unstash(gameId, id);
+        return { ...list(gameId), changed: 0, problems };
+    }
 
     const mods = store().list(gameId).mods;
     const leaving = data.list.find((p) => p.id === data.active);
@@ -205,10 +227,10 @@ async function use(gameId, id) {
     // Remembered first, so a switch cut short can be finished by picking the profile again.
     data.active = target.id;
     write(gameId, data);
+    const problems = profileSaves.unstash(gameId, target.id);
 
     const want = new Set(target.on.filter((key) => target.keys.includes(key)));
     let changed = 0;
-    const problems = [];
     // Off first, so files two profiles' mods share end up with the one going in.
     const order = [...mods.filter((m) => m.enabled && !want.has(m.key)), ...mods.filter((m) => !m.enabled && want.has(m.key))];
     for (const mod of order) {
@@ -233,7 +255,24 @@ function renameKey(gameId, from, to) {
     write(gameId, data);
 }
 
+/*
+ * Turns separate saves for each profile on or off. Turned on, the saves in the game's folder
+ * now count as the chosen profile's; turned off, other profiles' saves stay in the
+ * launcher's folder until it's turned back on.
+ */
+function setSaves(gameId, on) {
+    profileSaves.setOn(gameId, on);
+    const data = read(gameId);
+    if (on && data) {
+        data.savesHere = data.active;
+        write(gameId, data);
+        // Saves put away under it before this was turned off go back in (ones already there stay).
+        profileSaves.unstash(gameId, data.active);
+    }
+    return list(gameId);
+}
+
 /* Keys of mods that belong only to profiles that aren't chosen. */
 const hiddenKeys = (gameId) => outside(current(gameId));
 
-module.exports = { list, create, rename, remove, setMember, use, renameKey, hiddenKeys };
+module.exports = { list, create, rename, remove, setMember, use, renameKey, hiddenKeys, setSaves };

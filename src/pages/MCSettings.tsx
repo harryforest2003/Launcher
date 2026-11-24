@@ -16,6 +16,7 @@ import {
 import BackgroundLogo from "../components/BackgroundLogo";
 import Sidebar from "../components/MCSidebar";
 import StarterModsSettings from "../components/StarterModsSettings";
+import OfflineAccountForm from "../components/OfflineAccountForm";
 import { GameWindowSettings } from "../components/InstanceLaunchSettings";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
@@ -70,6 +71,7 @@ function MCSettings({
 
   // Signing in happens in the browser; pressing again starts it over.
   const [signingIn, setSigningIn] = useState(false);
+  const [addingOffline, setAddingOffline] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   const signInRun = useRef(0);
   const [confirmSignOut, setConfirmSignOut] = useState<string | null>(null);
@@ -644,9 +646,11 @@ function MCSettings({
                                     )}
                                   </div>
                                   <div className="set-item-meta">
-                                    {entry.active
-                                      ? "Minecraft launches as this account."
-                                      : "Signed in on this computer."}
+                                    {entry.offline
+                                      ? "Offline test account: single-player and offline servers, default skin."
+                                      : entry.active
+                                        ? "Minecraft launches as this account."
+                                        : "Signed in on this computer."}
                                   </div>
                                 </div>
                                 {!entry.active && (
@@ -700,6 +704,27 @@ function MCSettings({
                               </li>
                             ))}
                           </ul>
+                        )}
+
+                        {addingOffline ? (
+                          <OfflineAccountForm
+                            onCancel={() => setAddingOffline(false)}
+                            onDone={(next, name) => {
+                              setAccounts(next);
+                              setAddingOffline(false);
+                              setNotice(`Now playing as ${name}, offline.`);
+                            }}
+                          />
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<Plus size={14} aria-hidden="true" />}
+                            style={{ marginTop: "var(--space-2)" }}
+                            onClick={() => setAddingOffline(true)}
+                          >
+                            Add offline test account
+                          </Button>
                         )}
 
                         {signingIn && (

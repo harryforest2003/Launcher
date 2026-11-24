@@ -117,7 +117,8 @@ async function backup(game, loc, reason, { protect = null } = {}) {
     await fs.promises.cp(from, path.join(root, id), { recursive: true });
     const entry = { id, at: at.toISOString(), reason, size, files, from };
     fs.writeFileSync(path.join(root, `${id}.json`), JSON.stringify(entry, null, 2));
-    for (const old of list(game.id).filter((b) => b.id !== protect).slice(KEEP)) remove(game.id, old.id);
+    // Kept ones (a deleted mod profile's saves) aren't cleared out with the old ones.
+    for (const old of list(game.id).filter((b) => b.id !== protect && !b.keep).slice(KEEP)) remove(game.id, old.id);
     return entry;
 }
 
@@ -141,4 +142,4 @@ async function restore(game, loc, id) {
     return entry;
 }
 
-module.exports = { savesDir, chooseSavesDir, list, backup, restore, remove, homes };
+module.exports = { savesDir, chooseSavesDir, list, backup, restore, remove, homes, backupsDir, folderSize };

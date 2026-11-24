@@ -359,7 +359,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
       <GameSidebar
         game={detail?.name ?? ""}
         hasLoadOrder={Boolean(detail?.loadOrder)}
-        hasTools={detail?.loadOrder === "plugins"}
+        hasTools={detail?.loadOrder === "plugins" || Boolean(detail?.graphics)}
         hasCC={gameId === "sims4"}
         current={deeper ? null : page}
         go={go}
