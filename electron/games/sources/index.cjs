@@ -6,7 +6,8 @@ const store = require("../store.cjs");
 /*
  * The mod sites beyond Nexus Mods and CurseForge. Each knows which games it has mods
  * for, searches them, and gives a mod's file (or, for the Workshop, the Steam page to
- * subscribe on). Keys are the player's own, optional ones from Settings.
+ * subscribe on). Keys are the player's own, optional ones from Settings; the Workshop
+ * can also go through the launcher's host, which holds a Steam key of its own.
  *
  * Primary sites are mixed into a game's "Any site" results. GameBanana isn't (its skins
  * and sound packs would crowd out the mods), unless the game has nothing else.
@@ -20,10 +21,25 @@ const PROVIDERS = [
     require("./spacedock.cjs"),
     require("./beatmods.cjs"),
     require("./gamebanana.cjs"),
+    require("./modworkshop.cjs"),
+    require("./ficsit.cjs"),
+    require("./vintagestory.cjs"),
+    require("./contentdb.cjs"),
+    require("./idgames.cjs"),
 ];
 const BY_ID = new Map(PROVIDERS.map((provider) => [provider.id, provider]));
 
 const isSource = (id) => BY_ID.has(id);
+
+/* Whether a site that needs a key can be used: the player added one, or the host stands in. */
+async function usable(provider) {
+    if (!provider.needsKey || hasSecret(provider.needsKey)) return true;
+    try {
+        return Boolean(await provider.viaHost?.());
+    } catch {
+        return false;
+    }
+}
 const labelOf = (id) => BY_ID.get(id)?.label ?? id;
 
 function need(id) {
@@ -33,7 +49,8 @@ function need(id) {
 }
 
 /*
- * The sites with mods for a game: [{ id, label, primary, ready, needsKey }]. One that needs
+ * The sites with mods for a game: [{ id, label, primary, ready, needsKey, page }], page being
+ * the game's own page there. One that needs
  * a key the player hasn't added is listed (not ready) only where it surely applies: the
  * Workshop, for a Steam game. A site that can't be reached is left out this time.
  */
@@ -41,9 +58,13 @@ async function forGame(game) {
     const found = await Promise.all(
         PROVIDERS.map(async (provider) => {
             const entry = { id: provider.id, label: provider.label, primary: provider.primary, needsKey: provider.needsKey ?? provider.keyOptional ?? null };
-            if (provider.needsKey && !hasSecret(provider.needsKey)) return provider.id === "workshop" && game.steamAppIds?.length ? { ...entry, ready: false } : null;
+            if (!(await usable(provider))) {
+                const appId = game.steamAppIds?.[0];
+                return provider.id === "workshop" && appId ? { ...entry, ready: false, page: provider.home({ appId }) } : null;
+            }
             try {
-                return (await provider.supports(game)) ? { ...entry, ready: true } : null;
+                const ctx = await provider.supports(game);
+                return ctx ? { ...entry, ready: true, page: provider.home?.(ctx) ?? provider.site ?? null } : null;
             } catch {
                 return null;
             }
@@ -53,7 +74,7 @@ async function forGame(game) {
 }
 
 async function contextOf(provider, game) {
-    if (provider.needsKey && !hasSecret(provider.needsKey)) {
+    if (!(await usable(provider))) {
         const err = new Error(`Add your ${provider.id === "workshop" ? "Steam Web API" : provider.label} key in Settings → API keys to use ${provider.label}.`);
         err.code = "NEEDS_KEY";
         throw err;

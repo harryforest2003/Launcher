@@ -150,4 +150,7 @@ async function latest(_ctx, modId) {
     return pkg.latest ? { fileId: pkg.latest.version_number, version: pkg.latest.version_number, date: pkg.latest.date_created, size: 0 } : null;
 }
 
-module.exports = { id: "thunderstore", label: LABEL, site: `${SITE}/`, primary: true, supports, search, details, download, latest };
+/* The game's own page on the site. */
+const home = (ctx) => `${SITE}/c/${encodeURIComponent(ctx.community)}/`;
+
+module.exports = { id: "thunderstore", label: LABEL, site: `${SITE}/`, primary: true, home, supports, search, details, download, latest };

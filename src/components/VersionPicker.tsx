@@ -13,6 +13,10 @@ type Props = {
   icon: string | null;
   /** The version to start on (the update found), if any. */
   suggested?: string;
+  /** Kept at its version, so Update All leaves it alone. */
+  kept?: boolean;
+  /** Keeps it at its version, or lets it update again. */
+  onKeep?: (on: boolean) => Promise<void> | void;
   onDone: (result: UpdateResult & DependencyCheck) => void;
   onClose: () => void;
 };
@@ -38,7 +42,9 @@ function formatBytes(bytes: number) {
  * Every version of one mod (or pack) that works on this instance, like the Modrinth app's
  * version list: pick any, newer or older, and see each one's changelog when you open it.
  */
-export default function VersionPicker({ instanceName, itemKey, name, icon, suggested, onDone, onClose }: Props) {
+export default function VersionPicker({ instanceName, itemKey, name, icon, suggested, kept = false, onKeep, onDone, onClose }: Props) {
+  const [keep, setKeep] = useState(kept);
+  const [keeping, setKeeping] = useState(false);
   const [versions, setVersions] = useState<ContentVersion[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
@@ -100,6 +106,25 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
   const installed = versions?.find((v) => v.installed) ?? null;
   const picked = versions?.find((v) => v.id === chosenId) ?? null;
   const goingBack = Boolean(picked && installed && Date.parse(picked.published) < Date.parse(installed.published));
+  // A beta or alpha about to go in: said so, with the newest full release a click away.
+  const unfinished = picked && !picked.installed && picked.channel !== "release" ? picked : null;
+  const newestRelease = versions?.find((v) => v.channel === "release") ?? null;
+
+  const chooseRelease = () => {
+    if (!newestRelease) return;
+    if (filter !== "all" && filter !== "release") setFilter("all");
+    choose(newestRelease.id);
+  };
+
+  const changeKeep = async (on: boolean) => {
+    setKeep(on);
+    setKeeping(true);
+    try {
+      await onKeep?.(on);
+    } finally {
+      setKeeping(false);
+    }
+  };
 
   async function install(force: boolean) {
     if (!picked) return;
@@ -268,6 +293,39 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
           )}
         </div>
 
+        {unfinished && !problems && (
+          <div
+            data-testid="unfinished-warning"
+            role="note"
+            style={{
+              margin: `0 ${space[5]}`,
+              padding: `${space[3]} ${space[3]} ${space[3]} ${space[4]}`,
+              borderRadius: radius.sm,
+              background: color.warningBg,
+              boxShadow: `inset var(--rail-width) 0 0 ${color.warningBorder}`,
+              color: color.text,
+              fontSize: font.size.sm,
+              display: "flex",
+              alignItems: "center",
+              gap: space[3],
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ flex: "1 1 240px" }}>
+              <span style={{ fontWeight: font.weight.semibold, color: color.warningText }}>
+                {unfinished.number} is {unfinished.channel === "alpha" ? "an alpha" : "a beta"}.
+              </span>{" "}
+              It isn't a finished release, so it can have bugs or harm worlds.
+              {!newestRelease ? " There's no full release of it for this version yet." : newestRelease.installed ? " You already have its latest full release." : ""}
+            </span>
+            {newestRelease && !newestRelease.installed && (
+              <Button size="sm" variant="ghost" data-testid="pick-latest-release" disabled={busy} onClick={chooseRelease}>
+                Latest full release ({newestRelease.number})
+              </Button>
+            )}
+          </div>
+        )}
+
         {problems && (
           <div
             role="alert"
@@ -295,7 +353,18 @@ export default function VersionPicker({ instanceName, itemKey, name, icon, sugge
           </div>
         )}
 
-        <div style={{ display: "flex", alignItems: "center", gap: space[2], padding: `${space[3]} ${space[5]}`, borderTop: `1px solid ${color.border}` }}>
+        {onKeep && (
+          <label
+            data-testid="keep-version"
+            title="Update All leaves it alone. Picking a version here keeps it at that one instead."
+            style={{ display: "flex", alignItems: "center", gap: space[2], margin: `${space[3]} ${space[5]} 0`, fontSize: font.size.sm, color: color.textSecondary, cursor: "pointer" }}
+          >
+            <input type="checkbox" checked={keep} disabled={busy || keeping} onChange={(e) => changeKeep(e.target.checked)} />
+            Keep at its version: Update All leaves it alone
+          </label>
+        )}
+
+        <div style={{ display: "flex", alignItems: "center", gap: space[2], padding: `${space[3]} ${space[5]}`, borderTop: `1px solid ${color.border}`, marginTop: onKeep ? space[3] : 0 }}>
           <span style={{ fontSize: font.size.xs, color: color.textMuted, marginRight: "auto" }}>
             {picked && !picked.installed ? `${goingBack ? "Going back to" : "Updating to"} ${picked.number}` : "Pick a version"}
           </span>

@@ -1,4 +1,5 @@
 import { initials } from "../pages/playedAgo";
+import { useInstancePicture } from "../utils/instancePictures";
 
 type Props = {
   name: string;
@@ -6,6 +7,8 @@ type Props = {
   cols?: number;
   rows?: number;
   className?: string;
+  /** Always the pattern, never the instance's own picture (for a name still being typed). */
+  plain?: boolean;
 };
 
 // A small, steady hash of the name (FNV-1a), so an instance always gets the same pattern.
@@ -30,12 +33,30 @@ function random(seed: number) {
 }
 
 /*
- * The picture for an instance that has none: its initials over a mirrored pixel pattern made
+ * An instance's own picture when it has one (over a blurred copy of itself, so it fills a
+ * wide banner too). Otherwise the picture for an instance that has none: its initials over a mirrored pixel pattern made
  * from its name, in the user's colour (library.css .lx-art). Every instance looks different,
  * none of them is a grey cube, and the letters stay readable on any colour (they get a halo
  * of the background colour).
  */
-export default function InstanceArt({ name, cols = 6, rows = 6, className }: Props) {
+export default function InstanceArt({ name, cols = 6, rows = 6, className, plain = false }: Props) {
+  const picture = useInstancePicture(plain ? null : name);
+  if (picture) {
+    return (
+      <span className={["lx-art", "lx-art--picture", className].filter(Boolean).join(" ")} aria-hidden="true">
+        <img className="lx-art__backdrop" src={picture} alt="" draggable={false} />
+        <img
+          className="lx-art__picture"
+          src={picture}
+          alt=""
+          draggable={false}
+          // Small pixel art is scaled up in blocks rather than blurred.
+          onLoad={(event) => event.currentTarget.classList.toggle("is-pixel", event.currentTarget.naturalWidth <= 128)}
+        />
+      </span>
+    );
+  }
+
   const next = random(hash(name.trim().toLowerCase() || "?"));
   const half = Math.ceil(cols / 2);
   const cells: { x: number; y: number; strong: boolean }[] = [];

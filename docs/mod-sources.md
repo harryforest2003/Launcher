@@ -290,11 +290,69 @@ picked on their own from the site menu.
 |---|---|---|---|
 | Thunderstore | none | direct, with dependencies | 162 communities mapped by Steam app id (`thunderstoreSteam.json`); latest version only |
 | mod.io | the player's own read-only key (`MODIO_API_KEY`) | direct, MD5-checked | a file with no download link opens its page |
-| Steam Workshop | the player's own Steam Web API key (`STEAM_WEB_API_KEY`) | opens the item in Steam to Subscribe | listed as "(add a key)" for Steam games until a key is set |
+| Steam Workshop | the launcher's host (`/steam/*` on the Worker), or the player's own Steam Web API key (`STEAM_WEB_API_KEY`), which wins | opens the item in Steam to Subscribe | listed as "(add a key)" for Steam games when neither is there |
 | Factorio Mod Portal | optional `username:token` (`FACTORIO_TOKEN`) | direct, SHA-1-checked, with dependencies | browsing works keyless; search and downloads need the token |
 | SpaceDock | none | direct | Kerbal Space Program only; no dependency data (CKAN has it) |
 | BeatMods | none | direct, MD5-checked, with dependencies | the newest Beat Saber version with checked mods, of the last 12 |
 | GameBanana | none | direct, MD5-checked; refuses files its virus scan flagged | only joins "Any site" when the game has no other source |
+| ModWorkshop | none | direct, with dependencies | about 70 games, matched by the Steam id in its game links or by name; mods whose authors set `disable_mod_managers` open on the site |
+| ficsit.app | none | direct (`.smod`, a zip of one plugin), with dependencies, SML included | Satisfactory only; GraphQL; Windows builds only (Mac and Linux targets are servers) |
+| Vintage Story Mod DB | none | direct (the game reads the zip as it is) | its list comes whole, so it's cached 30 minutes and paged in the launcher; no dependency data |
+| ContentDB | none | direct, with hard dependencies | Luanti (Minetest); cached 10 minutes and paged in the launcher; a need nothing is named after (like `default`) comes with the game |
+| idgames | none | direct, from the youfailit.net mirror | Doom, Doom II, Final Doom; title search needs 3+ letters, an empty search shows the megawads; author e-mails in text files are hidden |
 
-None needs a launcher-wide key, so nothing goes through the Cloudflare Worker. Keys are added in
-Settings → Mod site keys. Updates are checked for every site except the Workshop (Steam updates those).
+The first seven were added on 2026-11-18, the last five on 2026-11-24. Keys are added in Settings →
+Mod sites, which lists every site with its games and is searchable by site or game. Updates are checked
+for every site except the Workshop (Steam updates those).
+
+### The Workshop through the launcher's host
+
+The Cloudflare Worker in `proxy/curseforge/` also answers three Steam routes, with the launcher's own
+Steam Web API key (the `STEAM_WEB_API_KEY` secret): `/steam/IPublishedFileService/QueryFiles/v1/`,
+`/steam/IPublishedFileService/GetDetails/v1/` and `/steam/ISteamUser/GetPlayerSummaries/v2/`. Each
+rebuilds the query from a short whitelist (so a caller's own `key` is dropped), is rate-limited per IP
+and cached. `GET /status` says which keys the Worker holds (`{ curseforge, steam }`); the launcher
+checks it every 10 minutes to decide whether the Workshop can be searched without a personal key.
+mod.io stays a personal key: its per-key limit (60 requests a minute) and terms don't suit one shared key.
+
+### New sources, 2026-11-24
+
+- **ModWorkshop** ([OpenAPI](https://api.modworkshop.net/.openapi)): keyless REST at
+  `https://api.modworkshop.net`, open to community mod managers that don't hammer it. Needs
+  `Accept: application/json`, or it answers with HTML. `GET /games` (paged) lists games with a `buttons`
+  string holding the Steam store link; `GET /games/{id}/mods?sort=&query=`; `GET /mods/{id}` and
+  `/mods/{id}/files`. Sorts: `weekly_score`, `downloads`, `bumped_at`, `published_at`, `best_match`.
+- **ficsit.app** (`https://api.ficsit.app/v2/query`, GraphQL): `getMods(filter: ModFilter)` and
+  `getModByReference(modReference:)`, versions with `targets { targetName link size }` and
+  `dependencies { mod_id optional }`. Satisfactory Mod Manager's own source.
+- **Vintage Story Mod DB** (`https://mods.vintagestory.at/api`): `GET /api/mods?orderby=&text=` returns
+  the whole list (about 10,000); `GET /api/mod/{alias or id}` has releases with `mainfile` download
+  links and game-version tags.
+- **ContentDB** ([API help](https://content.luanti.org/help/api/)): `GET /api/packages/?type=mod&sort=&order=&q=`
+  (not paged), `/api/packages/{author}/{name}/releases/` and `/dependencies/?only_hard=1`. The
+  `/api/scores/` endpoint answered 500 when tested, so the list shows no download counts from it.
+- **idgames** ([API](https://www.doomworld.com/idgames/api/)): `api.php?action=search|get|getcontents&out=json`.
+  Files from the archive's mirrors; one file comes as an object, several as a list.
+
+### Looked at and left out (2026-11-24)
+
+- **Hollow Knight ModLinks:** the mods need the game's `Assembly-CSharp.dll` patched first, which the
+  launcher doesn't do.
+- **ESOUI and WoWInterface (MMOUI):** the API is undocumented; ask MMOUI before using it.
+- **Wago Addons:** paid API access, World of Warcraft only.
+- **ModDrop, LCPDFR:** update checks only; downloads need a login.
+- **CKAN, BeatSaver, ModelSaber, Hangar, smapi.io:** metadata, songs or skins, server plugins, or update
+  data rather than mods the Discover page can install.
+- **No public API:** ModDB, The Sims Resource, GTA5-Mods, Planet Minecraft, Mod Collective, Overtake,
+  Bethesda Creations, Paradox Mods.
+
+### Discover's Sites tab (2026-11-24)
+
+Each game's Discover page has a Sites tab: every website with mods for that game, each opening in the
+browser. The hand-picked list is `electron/shared/gameModSites.mjs` (37 games: every built-in and
+catalog game except Minecraft and GTA VI). The sites Discover searches for a game join the list too, from
+each provider's `home(ctx)` page, so a game added from a search still gets its Nexus Mods,
+Thunderstore or Workshop link. Rows are marked "In Discover" (its mods are on the Mods tab) or
+"Website only" (download in the browser, then Add from Downloads). `games:openUrl` opens https links
+to the listed sites' hosts only. Adult-only sites, cheat sites and sites that re-upload paid mods are
+left out.

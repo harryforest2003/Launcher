@@ -137,4 +137,7 @@ async function latest(ctx, modId) {
     return file?.id ? { fileId: String(file.id), version: file.version || file.filename, date: date(file.date_added), size: file.filesize ?? 0 } : null;
 }
 
-module.exports = { id: "modio", label: LABEL, site: "https://mod.io/", needsKey: "modio", primary: true, supports, search, details, download, latest };
+/* The game's own page on the site. */
+const home = (ctx) => ctx.profile || `https://mod.io/g/${encodeURIComponent(ctx.nameId)}`;
+
+module.exports = { id: "modio", label: LABEL, site: "https://mod.io/", needsKey: "modio", primary: true, home, supports, search, details, download, latest };

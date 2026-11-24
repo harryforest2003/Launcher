@@ -4,6 +4,7 @@ import {
   Disc3,
   Gamepad2,
   KeyRound,
+  MessageCircle,
   Palette,
   Sparkles,
   Star,
@@ -16,13 +17,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
-import ApiKeyRow from "../components/ApiKeyRow";
+import ModSiteList from "../components/ModSiteList";
 import LauncherSidebar from "../components/LauncherSidebar";
 import Button from "../components/ui/Button";
 import Notice from "../components/ui/Notice";
 import SettingsLayout, { SettingsHeader } from "../components/SettingsLayout";
 import AppearanceSettings from "../theme/AppearanceSettings";
 import AccountSwitcher from "../components/AccountSwitcher";
+import { DiscordStatusSection } from "../components/DiscordStatusSettings";
 import { PLATFORMS } from "../components/platformAccountsData";
 import "../theme/appearance.css";
 
@@ -166,117 +168,7 @@ export default function LauncherSettings({
       );
   }, []);
 
-  const added = apiKeys
-    ? (["modrinth", "nexus", "github", "modio", "steam", "factorio"] as const).filter(
-        (key) => apiKeys[key]?.set,
-      ).length
-    : 0;
-
-  const keysSection = (
-    <section id="api-tokens" aria-label="Keys for mod sites" className="page-section">
-      <div className="set-pane-head set-pane-head--end">
-        {apiKeys && (
-          <span className="set-count" style={{ marginRight: 0 }}>
-            <strong>{added}</strong> of 6 added
-          </span>
-        )}
-      </div>
-      <div className="ui-panel set-panel" data-testid="personal-tokens">
-        <div className="set-panel-head">
-          <p className="set-lead" style={{ marginTop: 0 }}>
-            Keys from your own accounts. The launcher works without them; each
-            one adds something. They're locked with your computer's keychain and
-            only ever sent to the site they belong to.
-          </p>
-        </div>
-
-        <div className="set-rows">
-          <div id="token-modrinth" className="page-section-anchor">
-            <ApiKeyRow
-              name="modrinth"
-              label="Modrinth"
-              environmentVariable="MODRINTH_TOKEN"
-              status={apiKeys?.modrinth}
-              onChange={setApiKeys}
-            >
-              Lets the launcher see your own unlisted and draft projects.
-              Browsing and installing don't need it. Create one at
-              modrinth.com/settings/pats.
-            </ApiKeyRow>
-          </div>
-
-          <div id="token-nexus" className="page-section-anchor">
-            <ApiKeyRow
-              name="nexus"
-              label="Nexus Mods"
-              environmentVariable="NEXUS_API_KEY"
-              status={apiKeys?.nexus}
-              onChange={setApiKeys}
-            >
-              Needed to browse Nexus Mods in the Mod Manager. Find yours on
-              nexusmods.com, in your account's API Keys settings.
-            </ApiKeyRow>
-          </div>
-
-          <div id="token-github" className="page-section-anchor">
-            <ApiKeyRow
-              name="github"
-              label="GitHub"
-              environmentVariable="GITHUB_TOKEN"
-              status={apiKeys?.github}
-              onChange={setApiKeys}
-            >
-              Installs from GitHub allow 60 lookups an hour without one, and
-              5,000 with one. Create one at github.com/settings/tokens; it needs
-              no permissions.
-            </ApiKeyRow>
-          </div>
-
-          <div id="token-modio" className="page-section-anchor">
-            <ApiKeyRow
-              name="modio"
-              label="mod.io"
-              environmentVariable="MODIO_API_KEY"
-              status={apiKeys?.modio}
-              onChange={setApiKeys}
-            >
-              Lets the launcher browse and install mods from mod.io for the
-              games that use it. Get a read-only API key at mod.io, in your
-              account's API access settings.
-            </ApiKeyRow>
-          </div>
-
-          <div id="token-steam" className="page-section-anchor">
-            <ApiKeyRow
-              name="steam"
-              label="Steam Web API"
-              environmentVariable="STEAM_WEB_API_KEY"
-              status={apiKeys?.steam}
-              onChange={setApiKeys}
-            >
-              Lets the launcher search the Steam Workshop. Installing still
-              happens in Steam: you press Subscribe there. Get a key at
-              steamcommunity.com/dev/apikey.
-            </ApiKeyRow>
-          </div>
-
-          <div id="token-factorio" className="page-section-anchor">
-            <ApiKeyRow
-              name="factorio"
-              label="Factorio"
-              environmentVariable="FACTORIO_TOKEN"
-              status={apiKeys?.factorio}
-              onChange={setApiKeys}
-            >
-              Lets the launcher search the Factorio Mod Portal and download its
-              mods. Browsing works without it. Paste it as username:token, with
-              the token from your profile on factorio.com.
-            </ApiKeyRow>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
+  const keysSection = <ModSiteList apiKeys={apiKeys} onChange={setApiKeys} />;
 
   return (
     <div className="app-screen">
@@ -295,7 +187,7 @@ export default function LauncherSettings({
         <div className="app-page">
           <SettingsHeader
             title="Settings"
-            lead="How the launcher looks, your game accounts, and the keys it uses for mod sites."
+            lead="How the launcher looks, your game accounts, and the mod sites Discover uses."
           />
 
           {error && (
@@ -358,9 +250,15 @@ export default function LauncherSettings({
               },
               {
                 id: "api-tokens",
-                label: "Mod site keys",
+                label: "Mod sites",
                 icon: <KeyRound size={16} aria-hidden="true" />,
                 content: keysSection,
+              },
+              {
+                id: "discord-status",
+                label: "Discord status",
+                icon: <MessageCircle size={16} aria-hidden="true" />,
+                content: <DiscordStatusSection />,
               },
             ]}
           />

@@ -25,7 +25,53 @@ declare global {
         notes?: string;
         error?: string;
         folder?: string;
+        /** Its own game window; null or missing follows Settings. */
+        window?: GameWindow | null;
+        /** Commands of its own around each launch, set on its Settings tab. */
+        launchHooks?: LaunchHooks;
+        /** Files kept at their version, which updates leave alone ("mod/sodium.jar"). */
+        keptVersions?: string[];
+        /** Back up its worlds before updating mods or its loader. */
+        backupWorldsBeforeUpdates?: boolean;
     };
+
+    /** A size of null is Minecraft's own (854 x 480). */
+    type GameWindow = { width: number | null; height: number | null; fullscreen: boolean };
+
+    type LaunchHooks = { preLaunch: string; wrapper: string; postExit: string; env: Record<string, string> };
+
+    /** Where Quick Play goes as the game starts: a world's folder or a server's address. */
+    type QuickPlay = { world: string } | { server: string };
+
+    /** A server on an instance's list (its servers.dat). */
+    type InstanceServer = { index: number; name: string; address: string; icon: string | null; hidden: boolean };
+
+    type ServerStatus =
+        | { online: true; latency: number; players: number; maxPlayers: number; motd: string; version: string; icon: string | null }
+        | { online: false; error?: string };
+
+    /** A server listed on Modrinth. */
+    type FoundServer = {
+        id: string;
+        slug: string;
+        name: string;
+        summary: string;
+        icon: string | null;
+        address: string;
+        tags: string[];
+        followers: number;
+        versions: string[];
+        recommendedVersion: string | null;
+        modpack: { projectId: string | null; name: string; icon: string | null } | null;
+        online: { players: number; maxPlayers: number; version: string | null; latency: number | null } | null;
+        region: string | null;
+        url: string;
+    };
+
+    type ServerSearch = { servers: FoundServer[]; page: number; pageCount: number; total: number };
+
+    /** A world's .zip backup. auto: made before an update (the newest 3 of those are kept). */
+    type WorldBackup = { world: string; file: string; createdAt: string; size: number; auto: boolean };
 
     type JavaTuning = "performance" | "standard";
 
@@ -109,9 +155,14 @@ declare global {
 
     /** One file's update state; name and icon come from Modrinth for files the launcher didn't install. */
     type UpdateStatus = {
-        state: "update" | "current" | "unknown";
+        /** "kept": a newer build is out, but this file is kept at its version. */
+        state: "update" | "kept" | "current" | "unknown";
         current?: string | null;
         latest?: string;
+        /** Whether the newer build is a full release, a beta or an alpha. */
+        latestChannel?: "release" | "beta" | "alpha";
+        /** Kept at its version: never updated with the rest. */
+        kept?: boolean;
         name?: string;
         iconUrl?: string;
         /** Who publishes it on Modrinth. */
@@ -133,6 +184,7 @@ declare global {
         projectId: string;
         current: string;
         latest: string;
+        channel: "release" | "beta" | "alpha";
     };
 
     /** One thing Optimise looked at: "fix" has a change that should help, "tip" is advice, "ok" needs nothing. */
@@ -157,10 +209,12 @@ declare global {
     };
 
     type UpdateResult = {
-        updated: { name: string; from: string; to: string }[];
+        updated: { name: string; from: string; to: string; type?: ContentType; fileName?: string }[];
         /** Left as they were, because the new version wouldn't work with the rest. */
         skipped: { name: string; from: string; to: string; reasons: string[] }[];
         failed: { name: string; reason: string }[];
+        /** Asked for full releases only, but none is newer than the file installed. */
+        noRelease?: { name: string; from: string; to: string }[];
         /** What can be undone, if anything changed. */
         batch: { id: string; count: number } | null;
     };
@@ -402,6 +456,13 @@ declare global {
         showSnapshots: boolean;
         cloudFolder: string;
         downloadConcurrency: number;
+        /** The game window's size; null is Minecraft's own. */
+        windowWidth: number | null;
+        windowHeight: number | null;
+        fullscreen: boolean;
+        /** Show the game being played on Discord, as the application with this ID. */
+        discordStatus: boolean;
+        discordClientId: string;
         /** The Library's groups of instances: { group name: instance names }. */
         instanceGroups?: Record<string, string[]>;
         system: {
@@ -525,8 +586,8 @@ declare global {
             repair(name: string): Promise<Instance>;
             remove(name: string): Promise<{ deleted: string }>;
 
-            /** As the signed-in account with this id, or the active one. Refused while that account is in another game. */
-            launch(name: string, accountId?: string): Promise<{
+            /** As the signed-in account with this id, or the active one. Refused while that account is in another game. quickPlay opens a world or server straight away. */
+            launch(name: string, accountId?: string, options?: { quickPlay?: QuickPlay }): Promise<{
                 launched: boolean;
                 name: string;
                 pid: number;
@@ -547,6 +608,33 @@ declare global {
             fileAction(name: string, request: { kind: "world" | "screenshot"; name?: string; action: "open" | "show" | "trash" | "folder" }): Promise<void>;
             /** A copy under a new name, without its logs or play history. */
             duplicate(name: string, newName: string): Promise<Instance>;
+
+            /** The servers on its Multiplayer screen, in order. */
+            servers(name: string): Promise<InstanceServer[]>;
+            addServer(name: string, server: { name: string; address: string }): Promise<InstanceServer[]>;
+            removeServer(name: string, server: { index: number; address: string }): Promise<InstanceServer[]>;
+            /** Asks a server for its status, as the Multiplayer screen does. */
+            pingServer(address: string): Promise<ServerStatus>;
+            /** Java servers listed on Modrinth. */
+            searchServers(options: { query?: string; sort?: string; page?: number }): Promise<ServerSearch>;
+            /** Every world backup, newest first, including those of worlds since deleted. */
+            worldBackups(name: string): Promise<WorldBackup[]>;
+            backupWorld(name: string, folder: string): Promise<WorldBackup>;
+            /** The world as it is now goes to the Bin, and the backup takes its place. */
+            restoreBackup(name: string, folder: string, file: string): Promise<void>;
+            deleteBackup(name: string, folder: string, file: string): Promise<void>;
+            openBackups(name: string, folder?: string): Promise<void>;
+            /** Uploads the game log to mclo.gs, with login tokens, emails and the user name hidden. */
+            shareLog(name: string): Promise<{ url: string }>;
+            /** The instance's own picture as a data URL, or null for the pattern made from its name. */
+            picture(name: string): Promise<string | null>;
+            /** Saves a picture (a PNG data URL) as the instance's own; gives it back as saved. */
+            setPicture(name: string, dataUrl: string): Promise<string>;
+            clearPicture(name: string): Promise<null>;
+            /** Puts a shortcut that plays it on the desktop (the installed app only). */
+            desktopShortcut(name: string): Promise<{ path: string; replaced: boolean }>;
+            /** A desktop shortcut asked for an instance to be played. */
+            onShortcutLaunch(cb: (name: string) => void): () => void;
 
             /** Picks a world .zip and adds every world in it. null if nothing was picked. */
             importWorldFile(name: string): Promise<AddedWorld[] | null>;
@@ -627,6 +715,10 @@ declare global {
                     javaPath: string;
                     javaTuning: JavaTuning | "";
                     notes: string;
+                    window: GameWindow | null;
+                    launchHooks: LaunchHooks | null;
+                    keptVersions: string[];
+                    backupWorldsBeforeUpdates: boolean;
                 }>
             ): Promise<Instance>;
 
@@ -691,6 +783,10 @@ declare global {
 
             getApiKeys(): Promise<ApiKeyStatuses>;
             setApiKey(name: ApiKeyName, value: string | null): Promise<ApiKeyStatuses>;
+            /** Connects to the Discord app as that application; who's signed in, if Discord says. */
+            testDiscord(clientId: string): Promise<{ user: string | null; showing: boolean }>;
+            /** Whether a game's status is showing on Discord now, and the last problem if not. */
+            discordState(): Promise<{ showing: boolean; playing: boolean; error: string | null }>;
 
             getAccount(): Promise<{
                 name: string;
@@ -714,10 +810,11 @@ declare global {
             /** Each item's own icon (as a small data URL) and the authors it names, keyed like "mod//file.jar". */
             contentDetails(name: string): Promise<Record<string, { icon: string | null; authors: string[] }>>;
             /** Every mod, resource pack and shader checked for a newer build; status is keyed "mod/file.jar". */
-            checkUpdates(name: string): Promise<{ checked: number; identified: number; updates: ModUpdate[]; status: Record<string, UpdateStatus> }>;
+            checkUpdates(name: string): Promise<{ checked: number; identified: number; updates: ModUpdate[]; status: Record<string, UpdateStatus>; kept: string[] }>;
             /** Installs updates from the latest check, by their keys. */
             /** Updates that wouldn't work with the rest of the instance are left out, in skipped. */
-            applyUpdates(name: string, keys: string[]): Promise<UpdateResult & DependencyCheck>;
+            /** With releasesOnly, betas and alphas become the newest full release newer than the file installed. */
+            applyUpdates(name: string, keys: string[], options?: { releasesOnly?: boolean }): Promise<UpdateResult & DependencyCheck>;
             /** Every version of one item ("mod/file.jar") that works on this instance, newest first. */
             versions(name: string, key: string): Promise<{ name: string; versions: ContentVersion[] }>;
             /** One version's changelog as plain text ("" if none). */

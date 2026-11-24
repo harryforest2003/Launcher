@@ -97,6 +97,7 @@ async function resolveModrinthFile(projectId, mcVersion, loader, type = "mod") {
         sha1: file.hashes?.sha1 ?? null,
         versionNumber: release.version_number,
         published: release.date_published ?? null,
+        channel: release.version_type ?? "release",
         targetType: targetTypeFor(contentType, file.filename),
         dependencies: await requiredProjects(release.dependencies),
     };
@@ -156,6 +157,7 @@ async function resolveCurseForgeFile(projectId, mcVersion, loader, type = "mod")
         // algo 1 is SHA-1, the same check Modrinth files get.
         sha1: chosen.hashes?.find(h => h.algo === 1)?.value ?? null,
         versionNumber: chosen.displayName,
+        channel: { 1: "release", 2: "beta", 3: "alpha" }[chosen.releaseType] ?? "release",
         targetType: targetTypeFor(type, chosen.fileName),
         dependencies: (chosen.dependencies ?? [])
             .filter(d => d.relationType === 3)      // required

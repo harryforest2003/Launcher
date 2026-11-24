@@ -129,4 +129,7 @@ async function latest(_ctx, modId) {
     return file ? { fileId: String(file._idRow), version: file._sVersion || mod._sVersion || file._sFile, date: iso(file._tsDateAdded), size: file._nFilesize ?? 0 } : null;
 }
 
-module.exports = { id: "gamebanana", label: LABEL, site: "https://gamebanana.com/", primary: false, supports, search, details, download, latest };
+/* The game's own page on the site. */
+const home = (ctx) => `https://gamebanana.com/games/${ctx.gameId}`;
+
+module.exports = { id: "gamebanana", label: LABEL, site: "https://gamebanana.com/", primary: false, home, supports, search, details, download, latest };

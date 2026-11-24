@@ -29,6 +29,12 @@ function target() {
     return null;
 }
 
+/* The launcher's host, for other sites it holds a key for (the Steam Workshop). */
+function hostBase() {
+    const base = process.env.CURSEFORGE_PROXY_URL || PROXY_URL;
+    return base ? base.replace(/\/+$/, "") : null;
+}
+
 function available() {
     return target() !== null;
 }
@@ -87,4 +93,4 @@ async function curseforgeJson(path, options) {
     return res.json();
 }
 
-module.exports = { available, curseforgeFetch, curseforgeJson };
+module.exports = { available, curseforgeFetch, curseforgeJson, hostBase };

@@ -308,6 +308,22 @@ function takeNxm(link) {
     else if (pendingNxm.length < 20) pendingNxm.push(link);
 }
 
+/*
+ * A desktop shortcut starts the app with --launch-instance=<name> (see minecraft/shortcuts.cjs).
+ * The page plays it as the Library's Play button would; one asked for before the page has
+ * loaded waits for it.
+ */
+const { launchArg } = require("./minecraft/shortcuts.cjs");
+let pendingLaunch = null;
+
+function takeLaunch(argv) {
+    const name = launchArg(argv);
+    if (!name) return;
+    const win = BrowserWindow.getAllWindows()[0];
+    if (pageReady && win) win.webContents.send("shortcut:launch", name);
+    else pendingLaunch = name;
+}
+
 // Only the installed app handles these links: run from source, it would claim them for Electron.
 // A copy started on a throwaway profile (scripts/check-app-starts.cjs) leaves them to the real one.
 // A second copy of the installed app hands its link to the first and quits, without a window.
@@ -322,6 +338,7 @@ if (app.isPackaged) {
         // installer registers it (scripts/nxm-protocol.nsh). Links reach only takeNxm.
         app.on("second-instance", (_event, argv) => {
             argv.filter(isNxmLink).forEach(takeNxm);
+            takeLaunch(argv);
             const win = BrowserWindow.getAllWindows()[0];
             if (win) {
                 if (win.isMinimized()) win.restore();
@@ -329,6 +346,7 @@ if (app.isPackaged) {
             }
         });
         process.argv.filter(isNxmLink).forEach(takeNxm);
+        takeLaunch(process.argv);
     }
 }
 app.on("open-url", (event, url) => {
@@ -370,6 +388,8 @@ function createWindow() {
     win.webContents.once("did-finish-load", () => {
         pageReady = true;
         pendingNxm.splice(0).forEach(handleNxm);
+        if (pendingLaunch) win.webContents.send("shortcut:launch", pendingLaunch);
+        pendingLaunch = null;
     });
 
     /*
@@ -423,6 +443,8 @@ app.whenReady().then(() => {
     registerModIpc();
     registerGamesIpc();
     registerInstanceIpc();
+    // An instance's servers, world backups, picture, shared logs and desktop shortcuts.
+    require("./minecraft/extrasIpc.cjs").registerExtrasIpc();
     registerSkinBuilderIpc();
     registerBlockbenchIpc();
     // Home's play time, activity, news and Steam deals.

@@ -1,7 +1,11 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { EventEmitter } = require("events");
 const { app } = require("electron");
+
+// "changed" after every save, with the settings as saved (Discord status listens).
+const settingsEvents = new EventEmitter();
 
 /*
  * Launcher-wide settings.
@@ -22,7 +26,31 @@ const DEFAULTS = {
     cloudFolder: "",           // a synced folder (OneDrive, Dropbox, iCloud...)
     downloadConcurrency: 16,
     instanceGroups: {},        // the Library's groups: { name: [instance names] }
+    windowWidth: null,         // the game window's size; null is Minecraft's own (854 x 480)
+    windowHeight: null,
+    fullscreen: false,
+    discordStatus: false,      // show the game being played on Discord
+    discordClientId: "",       // the Discord application it shows as
 };
+
+/* A window size: a whole number of pixels in range, or null for Minecraft's own. */
+function windowSize(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const size = Math.round(Number(value));
+    if (!Number.isFinite(size) || size < 320 || size > 7680) throw new Error("A window size has to be between 320 and 7680 pixels.");
+    return size;
+}
+
+/* The game window an instance gets: its own choice, else Settings'. */
+function gameWindow(instanceWindow, settings) {
+    const own = instanceWindow && typeof instanceWindow === "object" ? instanceWindow : null;
+    const width = own ? own.width : settings.windowWidth;
+    const height = own ? own.height : settings.windowHeight;
+    return {
+        resolution: width && height ? { width, height } : null,
+        fullscreen: Boolean(own ? own.fullscreen : settings.fullscreen),
+    };
+}
 
 function settingsPath() {
     return path.join(app.getPath("userData"), "launcher-settings.json");
@@ -47,6 +75,7 @@ function writeSettings(patch) {
 
     fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
     fs.writeFileSync(settingsPath(), JSON.stringify(next, null, 2));
+    settingsEvents.emit("changed", next);
 
     return next;
 }
@@ -124,6 +153,15 @@ function settingsFromPage(patch) {
             const { text, removed } = withoutJavaFlags(readSettings().jvmArgs);
             if (removed.length) clean.jvmArgs = text;
         }
+    }
+    if ("windowWidth" in clean) clean.windowWidth = windowSize(clean.windowWidth);
+    if ("windowHeight" in clean) clean.windowHeight = windowSize(clean.windowHeight);
+    if ("fullscreen" in clean) clean.fullscreen = clean.fullscreen === true;
+    if ("discordStatus" in clean) clean.discordStatus = clean.discordStatus === true;
+    if ("discordClientId" in clean) {
+        const id = String(clean.discordClientId ?? "").trim();
+        if (id && !/^\d{17,20}$/.test(id)) throw new Error("A Discord application ID is a number 17 to 20 digits long, from discord.com/developers/applications.");
+        clean.discordClientId = id;
     }
     if ("downloadConcurrency" in clean) {
         clean.downloadConcurrency = Math.max(1, Math.min(64, Math.round(Number(clean.downloadConcurrency)) || DEFAULTS.downloadConcurrency));
@@ -380,6 +418,7 @@ function launchJvmArgs(own, { tuning } = {}) {
 }
 
 module.exports = {
+    settingsEvents,
     readSettings,
     writeSettings,
     checkJvmArgs,
@@ -396,6 +435,8 @@ module.exports = {
     withDefaultGc,
     launchJvmArgs,
     javaTuningOf,
+    windowSize,
+    gameWindow,
     DEFAULT_GC_ARGS,
     PERFORMANCE_GC_ARGS,
     DEFAULTS,

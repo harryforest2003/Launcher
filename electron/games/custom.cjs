@@ -468,7 +468,7 @@ async function curseforgeGames() {
         const games = [];
         for (let index = 0; index < 2000; index += 50) {
             const json = await curseforgeJson(`/games?index=${index}&pageSize=50`);
-            games.push(...(json?.data ?? []).filter((g) => g?.id !== 432 && g?.name).map((g) => ({ id: g.id, name: g.name })));
+            games.push(...(json?.data ?? []).filter((g) => g?.id !== 432 && g?.name).map((g) => ({ id: g.id, name: g.name, slug: g.slug ?? null })));
             if ((json?.data?.length ?? 0) < 50) break;
         }
         if (games.length) {
@@ -528,6 +528,12 @@ function sites() {
         },
     };
     return siteIndex.value;
+}
+
+/* A game's page on CurseForge, when its list (fetched since slugs were kept) says where. */
+function curseforgePage(id) {
+    const slug = sites().cfById.get(Number(id))?.slug;
+    return slug ? `https://www.curseforge.com/${encodeURIComponent(slug)}` : null;
 }
 
 const steamHeader = (id) => `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${id}/header.jpg`;
@@ -1155,4 +1161,4 @@ async function xboxArt(name) {
     return `${pick.Uri.startsWith("//") ? "https:" : ""}${pick.Uri}?w=920`;
 }
 
-module.exports = { all, find, open, keep, remove, locate, chooseModsDir, chooseLaunch, search, storeInfo, whereToGet, artFor, steamApps, defaultModsDir, keyFor, OWN };
+module.exports = { all, find, open, keep, remove, locate, chooseModsDir, chooseLaunch, search, storeInfo, whereToGet, artFor, steamApps, defaultModsDir, keyFor, curseforgePage, OWN };

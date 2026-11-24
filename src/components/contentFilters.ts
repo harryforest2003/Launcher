@@ -8,7 +8,7 @@ export type Filters = {
   /** The rest narrow the list when anything in them is ticked. */
   authors: string[];
   state: ("on" | "off")[];
-  updates: ("update" | "current" | "unknown")[];
+  updates: ("update" | "kept" | "current" | "unknown")[];
   sources: string[];
   sort: SortBy;
 };

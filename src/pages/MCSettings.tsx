@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  AppWindow,
   CircleCheck,
   CircleX,
   Cloud,
@@ -15,6 +16,7 @@ import {
 import BackgroundLogo from "../components/BackgroundLogo";
 import Sidebar from "../components/MCSidebar";
 import StarterModsSettings from "../components/StarterModsSettings";
+import { GameWindowSettings } from "../components/InstanceLaunchSettings";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Notice from "../components/ui/Notice";
@@ -551,6 +553,29 @@ function MCSettings({
 
                       </section>
                     </>
+                  ),
+                },
+                {
+                  id: "mc-window",
+                  label: "Game window",
+                  icon: <AppWindow size={16} aria-hidden="true" />,
+                  content: (
+                    <section id="mc-window" aria-labelledby="mc-window-title" className="ui-panel set-panel">
+                      <div className="set-section">
+                        <div className="set-panel-head">
+                          <div>
+                            <h2 id="mc-window-title" className="set-panel-title">
+                              <AppWindow size={18} aria-hidden="true" />
+                              Game window
+                            </h2>
+                            <p className="set-lead">
+                              The size Minecraft opens at. An instance can have its own on its Settings tab.
+                            </p>
+                          </div>
+                        </div>
+                        <GameWindowSettings settings={settings} onSave={(update) => void patch(update)} />
+                      </div>
+                    </section>
                   ),
                 },
                 {

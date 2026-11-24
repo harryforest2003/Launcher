@@ -565,6 +565,7 @@ export const gamesBridge = {
     // The sites the picker offers: these two, as the samples have no others.
     const offered = (game.curseforge ? (["nexus", "curseforge"] as const) : (["nexus"] as const)).map((site) => ({
       id: site, label: site === "nexus" ? "Nexus Mods" : "CurseForge", primary: true, ready: true, needsKey: null,
+      page: site === "nexus" && game.nexus ? `https://www.nexusmods.com/games/${game.nexus}/mods` : null,
     }));
     return { total: Object.values(totals).reduce((a, b) => a + b, 0), totals, pageCount: options.query ? 1 : 100, mods, sources: offered };
   },

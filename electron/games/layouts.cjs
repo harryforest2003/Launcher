@@ -499,6 +499,22 @@ function shapeOf(ctx) {
 }
 
 /*
+ * A download that is one mod's own folder, known by the file that marks it: an Unreal
+ * plugin's Name.uplugin (Satisfactory's .smod, beside its Content/ and Resources/), or a
+ * Lua mod's init.lua or mod.conf (Luanti, Noita). -> { top, folder } or null: top is the
+ * folder it's wrapped in ("" for none), folder the name it goes in the mods folder under.
+ */
+const MOD_MARKS = new Set(["init.lua", "mod.conf", "modpack.conf"]);
+function modFolderIn(files) {
+    const top = wrapper(files);
+    const rels = files.map((file) => under(file, top)).filter((rel) => rel !== null && !rel.includes("/"));
+    const plugin = rels.find((rel) => ext(rel) === ".uplugin");
+    if (plugin) return { top, folder: path.posix.basename(plugin, path.posix.extname(plugin)) };
+    if (rels.some((rel) => MOD_MARKS.has(lower(rel)))) return { top, folder: top ? base(top) : null };
+    return null;
+}
+
+/*
  * The folder above one the game's folder has ("BepInEx", "Content", "scripts"...), taken from
  * the first few levels of each path; the one most files agree on wins. -> { prefix, into }:
  * prefix "" is the download's top; into is where it goes in the game, "" for its folder, or
@@ -558,6 +574,7 @@ function routeByKind(file, shape, modFolder, loose) {
  * BepInEx's plugins) needs nothing set first:
  *
  *  1. A download that carries the mods folder chosen in Settings goes in from inside it.
+ *     One that is a single mod's folder (an Unreal plugin, a Lua mod) goes into it whole.
  *  2. One shaped like the game's folder (BepInEx/..., Content/Paks/..., scripts/...) goes into
  *     the game's folder as it is, with anything beside those folders.
  *  3. Loose files go where their kind belongs in this game: .pak into Paks/~mods, a BepInEx
@@ -582,6 +599,19 @@ function generic(files, ctx) {
             const rel = inside(file);
             if (rel !== null) result.placements.push({ from: file, base: "mods", to: rel });
             else result.skipped.push({ file, reason: `outside the ${path.basename(ctx.modsDir)} folder in this download` });
+        }
+        return result;
+    }
+
+    // One mod's own folder goes whole into the mods folder, pictures and all, before its
+    // Content/ or textures/ could pass for the game's own folders.
+    const own = ctx.modsDir ? modFolderIn(use) : null;
+    if (own) {
+        const folder = safeFolder(own.folder || ctx.modName || "Mod");
+        for (const file of files) {
+            const rel = under(file, own.top);
+            if (rel !== null) result.placements.push({ from: file, base: "mods", to: `${folder}/${rel}` });
+            else if (!isDoc(file)) result.skipped.push({ file, reason: "beside the mod's folder in this download" });
         }
         return result;
     }

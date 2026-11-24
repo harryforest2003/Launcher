@@ -7,12 +7,15 @@ import { useContentUpdates } from "../components/useContentUpdates";
 import LoaderUpdate from "../components/LoaderUpdate";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
+import { GameWindowCard, LaunchCommandsCard } from "../components/InstanceLaunchSettings";
+import { hooksDraftOf, hooksError, hooksFromDraft, windowDraftOf, windowFromDraft, windowSizeError, type HooksDraft, type WindowDraft } from "../utils/launchSettings";
 import Pagination from "../components/Pagination";
 import SourceDownloads from "../components/SourceDownloads";
 import { Cloud, Folder, Gauge, Hammer, Play, Settings, Square } from "lucide-react";
 import OptimisePanel from "../components/OptimisePanel";
 import { Badge, Segmented, Tabs } from "../components/ui";
 import InstanceArt from "../components/InstanceArt";
+import { InstancePictureCard } from "../components/InstancePicture";
 import ModDescription from "./ModDescription";
 import "./library.css";
 import { AccountClashNotice, PlayAsMenu } from "../components/PlayAs";
@@ -137,6 +140,10 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   /* ---------------- per-instance settings ---------------- */
   const [ramDraft, setRamDraft] = useState<number | null>(null);
   const [jvmDraft, setJvmDraft] = useState<string | null>(null);
+  const [windowDraft, setWindowDraft] = useState<WindowDraft | null>(null);
+  const [hooksDraft, setHooksDraft] = useState<HooksDraft | null>(null);
+  // The game window in Settings, which instances without their own follow.
+  const [globalWindow, setGlobalWindow] = useState<GameWindow | null>(null);
   // What an exported modpack includes beyond mods and config.
   const [exportWorlds, setExportWorlds] = useState(false);
   const [exportOptions, setExportOptions] = useState(false);
@@ -161,6 +168,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         setGlobalJava(s.javaPath ?? "");
         setGlobalTuning(s.javaTuning ?? "performance");
         setGlobalJvmArgs(s.jvmArgs ?? "");
+        setGlobalWindow({ width: s.windowWidth ?? null, height: s.windowHeight ?? null, fullscreen: Boolean(s.fullscreen) });
       })
       .catch(() => setSystem(null));
   }, []);
@@ -171,6 +179,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
     setRamDraft((current) => (current === null ? instance.ram : current));
     setJvmDraft((current) => (current === null ? (instance.jvmArgs ?? "") : current));
+    setWindowDraft((current) => current ?? windowDraftOf(instance.window));
+    setHooksDraft((current) => current ?? hooksDraftOf(instance.launchHooks));
   }, [instance]);
 
   useEffect(() => {
@@ -204,6 +214,10 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     setBusy(null);
   }
 
+  // Why the settings can't be saved as typed, if they can't.
+  const draftProblem =
+    (windowDraft?.own && !windowDraft.fullscreen ? windowSizeError(windowDraft.width, windowDraft.height) : null) ?? (hooksDraft ? hooksError(hooksDraft) : null);
+
   // The -XX: flags typed for this instance (or in Settings, if it has none): they override the sets.
   const ownFlags = (instance?.jvmArgs || globalJvmArgs).split(/\s+/).filter((arg) => arg.startsWith("-XX:"));
 
@@ -221,8 +235,12 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     });
   }
 
-  /* Starts it alongside any other open games: as accountId, or the active account. */
-  async function launch(accountId?: string) {
+  // Where the latest Play was headed, so picking another account after a clash goes there too.
+  const quickPlayRef = useRef<QuickPlay | undefined>(undefined);
+
+  /* Starts it alongside any other open games: as accountId, or the active account, opening a world or server if given. */
+  async function launch(accountId?: string, quickPlay?: QuickPlay) {
+    quickPlayRef.current = quickPlay;
     if (!choice.check(instanceName, accountId)) return;
     setBusy("launch");
     setError(null);
@@ -231,7 +249,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
     try {
       setProgress(null);
       setTab("log");
-      const result = await window.instanceAPI.launch(instanceName, accountId);
+      const result = await window.instanceAPI.launch(instanceName, accountId, quickPlay ? { quickPlay } : undefined);
 
       setNotice(
         result.online
@@ -586,7 +604,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
       )}
 
-      <AccountClashNotice choice={choice} instance={instanceName} className="play-as__clash--spaced" onPlayAs={(id) => launch(id)} />
+      <AccountClashNotice choice={choice} instance={instanceName} className="play-as__clash--spaced" onPlayAs={(id) => launch(id, quickPlayRef.current)} />
 
       {error && (
         <div
@@ -665,7 +683,16 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         />
       )}
 
-      {tab === "worlds" && <InstanceWorlds instanceName={instanceName} mcVersion={instance.version} />}
+      {tab === "worlds" && (
+        <InstanceWorlds
+          instanceName={instanceName}
+          mcVersion={instance.version}
+          running={Boolean(instance.running) || busy === "launch"}
+          onPlay={(quickPlay) => launch(undefined, quickPlay)}
+          backupBeforeUpdates={Boolean(instance.backupWorldsBeforeUpdates)}
+          onBackupBeforeUpdates={(on) => run("backups", () => window.instanceAPI.update(instanceName, { backupWorldsBeforeUpdates: on }))}
+        />
+      )}
 
       {tab === "screenshots" && <InstanceScreenshots instanceName={instanceName} />}
 
@@ -680,6 +707,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {/* ---------------- SETTINGS ---------------- */}
       {tab === "settings" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
+          <InstancePictureCard instanceName={instanceName} onError={setError} />
+
           <div style={card} data-testid="instance-files">
             <p style={{ color: "var(--color-accent-text)", marginBottom: 10 }}>This instance</p>
 
@@ -691,6 +720,22 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 Show Files
               </button>
               <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>Opens its folder in {FILE_MANAGER}.</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+              <button
+                className="sidebar-button"
+                data-testid="desktop-shortcut"
+                onClick={() =>
+                  window.instanceAPI
+                    .desktopShortcut(instanceName)
+                    .then((made) => setNotice(made.replaced ? "Replaced its desktop shortcut." : "Added a shortcut to your desktop. Opening it plays this instance."))
+                    .catch((err) => setError(String(err?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "")))
+                }
+              >
+                Add to desktop
+              </button>
+              <span style={{ color: "var(--color-text-muted)", fontSize: 12 }}>A shortcut that starts the launcher and plays it.</span>
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -849,6 +894,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             />
           </div>
 
+          {windowDraft && <GameWindowCard draft={windowDraft} onChange={setWindowDraft} settings={globalWindow} />}
+
           <div style={card}>
             <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>
               Allocated RAM: {ramDraft ?? instance.ram} GB
@@ -907,16 +954,21 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             </p>
           </div>
 
+          {hooksDraft && <LaunchCommandsCard draft={hooksDraft} onChange={setHooksDraft} windows={system?.platform === "win32"} />}
+
           <div style={{ display: "flex", gap: 10 }}>
             <button
               className="sidebar-button"
               style={{ background: "var(--color-accent)", color: "var(--color-on-accent)" }}
-              disabled={busy === "save"}
+              disabled={busy === "save" || Boolean(draftProblem)}
+              title={draftProblem ?? undefined}
               onClick={() =>
                 run("save", async () => {
                   await window.instanceAPI.update(instanceName, {
                     ram: ramDraft ?? instance.ram,
                     jvmArgs: jvmDraft ?? "",
+                    ...(windowDraft ? { window: windowFromDraft(windowDraft) } : {}),
+                    ...(hooksDraft ? { launchHooks: hooksFromDraft(hooksDraft) } : {}),
                   });
 
                   setNotice("Settings saved — they apply on the next launch.");
@@ -931,6 +983,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               onClick={() => {
                 setRamDraft(instance.ram);
                 setJvmDraft(instance.jvmArgs ?? "");
+                setWindowDraft(windowDraftOf(instance.window));
+                setHooksDraft(hooksDraftOf(instance.launchHooks));
               }}
             >
               Reset

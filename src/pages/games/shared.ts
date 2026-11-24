@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { GAME_MOD_SITES, siteHost } from "../../../electron/shared/gameModSites.mjs";
 
 /* Bits shared by a game section's pages. */
 
@@ -30,18 +31,26 @@ export const SAFE_PLAY: Record<GameId, { button: string; what: string }> = {
   stardew: { button: "Play without SMAPI", what: "SMAPI and its mods" },
 };
 
+export type GameSiteLink = { name: string; url: string; about: string; host: string; searched: boolean };
+
 /*
- * Other sites with mods for a game. They have no way for apps to list their mods (The Sims
- * Resource's terms forbid collecting them), so these open in the browser; what's downloaded
- * there is installed from Downloads on the Mods page.
+ * The websites with mods for a game: the hand-picked list (many of which apps can't search),
+ * then any other site Discover searches for it. A site Discover searches is marked so.
  */
-export const MORE_SITES: Partial<Record<GameId, { name: string; url: string; about: string }[]>> = {
-  sims4: [
-    { name: "Mod Collective", url: "https://www.modcollective.gg/sims4", about: "Thousands of mods and CC from many creators" },
-    { name: "The Sims Resource", url: "https://www.thesimsresource.com/downloads/browse/category/sims4-mods/", about: "One of the biggest Sims CC sites" },
-  ],
-  gtav: [{ name: "GTA5-Mods.com", url: "https://www.gta5-mods.com/", about: "Where most GTA V script mods and vehicles are" }],
-};
+export function modSitesFor(id: GameId, sources: NonNullable<GameSearchPage["sources"]>): GameSiteLink[] {
+  const same = (url: string) => url.toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/\/+$/, "");
+  const sites = (GAME_MOD_SITES[id] ?? []).map((site) => ({ ...site, host: siteHost(site.url), searched: false }));
+  for (const source of sources) {
+    if (!source.ready || !source.page) continue;
+    const page = source.page;
+    // The same page, or the only listed one on that site (the site may name the game differently).
+    const onHost = sites.filter((site) => site.host === siteHost(page));
+    const listed = sites.find((site) => same(site.url) === same(page)) ?? (onHost.length === 1 ? onHost[0] : undefined);
+    if (listed) listed.searched = true;
+    else sites.push({ name: source.label, url: page, about: "Its mods show on the Mods tab too", host: siteHost(page), searched: true });
+  }
+  return sites;
+}
 
 export function shortDate(iso: string | null | undefined) {
   if (!iso) return "";

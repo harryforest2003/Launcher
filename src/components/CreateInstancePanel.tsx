@@ -41,10 +41,11 @@ const DEFAULT_LOADERS: LoaderOption[] = [
   { id: "quilt", name: "Quilt" },
 ];
 
-// The listing to install from: Modrinth's when a pack is on both sites and allows it.
+// The listing to install from: CurseForge's when a pack is on both sites and allows it,
+// as some authors put the full pack there and a lighter one on Modrinth.
 const installableSource = (item: CatalogItem) => {
   const usable = item.sources.filter((source) => source.installable);
-  return usable.find((source) => source.source === "modrinth") ?? usable[0] ?? null;
+  return usable.find((source) => source.source === "curseforge") ?? usable[0] ?? null;
 };
 
 const siteName = (source: string) => (source === "modrinth" ? "Modrinth" : "CurseForge");
@@ -543,7 +544,7 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
               <img src={pack.icon} alt="" />
             </span>
           ) : (
-            <InstanceArt name={nameValue || (startFrom === "modpack" ? pack?.name : "") || "?"} cols={12} rows={5} />
+            <InstanceArt plain name={nameValue || (startFrom === "modpack" ? pack?.name : "") || "?"} cols={12} rows={5} />
           )}
           <p className={`nc-summary-name${nameValue.trim() ? "" : " blank"}`}>{nameValue.trim() || "Name your instance"}</p>
           <dl>

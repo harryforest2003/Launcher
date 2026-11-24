@@ -23,6 +23,11 @@ const SITES: Record<GameModProvider, { name: string; url: string }> = {
   factorio: { name: "Factorio Mod Portal", url: "https://mods.factorio.com/" },
   spacedock: { name: "SpaceDock", url: "https://spacedock.info/" },
   beatmods: { name: "BeatMods", url: "https://beatmods.com/" },
+  modworkshop: { name: "ModWorkshop", url: "https://modworkshop.net/" },
+  ficsit: { name: "ficsit.app", url: "https://ficsit.app/" },
+  vintagestory: { name: "Vintage Story Mod DB", url: "https://mods.vintagestory.at/" },
+  contentdb: { name: "ContentDB", url: "https://content.luanti.org/" },
+  idgames: { name: "idgames archive", url: "https://www.doomworld.com/idgames/" },
 };
 
 /* A mod's page, laid out as Minecraft's: what it is, its files, its pictures, and installing it. */

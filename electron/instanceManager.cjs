@@ -10,6 +10,7 @@ const launcherSettings = require("./minecraft/settings.cjs");
 const { analyzeCrash } = require("./minecraft/crashHelp.cjs");
 const { ensureRuntime, requiredJava } = require("./minecraft/javaRuntime.cjs");
 const { restoreVanillaLibraries } = require("./minecraft/versionData.cjs");
+const launchHooks = require("./minecraft/launchHooks.cjs");
 
 const { instancesDir } = require("./paths.cjs");
 
@@ -288,7 +289,7 @@ function deleteInstance(name) {
 /* ---------------- UPDATE SETTINGS ---------------- */
 
 // Fields the UI is allowed to change after creation.
-const EDITABLE = ["ram", "jvmArgs", "javaPath", "javaTuning", "notes"];
+const EDITABLE = ["ram", "jvmArgs", "javaPath", "javaTuning", "notes", "window", "launchHooks", "keptVersions", "backupWorldsBeforeUpdates"];
 
 function updateInstance(name, patch) {
     if (!patch || typeof patch !== "object") throw new Error("Those settings couldn't be read.");
@@ -340,7 +341,31 @@ function updateInstance(name, patch) {
             continue;
         }
 
-        next[key] = patch[key];
+        // The game window: null follows Settings; otherwise a size (or none) and fullscreen.
+        if (key === "window") {
+            const value = patch.window;
+            next.window = value && typeof value === "object"
+                ? { width: launcherSettings.windowSize(value.width), height: launcherSettings.windowSize(value.height), fullscreen: value.fullscreen === true }
+                : null;
+            continue;
+        }
+
+        if (key === "launchHooks") {
+            next.launchHooks = launchHooks.cleanHooks(patch.launchHooks);
+            continue;
+        }
+
+        // Files kept at the version they are ("mod/sodium.jar"), which updates leave alone.
+        if (key === "keptVersions") {
+            const list = Array.isArray(patch.keptVersions) ? patch.keptVersions : [];
+            next.keptVersions = [...new Set(list.map(String).filter((entry) => /^[a-z]+\/[^/\\]+$/.test(entry)))].slice(0, 2000);
+            continue;
+        }
+
+        if (key === "backupWorldsBeforeUpdates") {
+            next.backupWorldsBeforeUpdates = patch.backupWorldsBeforeUpdates === true;
+            continue;
+        }
     }
 
     fs.writeFileSync(
@@ -598,12 +623,34 @@ function withRunState(instance) {
 }
 
 /*
+ * Where Quick Play goes: a world folder in this instance's saves, or a server address.
+ * Anything else is refused before the game starts.
+ */
+function quickPlayTarget(quickPlay, gameDirectory) {
+    if (!quickPlay || typeof quickPlay !== "object") return null;
+    if (typeof quickPlay.world === "string" && quickPlay.world) {
+        const world = quickPlay.world;
+        const saves = path.join(gameDirectory, "saves");
+        if (/[\\/]/.test(world) || world === "." || world === ".." || !fs.existsSync(path.join(saves, world, "level.dat"))) {
+            throw new Error(`There's no world called "${world}" in this instance.`);
+        }
+        return { world };
+    }
+    if (typeof quickPlay.server === "string" && quickPlay.server) {
+        return { server: require("./minecraft/servers.cjs").cleanAddress(quickPlay.server) };
+    }
+    return null;
+}
+
+/*
  * account is what accountForLaunch gives: id is the saved account's id (null offline).
  * Throws, saying which game has it, when that account is already in one.
  */
-async function launchInstance(name, account, { onProgress } = {}) {
+async function launchInstance(name, account, { onProgress, quickPlay = null } = {}) {
     const instance = getInstance(name);
     const folder = instanceFolder(name);
+    const gameDirectory = instance.gameDirectory ?? path.join(folder, ".minecraft");
+    const target = quickPlayTarget(quickPlay, gameDirectory);
 
     if (!instance.versionId) {
         throw new Error(
@@ -668,6 +715,11 @@ async function launchInstance(name, account, { onProgress } = {}) {
         note(`Left out Java arguments the launcher doesn't use (they could run a program or write a file): ${refusedJvmArgs.map((entry) => entry.arg).join(" ")}. Remove them in Settings.`);
     }
     if (restored) note(`Put back ${restored} of Minecraft's own libraries that an earlier install left out.`);
+    const { resolution, fullscreen } = launcherSettings.gameWindow(instance.window, global);
+    if (fullscreen) note("Starting fullscreen.");
+    else if (resolution) note(`Starting with a ${resolution.width} x ${resolution.height} window.`);
+    if (target?.world) note(`Opening the world "${target.world}" straight away.`);
+    if (target?.server) note(`Joining ${target.server} straight away.`);
     if (launcherSettings.choosesGc(ownJvmArgs)) note("Using your own garbage collection settings.");
     else if (tuning === "performance") note("Using the Performance Java settings: the Minecraft Launcher's, plus no freezes when a mod asks Java to clean up and room for more compiled code.");
     else note("Using the Minecraft Launcher's garbage collection settings, for fewer stutters.");
@@ -683,16 +735,39 @@ async function launchInstance(name, account, { onProgress } = {}) {
         };
         const javaPath = await chooseJava(instance, javaNeed, { onProgress: progress, note });
 
+        // The instance's own commands, each written to the log before it runs.
+        const hooks = launchHooks.cleanHooks(instance.launchHooks);
+        const hookEnv = { ...hooks.env, ...launchHooks.instanceVariables({ instance, folder, gameDirectory, javaPath }) };
+        const hookLog = (text) => recordLog(name, text, run);
+        if (Object.keys(hooks.env).length) note(`Setting environment variables: ${Object.keys(hooks.env).join(", ")}.`);
+        if (hooks.preLaunch) {
+            note(`Running the before-launch command: ${hooks.preLaunch}`);
+            progress({ stage: "launch", detail: "Running the before-launch command" });
+            await launchHooks.runBeforeLaunch(hooks.preLaunch, { cwd: gameDirectory, env: hookEnv, onLog: hookLog });
+        }
+        const wrapper = hooks.wrapper ? launchHooks.splitWords(hooks.wrapper) : [];
+        if (wrapper.length) note(`Starting Java through the wrapper command: ${hooks.wrapper}`);
+
         proc = launch({
             versionJson,
             instanceFolder: folder,
-            gameDirectory: instance.gameDirectory ?? path.join(folder, ".minecraft"),
+            gameDirectory,
             account,
             ram: instance.ram,
             javaPath,
             extraJvmArgs,
+            mcVersion: instance.version,
+            resolution,
+            fullscreen,
+            quickPlay: target,
+            env: hookEnv,
+            wrapper,
             onLog: (text) => recordLog(name, text, run),
             onExit: (code) => {
+                if (hooks.postExit) {
+                    recordLog(name, `[Unity Launcher] Running the after-exit command: ${hooks.postExit}\n`, run);
+                    launchHooks.runAfterExit(hooks.postExit, { cwd: gameDirectory, env: { ...hookEnv, INST_EXIT_CODE: String(code ?? "") }, onLog: hookLog });
+                }
                 // A game stopped and started again: only the newest one is "running".
                 const superseded = runs.get(name) !== run;
                 forgetRun(name, proc);

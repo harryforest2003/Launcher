@@ -116,10 +116,11 @@ const looksNameless = (item) => item.name === item.fileName.replace(/\.(jar|zip)
  * request per kind, and the rest (CurseForge files) one at a time. A stable release is
  * only offered stable updates; a beta can update to anything newer.
  *
- * Returns { checked, identified, updates, status }, where status says for each file
- * ("mod/sodium.jar") whether an update is waiting ("update"), it's the newest
- * ("current"), or it can't be checked ("unknown"), with the name and icon Modrinth
- * gives for files the launcher didn't install.
+ * Returns { checked, identified, updates, status, kept }, where status says for each file
+ * ("mod/sodium.jar") whether an update is waiting ("update"), one is waiting but the file
+ * is kept at its version ("kept"), it's the newest ("current"), or it can't be checked
+ * ("unknown"), with the name and icon Modrinth gives for files the launcher didn't
+ * install. Each update says whether it's a release, beta or alpha build (channel).
  */
 async function checkUpdates(name, instance, folder) {
     const loader = String(instance.loader || "vanilla").toLowerCase();
@@ -129,9 +130,17 @@ async function checkUpdates(name, instance, folder) {
     // A stable release whose newest build is a beta: looked at again for a newer stable one.
     const stableOnly = [];
 
+    // Files kept at their version: their updates are shown, never installed with the rest.
+    const kept = new Set(Array.isArray(instance.keptVersions) ? instance.keptVersions : []);
+
     const LOADERS = { mod: loadersFor("mod", loader), resourcepack: loadersFor("resourcepack"), shader: loadersFor("shader") };
     const addUpdate = (item, latest) => {
-        status[keyOf(item)] = { state: "update", current: item.versionNumber ?? null, latest: latest.versionNumber };
+        const channel = latest.channel ?? "release";
+        if (kept.has(keyOf(item))) {
+            status[keyOf(item)] = { state: "kept", current: item.versionNumber ?? null, latest: latest.versionNumber, latestChannel: channel };
+            return;
+        }
+        status[keyOf(item)] = { state: "update", current: item.versionNumber ?? null, latest: latest.versionNumber, latestChannel: channel };
         pending.push({
             key: keyOf(item),
             type: item.type,
@@ -143,6 +152,7 @@ async function checkUpdates(name, instance, folder) {
             projectId: item.projectId,
             current: item.versionNumber ?? item.fileName,
             latest: latest.versionNumber,
+            channel,
             file: { url: latest.url, fileName: latest.fileName, sha1: latest.sha1 },
         });
     };
@@ -177,7 +187,7 @@ async function checkUpdates(name, instance, folder) {
                 continue;
             }
             const file = version.files.find((f) => f.primary) ?? version.files[0];
-            addUpdate(item, { versionNumber: version.version_number, url: file.url, fileName: file.filename, sha1: file.hashes?.sha1 ?? null });
+            addUpdate(item, { versionNumber: version.version_number, channel: version.version_type, url: file.url, fileName: file.filename, sha1: file.hashes?.sha1 ?? null });
         }
     }
 
@@ -205,6 +215,7 @@ async function checkUpdates(name, instance, folder) {
     );
 
     for (const item of items) status[keyOf(item)] ??= { state: "unknown" };
+    for (const key of kept) if (status[key]) status[key].kept = true;
 
     // Which site each file is from, so its page can be opened from the instance.
     for (const item of items) {
@@ -245,6 +256,7 @@ async function checkUpdates(name, instance, folder) {
         identified: items.filter((item) => item.projectId).length,
         updates: pending.map(({ file, ...update }) => ({ ...update, newFileName: file.fileName })),
         status,
+        kept: [...kept].filter((key) => status[key]),
     };
 }
 
@@ -473,14 +485,49 @@ function undoLastUpdate(folder) {
     return { restored, loader };
 }
 
-/* Installs the chosen updates from the latest check, leaving out any that wouldn't fit. */
-async function applyUpdates(name, instance, folder, keys, { onProgress } = {}) {
+/*
+ * Installs the chosen updates from the latest check, leaving out any that wouldn't fit.
+ * With releasesOnly, an update to a beta or alpha becomes one to the newest full release
+ * that's newer than the file installed; one with no such release stays as it is and is
+ * listed in noRelease.
+ */
+async function applyUpdates(name, instance, folder, keys, { onProgress, releasesOnly = false } = {}) {
     const checked = lastCheck.get(name);
     if (!checked) throw new Error("Check for updates first.");
     const chosen = keys.map((key) => checked.get(key)).filter(Boolean);
-    const result = await runUpdates(instance, folder, chosen, { mode: "skip", onProgress });
+    const noRelease = [];
+    const failed = [];
+    const toInstall = [];
+    for (const update of chosen) {
+        if (!releasesOnly || update.channel === "release") {
+            toInstall.push(update);
+            continue;
+        }
+        onProgress?.({ stage: "updates", percent: 0, detail: `Finding the latest full release of ${update.name}` });
+        const release = await newestReleaseAfter(name, instance, update.key).catch(() => null);
+        if (!release) {
+            noRelease.push({ name: update.name, from: update.current, to: update.latest });
+            continue;
+        }
+        try {
+            toInstall.push(await updateTo(lastItems.get(name).get(update.key), release.id));
+        } catch (err) {
+            failed.push({ name: update.name, reason: err.message });
+        }
+    }
+    const result = await runUpdates(instance, folder, toInstall, { mode: "skip", onProgress });
     for (const update of chosen) checked.delete(update.key);
-    return result;
+    return { ...result, failed: [...failed, ...result.failed], noRelease };
+}
+
+/* The newest full release of an item that's newer than the file installed, if there is one. */
+async function newestReleaseAfter(name, instance, key) {
+    const { versions } = await listVersions(name, instance, key);
+    const installed = versions.find((v) => v.installed);
+    const item = lastItems.get(name)?.get(key);
+    const since = installed ? Date.parse(installed.published) : item?.modrinthVersion ? Date.parse(item.modrinthVersion.published) : NaN;
+    if (Number.isNaN(since)) return null;
+    return versions.find((v) => v.channel === "release" && !v.installed && Date.parse(v.published) > since) ?? null;
 }
 
 const CHANNELS = { 1: "release", 2: "beta", 3: "alpha" };

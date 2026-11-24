@@ -12,6 +12,9 @@ import { addSampleWorkspaces, gamesBridge } from "./gamesMock";
 import { createCatalog } from "../../electron/shared/catalog.mjs";
 import { curseForgeType, modrinthType } from "../../electron/shared/contentTypes.mjs";
 
+// Instance pictures chosen in the preview, kept until the page reloads.
+const mockPictures = new Map<string, string>();
+
 /* The real bridges are loosely typed JSON over IPC, and this mirrors them. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -106,6 +109,11 @@ function initialState(): PreviewState {
       showSnapshots: false,
       cloudFolder: "",
       downloadConcurrency: 8,
+      windowWidth: null,
+      windowHeight: null,
+      fullscreen: false,
+      discordStatus: false,
+      discordClientId: "",
       system: {
         totalRamGb: 32,
         maxRecommendedGb: 24,
@@ -140,6 +148,42 @@ function loadState(): PreviewState {
 const state = loadState();
 // Worlds "added" in the preview, until it reloads.
 const previewWorlds = new Map<string, InstanceWorld[]>();
+// Each instance's server list; the preview pings nothing, so every server answers alike.
+const previewServers = new Map<string, InstanceServer[]>();
+const sampleFoundServers: FoundServer[] = [
+  {
+    id: "preview-survival",
+    slug: "preview-survival",
+    name: "Preview Survival",
+    summary: "A sample server, shown in the browser preview in place of Modrinth's list.",
+    icon: null,
+    address: "survival.example.net",
+    tags: ["survival", "smp"],
+    followers: 1200,
+    versions: ["1.21.1", "1.21.4", "1.21.5"],
+    recommendedVersion: "1.21.5",
+    modpack: null,
+    online: { players: 312, maxPlayers: 1000, version: "1.21.5", latency: null },
+    region: "Europe",
+    url: "https://modrinth.com/servers",
+  },
+  {
+    id: "preview-modded",
+    slug: "preview-modded",
+    name: "Preview Modded",
+    summary: "A sample modded server that asks you to join with its modpack.",
+    icon: null,
+    address: "modded.example.net",
+    tags: ["modded"],
+    followers: 480,
+    versions: [],
+    recommendedVersion: null,
+    modpack: { projectId: null, name: "Preview Pack", icon: null },
+    online: null,
+    region: null,
+    url: "https://modrinth.com/servers",
+  },
+];
 
 function persist() {
   try {
@@ -738,6 +782,10 @@ const instanceBridge = {
   setApiKey: async () => {
     throw new Error("Keys can only be saved in the desktop app. For this preview, use .env.local.");
   },
+  testDiscord: async () => {
+    throw new Error("The preview can't reach Discord. Try it in the desktop app.");
+  },
+  discordState: async () => ({ showing: false, playing: false, error: null }),
   getAccount: async () => activeAccount(),
   clearAccount: async () => {
     removePreviewAccount(state.active);
@@ -793,6 +841,52 @@ const instanceBridge = {
     return [{ folder: world.folder, name: world.name, version: world.version, newer: false }];
   },
   onWorldProgress: () => () => {},
+  worldBackups: async () => [],
+  backupWorld: async () => {
+    throw new Error("Backing up a world needs the desktop app.");
+  },
+  restoreBackup: async () => {
+    throw new Error("Restoring a world needs the desktop app.");
+  },
+  deleteBackup: async () => {},
+  openBackups: async () => {
+    throw new Error("Folders can only be opened in the desktop app.");
+  },
+  shareLog: async () => {
+    throw new Error("Sharing a log needs the desktop app.");
+  },
+  picture: async (name: string) => mockPictures.get(name) ?? null,
+  setPicture: async (name: string, dataUrl: string) => {
+    mockPictures.set(name, dataUrl);
+    return dataUrl;
+  },
+  clearPicture: async (name: string) => {
+    mockPictures.delete(name);
+    return null;
+  },
+  desktopShortcut: async () => {
+    throw new Error("Desktop shortcuts work in the installed launcher, not this preview.");
+  },
+  onShortcutLaunch: () => () => {},
+  servers: async (name: string) => previewServers.get(name) ?? [],
+  addServer: async (name: string, server: { name: string; address: string }) => {
+    const list = previewServers.get(name) ?? [];
+    const address = server.address.trim().toLowerCase();
+    if (list.some((s) => s.address === address)) throw new Error(`${address} is already in this instance's server list.`);
+    const next = [...list, { index: list.length, name: server.name.trim() || "Minecraft Server", address, icon: null, hidden: false }];
+    previewServers.set(name, next);
+    return next;
+  },
+  removeServer: async (name: string, server: { index: number; address: string }) => {
+    const next = (previewServers.get(name) ?? []).filter((s) => s.address !== server.address).map((s, index) => ({ ...s, index }));
+    previewServers.set(name, next);
+    return next;
+  },
+  pingServer: async (): Promise<ServerStatus> => ({ online: true, latency: 42, players: 7, maxPlayers: 20, motd: "A preview server\nPinging needs the desktop app", version: "1.21.5", icon: null }),
+  searchServers: async ({ query = "" }: { query?: string }) => {
+    const servers = sampleFoundServers.filter((s) => s.name.toLowerCase().includes(query.toLowerCase()));
+    return { servers, page: 0, pageCount: 1, total: servers.length };
+  },
   fileAction: async () => {
     throw new Error("Files can only be opened in the desktop app.");
   },
@@ -806,7 +900,7 @@ const instanceBridge = {
   javaInfo: async () => ({ component: "java-runtime-delta", majorVersion: 21, downloaded: false }),
   javaRuntimes: async () => [],
   contentDetails: async () => ({}),
-  checkUpdates: async () => ({ checked: 0, identified: 0, updates: [], status: {} }),
+  checkUpdates: async () => ({ checked: 0, identified: 0, updates: [], status: {}, kept: [] }),
   applyUpdates: async () => ({ updated: [], skipped: [], failed: [], batch: null, dependencies: [], missingDependencies: [], disabledDependencies: [] }),
   versions: async () => ({ name: "", versions: [] }),
   versionChangelog: async () => "",
@@ -964,6 +1058,10 @@ const sampleCatalog: CatalogGame[] = [
   catalogGame("schedule1", "Schedule I"),
   catalogGame("kenshi", "Kenshi"),
   catalogGame("mhwilds", "Monster Hunter Wilds"),
+  catalogGame("payday2", "PAYDAY 2", { providers: [] }),
+  catalogGame("noita", "Noita", { providers: [] }),
+  catalogGame("vintagestory", "Vintage Story", { windowsOnly: false, providers: [] }),
+  catalogGame("luanti", "Luanti", { windowsOnly: false, providers: [] }),
 ];
 
 const installedGameMods: Record<string, InstalledMod[]> = {};

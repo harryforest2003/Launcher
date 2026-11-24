@@ -161,7 +161,7 @@ declare global {
     };
 
     /* Where a mod comes from: Nexus Mods, CurseForge, or one of the other sites (sources/index.cjs). */
-    type GameModProvider = "nexus" | "curseforge" | "thunderstore" | "modio" | "workshop" | "gamebanana" | "factorio" | "spacedock" | "beatmods";
+    type GameModProvider = "nexus" | "curseforge" | "thunderstore" | "modio" | "workshop" | "gamebanana" | "factorio" | "spacedock" | "beatmods" | "modworkshop" | "ficsit" | "vintagestory" | "contentdb" | "idgames";
 
     type GameModUpdate = {
         key: string;
@@ -355,7 +355,8 @@ declare global {
         /* A site that couldn't be searched, while the other could. */
         warnings?: string[];
         /* Every site with mods for the game; ready false: it needs a key not added yet. */
-        sources?: { id: GameModProvider; label: string; ready: boolean; needsKey?: string | null }[];
+        /* The sites with mods for this game; page is the game's own page there. */
+        sources?: { id: GameModProvider; label: string; ready: boolean; needsKey?: string | null; page?: string | null }[];
     };
 
     type GameCollectionSummary = {

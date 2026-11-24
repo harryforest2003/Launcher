@@ -65,7 +65,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [showFilter, setShowFilter] = useState(false);
   // The item whose versions are being chosen from.
-  const [picking, setPicking] = useState<{ key: string; name: string; icon: string | null; suggested?: string } | null>(null);
+  const [picking, setPicking] = useState<{ key: string; name: string; icon: string | null; suggested?: string; kept?: boolean } | null>(null);
 
   // Icons and authors from inside the files; fetched again when files are added or removed.
   const files = ALL_TYPES.flatMap(({ type }) => content[type].map(contentKey)).sort().join("|");
@@ -95,7 +95,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
       version: item.versionNumber ?? status?.current ?? null,
       // Where it came from, or else whether Modrinth knows it (found by its hash).
       source: SOURCE_LABEL[item.source ?? ""] ?? (status && status.state !== "unknown" ? "Modrinth" : "Not on Modrinth or CurseForge"),
-      updateState: item.kind === "file" ? (status?.state ?? null) : ("unknown" as const),
+      updateState: item.kind === "file" ? (status?.kept ? ("kept" as const) : (status?.state ?? null)) : ("unknown" as const),
       project: onOpenProject ? projectOf(item, status) : null,
     };
   });
@@ -258,7 +258,9 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
               <ItemUpdateStatus
                 item={item}
                 updates={updates}
-                onPick={() => setPicking({ key: `${item.type}/${item.fileName}`, name, icon, suggested: status?.state === "update" ? status.latest : undefined })}
+                onPick={() =>
+                  setPicking({ key: `${item.type}/${item.fileName}`, name, icon, suggested: status?.state === "update" || status?.state === "kept" ? status.latest : undefined, kept: Boolean(status?.kept) })
+                }
               />
 
               {item.kind === "file" && (
@@ -295,7 +297,9 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
           name={picking.name}
           icon={picking.icon}
           suggested={picking.suggested}
-          onDone={updates.finish}
+          kept={picking.kept}
+          onKeep={(on) => updates.keep(picking.key, on)}
+          onDone={(done) => updates.finishPicked(picking.key, done)}
           onClose={() => setPicking(null)}
         />
       )}

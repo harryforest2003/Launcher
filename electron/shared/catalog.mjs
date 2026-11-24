@@ -335,11 +335,21 @@ function sourceEntry(item) {
   };
 }
 
-// Modrinth's details come first where a project is on both, because its files can
-// always be downloaded.
+/*
+ * Which listing a card shows and installs from, where a project is on both sites.
+ * Modrinth's, because its files can always be downloaded, except for modpacks: a
+ * Modrinth pack can't carry CurseForge-only mods, so some authors put the full pack on
+ * CurseForge and a lighter one on Modrinth under the same name. A pack comes from
+ * CurseForge unless its authors forbid launchers downloading it there.
+ */
+function takesOver(card, item) {
+  if (item.type !== "modpack") return item.source === "modrinth";
+  return item.source === "curseforge" ? item.installable !== false : card.installable === false;
+}
+
 function addToCard(card, item) {
   const sources = [...card.sources, sourceEntry(item)].sort((a, b) => a.source.localeCompare(b.source)).reverse();
-  if (item.source === "modrinth") Object.assign(card, item);
+  if (takesOver(card, item)) Object.assign(card, item);
   card.sources = sources;
 }
 

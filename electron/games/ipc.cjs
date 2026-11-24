@@ -15,6 +15,7 @@ const nexus = require("./nexus.cjs");
 const { launch } = require("./launch.cjs");
 const { installFromUrl } = require("./remote.cjs");
 const sources = require("./sources/index.cjs");
+const { MOD_SITE_HOSTS, siteHost } = require("../shared/gameModSites.mjs");
 const updates = require("./updates.cjs");
 const saves = require("./saves.cjs");
 const plugins = require("./plugins.cjs");
@@ -545,6 +546,18 @@ function registerGamesIpc() {
                 if (!/^steam:\/\/rungameid\/\d+$/.test(String(url))) throw new Error("Invalid Steam game link.");
                 await openExternalChecked(url, { steam: true });
             } });
+            try {
+                // The Discord status (when it's on in Settings) shows this game while it's open.
+                require("../minecraft/discord.cjs").gameStarted({
+                    id: game.id,
+                    name: game.name,
+                    safe: started.safe === true,
+                    mods: (store.readState(id).mods ?? []).filter((mod) => mod.enabled).length,
+                    watch: require("./running.cjs").watchFor(game, loc),
+                });
+            } catch {
+                // It's extra: never a reason the game didn't start.
+            }
             return { ...started, backedUp, backupError };
         } finally {
             pendingLaunches.delete(game.id);
@@ -732,8 +745,11 @@ function registerGamesIpc() {
         const page = Math.max(0, Number(options?.page) || 0);
         // Thunderstore, mod.io, the Workshop and the rest: the ones with mods for this game.
         const extras = await sources.forGame(game);
-        const builtIn = [...(game.nexus ? [{ id: "nexus", label: "Nexus Mods", ready: true }] : []), ...(game.curseforge ? [{ id: "curseforge", label: "CurseForge", ready: true }] : [])];
-        const offered = [...builtIn, ...extras.map(({ id: source, label, ready, needsKey }) => ({ id: source, label, ready, needsKey }))];
+        const builtIn = [
+            ...(game.nexus ? [{ id: "nexus", label: "Nexus Mods", ready: true, page: `https://www.nexusmods.com/games/${encodeURIComponent(game.nexus)}/mods` }] : []),
+            ...(game.curseforge ? [{ id: "curseforge", label: "CurseForge", ready: true, page: custom.curseforgePage(game.curseforge) }] : []),
+        ];
+        const offered = [...builtIn, ...extras.map(({ id: source, label, ready, needsKey, page }) => ({ id: source, label, ready, needsKey, page }))];
         const asked = String(options?.provider ?? "any");
         const wanted = offered.some((source) => source.id === asked) ? asked : "any";
         let picked = wanted !== "any" ? [wanted] : [...builtIn.map((source) => source.id), ...extras.filter((source) => source.ready && source.primary).map((source) => source.id)];
@@ -913,10 +929,12 @@ function registerGamesIpc() {
     });
 
     ipcMain.handle("games:openUrl", (_e, url) => {
-        const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|store\.steampowered\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com|thunderstore\.io|mod\.io|gamebanana\.com|mods\.factorio\.com|spacedock\.info|beatmods\.com|steamcommunity\.com)\//i;
+        const allowed = /^https:\/\/(www\.)?(nexusmods\.com|curseforge\.com|store\.steampowered\.com|dev-c\.com|smapi\.io|skse\.silverlock\.org|f4se\.silverlock\.org|openiv\.com|modcollective\.gg|thesimsresource\.com|gta5-mods\.com|thunderstore\.io|mod\.io|gamebanana\.com|mods\.factorio\.com|spacedock\.info|beatmods\.com|steamcommunity\.com|modworkshop\.net|ficsit\.app|mods\.vintagestory\.at|content\.luanti\.org|doomworld\.com)\//i;
         // Script Hook V's own site, and Script Hook V .NET's releases (requirements of GTA V mods).
         const frameworks = /^(http:\/\/www\.dev-c\.com\/gtav\/|https:\/\/github\.com\/scripthookvdotnet\/)/i;
-        if ((allowed.test(String(url)) || frameworks.test(String(url))) && openExternalSafely(String(url))) return;
+        // The sites in Discover's Sites tab.
+        const listed = /^https:\/\//i.test(String(url)) && MOD_SITE_HOSTS.has(siteHost(String(url)));
+        if ((allowed.test(String(url)) || frameworks.test(String(url)) || listed) && openExternalSafely(String(url))) return;
         throw new Error("That link isn't one the launcher opens.");
     });
 }

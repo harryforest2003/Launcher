@@ -84,7 +84,8 @@ expose("instanceAPI", {
     remove: (name) => ipcRenderer.invoke("instance:delete", name),
 
     // accountId: a signed-in account's id, to play as it; left out, the active account.
-    launch: (name, accountId) => ipcRenderer.invoke("instance:launch", name, accountId),
+    // options.quickPlay: { world } or { server } to open straight away.
+    launch: (name, accountId, options) => ipcRenderer.invoke("instance:launch", name, accountId, options),
     stop: (name) => ipcRenderer.invoke("instance:stop", name),
     playing: () => ipcRenderer.invoke("instance:playing"),
 
@@ -93,6 +94,29 @@ expose("instanceAPI", {
     screenshots: (name) => ipcRenderer.invoke("instance:screenshots", name),
     fileAction: (name, request) => ipcRenderer.invoke("instance:fileAction", name, request),
     duplicate: (name, newName) => ipcRenderer.invoke("instance:duplicate", name, newName),
+
+    // ----- servers: the instance's list, whether each is up, and finding more -----
+    servers: (name) => ipcRenderer.invoke("servers:list", name),
+    addServer: (name, server) => ipcRenderer.invoke("servers:add", name, server),
+    removeServer: (name, server) => ipcRenderer.invoke("servers:remove", name, server),
+    pingServer: (address) => ipcRenderer.invoke("servers:ping", address),
+    searchServers: (options) => ipcRenderer.invoke("servers:search", options),
+    worldBackups: (name) => ipcRenderer.invoke("backups:list", name),
+    backupWorld: (name, folder) => ipcRenderer.invoke("backups:create", name, folder),
+    restoreBackup: (name, folder, file) => ipcRenderer.invoke("backups:restore", name, folder, file),
+    deleteBackup: (name, folder, file) => ipcRenderer.invoke("backups:delete", name, folder, file),
+    openBackups: (name, folder) => ipcRenderer.invoke("backups:open", name, folder),
+    shareLog: (name) => ipcRenderer.invoke("log:share", name),
+    picture: (name) => ipcRenderer.invoke("instance:picture", name),
+    setPicture: (name, dataUrl) => ipcRenderer.invoke("instance:setPicture", name, dataUrl),
+    clearPicture: (name) => ipcRenderer.invoke("instance:clearPicture", name),
+    desktopShortcut: (name) => ipcRenderer.invoke("instance:desktopShortcut", name),
+    // A desktop shortcut asked for this instance to be played.
+    onShortcutLaunch: (cb) => {
+        const h = (_e, name) => cb(name);
+        ipcRenderer.on("shortcut:launch", h);
+        return () => ipcRenderer.removeListener("shortcut:launch", h);
+    },
 
     // ----- adding worlds: from this computer, a link, or CurseForge -----
     importWorldFile: (name) => ipcRenderer.invoke("worlds:importFile", name),
@@ -162,6 +186,8 @@ expose("instanceAPI", {
     javaRuntimes: () => ipcRenderer.invoke("settings:javaRuntimes"),
     getApiKeys: () => ipcRenderer.invoke("settings:apiKeys"),
     setApiKey: (name, value) => ipcRenderer.invoke("settings:setApiKey", { name, value }),
+    testDiscord: (clientId) => ipcRenderer.invoke("discord:test", clientId),
+    discordState: () => ipcRenderer.invoke("discord:state"),
 
     // ----- account -----
     getAccount: () => ipcRenderer.invoke("account:get"),
@@ -187,7 +213,7 @@ expose("instanceAPI", {
     exportModpack: (name, options) => ipcRenderer.invoke("instance:exportModpack", name, options),
     contentDetails: (name) => ipcRenderer.invoke("instance:contentDetails", name),
     checkUpdates: (name) => ipcRenderer.invoke("instance:checkUpdates", name),
-    applyUpdates: (name, keys) => ipcRenderer.invoke("instance:applyUpdates", name, keys),
+    applyUpdates: (name, keys, options) => ipcRenderer.invoke("instance:applyUpdates", name, keys, options),
     versions: (name, key) => ipcRenderer.invoke("instance:versions", name, key),
     versionChangelog: (name, key, versionId) => ipcRenderer.invoke("instance:versionChangelog", name, key, versionId),
     installVersion: (name, key, versionId, force) => ipcRenderer.invoke("instance:installVersion", name, key, versionId, force),

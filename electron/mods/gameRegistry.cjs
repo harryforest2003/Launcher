@@ -342,7 +342,63 @@ const GAMES = [
         loose: true,
         modExtensions: [".pak", ".dll", ".uplugin"],
         windowsOnly: true,
-        notes: "Most mods are on ficsit.app and are easiest to install with Satisfactory Mod Manager.",
+        notes: "Discover lists ficsit.app's mods: each goes into FactoryGame/Mods with what it needs, the Satisfactory Mod Loader (SML) included.",
+    },
+
+    {
+        id: "payday2",
+        name: "PAYDAY 2",
+        steamAppId: "218620",
+        providers: { nexus: "payday2" },
+        modDir: { relative: ["mods"] },
+        windowsOnly: true,
+        notes: "Most mods need SuperBLT (from superblt.znix.xyz) beside the game's program. Mod overrides go in assets/mod_overrides instead.",
+    },
+
+    {
+        id: "noita",
+        name: "Noita",
+        steamAppId: "881100",
+        providers: { nexus: "noita" },
+        modDir: { relative: ["mods"] },
+        windowsOnly: true,
+        notes: "Turn mods on in the game's Mods menu. Some need \"Allow unsafe mods\" there too.",
+    },
+
+    {
+        id: "vintagestory",
+        name: "Vintage Story",
+        providers: {},
+        modDir: {
+            darwin: [path.join(home, "Library", "Application Support", "VintagestoryData", "Mods")],
+            win32: [path.join(appData(), "VintagestoryData", "Mods")],
+            linux: [path.join(home, ".config", "VintagestoryData", "Mods")],
+        },
+        probes: {
+            darwin: ["/Applications/Vintage Story.app", path.join(home, "Applications", "Vintage Story.app")],
+            win32: [path.join(appData(), "Vintagestory")],
+            linux: [path.join(home, ".local", "share", "vintagestory"), "/opt/vintagestory"],
+        },
+        // The game reads each mod's .zip as it is.
+        modExtensions: [".zip"],
+        notes: "Mods load the next time the game starts; turn them on or off in its Mod Manager.",
+    },
+
+    {
+        id: "luanti",
+        name: "Luanti",
+        providers: {},
+        modDir: {
+            darwin: [path.join(home, "Library", "Application Support", "minetest", "mods"), path.join(home, "Library", "Application Support", "luanti", "mods")],
+            // Luanti on Windows keeps everything in its own folder: choose its mods folder in Settings.
+            win32: [],
+            linux: [path.join(home, ".minetest", "mods"), path.join(home, ".var", "app", "net.minetest.Minetest", ".minetest", "mods")],
+        },
+        probes: {
+            darwin: ["/Applications/Luanti.app", path.join(home, "Applications", "Luanti.app"), "/Applications/minetest.app"],
+            linux: ["/usr/share/luanti", "/usr/share/minetest"],
+        },
+        notes: "Once Luanti was Minetest. Turn mods on per world: Select Mods, under the world's settings.",
     },
 
     {

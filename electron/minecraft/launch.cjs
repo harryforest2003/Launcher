@@ -57,6 +57,7 @@ function buildArguments(versionJson, context) {
         classpath,
         account,
         resolution,
+        quickPlay,
     } = context;
 
     const map = {
@@ -87,14 +88,17 @@ function buildArguments(versionJson, context) {
 
         resolution_width: String(resolution?.width ?? 854),
         resolution_height: String(resolution?.height ?? 480),
+
+        quick_play_singleplayer: quickPlay?.world ?? "",
+        quick_play_multiplayer: quickPlay?.server ?? "",
     };
 
     const features = {
         is_demo_user: false,
         has_custom_resolution: !!resolution,
         has_quick_plays_support: false,
-        is_quick_play_singleplayer: false,
-        is_quick_play_multiplayer: false,
+        is_quick_play_singleplayer: Boolean(quickPlay?.world),
+        is_quick_play_multiplayer: Boolean(quickPlay?.server),
         is_quick_play_realms: false,
     };
 
@@ -126,6 +130,35 @@ function buildArguments(versionJson, context) {
     return { jvm, game };
 }
 
+/*
+ * Whether this Minecraft can open a world or server straight away (Quick Play, 1.20 and
+ * newer): its version file asks for it, or its version number is new enough.
+ */
+function supportsQuickPlay(versionJson, mcVersion) {
+    if (JSON.stringify(versionJson.arguments?.game ?? []).includes("is_quick_play_")) return true;
+    const version = String(mcVersion ?? versionJson.id ?? "");
+    const snapshot = /^(\d\d)w(\d\d)/.exec(version);
+    if (snapshot) return Number(snapshot[1]) > 23 || (Number(snapshot[1]) === 23 && Number(snapshot[2]) >= 14);
+    const [major, minor] = version.split(/[.-]/).map(Number);
+    return major >= 2 || (major === 1 && minor >= 20);
+}
+
+/*
+ * The game arguments that open a world or join a server as the game starts, when the
+ * version file didn't add them itself. Before 1.20 only a server can be joined this way.
+ */
+function quickPlayArgs(game, quickPlay, versionJson, mcVersion) {
+    if (!quickPlay?.world && !quickPlay?.server) return [];
+    if (game.includes("--quickPlaySingleplayer") || game.includes("--quickPlayMultiplayer")) return [];
+    if (supportsQuickPlay(versionJson, mcVersion)) {
+        return quickPlay.world ? ["--quickPlaySingleplayer", quickPlay.world] : ["--quickPlayMultiplayer", quickPlay.server];
+    }
+    if (quickPlay.world) throw new Error("Opening a world straight from the launcher needs Minecraft 1.20 or newer.");
+    const v6 = /^\[([^\]]+)\](?::(\d+))?$/.exec(quickPlay.server);
+    const [host, port] = v6 ? [v6[1], v6[2]] : quickPlay.server.split(":");
+    return ["--server", host, "--port", port || "25565"];
+}
+
 function memoryArgs(ram) {
     const max = Number(ram) > 0 ? Number(ram) : 4;
     const min = Math.max(1, Math.floor(max / 2));
@@ -144,6 +177,12 @@ function launch({
     ram,
     javaPath = "java",
     extraJvmArgs = [],
+    mcVersion,
+    resolution = null,
+    fullscreen = false,
+    quickPlay = null,
+    env = {},
+    wrapper = [],
     onLog,
     onExit,
 }) {
@@ -172,7 +211,14 @@ function launch({
         nativesDir: resolvedNatives,
         classpath,
         account,
+        resolution,
+        quickPlay,
     });
+
+    game.push(...quickPlayArgs(game, quickPlay, versionJson, mcVersion));
+    // Old versions' arguments have no window size of their own.
+    if (resolution && !game.includes("--width")) game.push("--width", String(resolution.width), "--height", String(resolution.height));
+    if (fullscreen && !game.includes("--fullscreen")) game.push("--fullscreen");
 
     fs.mkdirSync(gameDirectory, { recursive: true });
 
@@ -185,7 +231,9 @@ function launch({
         ...game,
     ];
 
-    const proc = spawn(javaPath, args, { cwd: gameDirectory });
+    // A wrapper command (as in "prime-run" or "gamemoderun") runs Java itself.
+    const [program, ...before] = wrapper.length ? [...wrapper, javaPath] : [javaPath];
+    const proc = spawn(program, [...before, ...args], { cwd: gameDirectory, env: { ...process.env, ...env } });
 
     proc.stdout.on("data", d => onLog?.(d.toString()));
     proc.stderr.on("data", d => onLog?.(d.toString()));
@@ -199,4 +247,5 @@ function launch({
 module.exports = {
     launch,
     buildArguments,
+    supportsQuickPlay,
 };

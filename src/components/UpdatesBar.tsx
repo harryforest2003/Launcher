@@ -1,6 +1,8 @@
+import { Pin } from "lucide-react";
 import type { ContentUpdates } from "./useContentUpdates";
 import { updateKey } from "./useContentUpdates";
 import { CheckIcon, DownloadIcon, RefreshIcon } from "./Icons";
+import { Badge, Button, Modal } from "./ui";
 
 const GREEN = "var(--color-success-solid)";
 const GREEN_TEXT = "var(--color-success-text)";
@@ -16,12 +18,14 @@ export function UpdatesControls({ updates }: { updates: ContentUpdates }) {
       ? "Checking for updates..."
       : count
         ? "" // Update All says how many.
-        : "Up to date";
+        : updates.keptWaiting
+          ? `${updates.keptWaiting} kept at ${updates.keptWaiting === 1 ? "its version" : "their versions"}`
+          : "Up to date";
 
   return (
     <div data-testid="updates-bar" style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: count && !busy ? "var(--color-success-text)" : "var(--color-text-muted)", fontSize: 12 }}>
-        {!updates.checking && !busy && !count && (
+        {!updates.checking && !busy && !count && !updates.keptWaiting && (
           <span style={{ color: GREEN_TEXT, display: "inline-flex" }}>
             <CheckIcon size={14} />
           </span>
@@ -64,7 +68,48 @@ export function UpdatesControls({ updates }: { updates: ContentUpdates }) {
           Update All ({count})
         </button>
       )}
+
+      <UnstableUpdates updates={updates} />
     </div>
+  );
+}
+
+/* Before Update All installs a beta or alpha: back out, update anyway, or full releases only. */
+function UnstableUpdates({ updates }: { updates: ContentUpdates }) {
+  const list = updates.unstable ?? [];
+  return (
+    <Modal
+      open={list.length > 0}
+      onClose={() => updates.resolveUnstable("cancel")}
+      title={list.length === 1 ? "One update is a beta or alpha" : `${list.length} updates are betas or alphas`}
+      lead="They aren't finished releases, so they can have bugs or harm worlds."
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => updates.resolveUnstable("cancel")}>
+            Back out
+          </Button>
+          <Button data-testid="update-anyway" onClick={() => updates.resolveUnstable("anyway")}>
+            Update anyway
+          </Button>
+          <Button variant="primary" data-testid="update-releases" onClick={() => updates.resolveUnstable("releases")}>
+            Latest full releases only
+          </Button>
+        </>
+      }
+    >
+      <ul data-testid="unstable-updates" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+        {list.map((update) => (
+          <li key={update.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, minWidth: 0 }}>
+            <span style={{ fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{update.name}</span>
+            <span style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>to {update.latest}</span>
+            <Badge tone={update.channel === "alpha" ? "danger" : "warning"}>{update.channel === "alpha" ? "Alpha" : "Beta"}</Badge>
+          </li>
+        ))}
+      </ul>
+      <p style={{ color: "var(--color-text-muted)", fontSize: 12, marginTop: 12 }}>
+        Latest full releases only still updates everything else, and moves each of these to its newest full release instead, when one is newer than the version you have.
+      </p>
+    </Modal>
   );
 }
 
@@ -126,6 +171,23 @@ export function ItemUpdateStatus({ item, updates, onPick }: { item: InstanceMod;
 
   if (!status) {
     return updates.checking ? <span style={{ ...SLOT, color: "var(--color-text-muted)" }}>…</span> : null;
+  }
+
+  // Kept at its version: a pin, whether or not a newer build is out.
+  if (status.kept && (status.state === "kept" || status.state === "current")) {
+    return (
+      <button
+        data-testid="item-kept"
+        title={`Kept at ${status.current ?? "its version"}: Update All leaves it alone.${status.state === "kept" ? ` ${status.latest} is out.` : ""} Click to choose a version or stop keeping it.`}
+        aria-label={`Choose a version of ${status.name ?? item.name} (kept at its version)`}
+        disabled={updates.installing.length > 0}
+        onClick={() => onPick(item)}
+        className="tick-button"
+        style={{ ...SLOT, padding: 0, color: status.state === "kept" ? "var(--color-warning-text)" : "var(--color-text-secondary)" }}
+      >
+        <Pin size={16} />
+      </button>
+    );
   }
 
   if (status.state === "update") {

@@ -223,3 +223,13 @@
 .gd-page .dc-bar__row--tabs { gap: var(--space-3); }
 .gd-page .dc-bar__source { margin-left: auto; flex-shrink: 0; }
 .gd-page .dc-bar__row--tabs .dc-bar__count { margin-left: 0; }
+
+/* Mods, Collections and Sites. */
+.gd-page .dc-bar__row--tabs .dc-tabs--three { width: 340px; }
+
+/* The Sites tab: one line above the list of sites. */
+.gd-sites-note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}

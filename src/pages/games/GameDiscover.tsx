@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Clock, Download, ExternalLink, Heart, Info } from "lucide-react";
+import { Clock, Download, Heart, Info } from "lucide-react";
 import "../discover.css";
 import "./gameDiscover.css";
 import Pagination from "../../components/Pagination";
 import DiscoverRow from "../DiscoverRow";
 import CollectionsList from "./CollectionsList";
-import { countText, errorText, installSummary, MORE_SITES, shortDate } from "./shared";
+import GameSites from "./GameSites";
+import { countText, errorText, installSummary, modSitesFor, shortDate } from "./shared";
 import { Badge, Button, EmptyState, Monogram, Notice, SearchField, Select, Skeleton, Tabs } from "../../components/ui";
 
 type Props = {
@@ -47,6 +48,11 @@ const BADGE: Record<string, { label: string }> = {
   factorio: { label: "Factorio" },
   spacedock: { label: "SpaceDock" },
   beatmods: { label: "BeatMods" },
+  modworkshop: { label: "ModWorkshop" },
+  ficsit: { label: "ficsit.app" },
+  vintagestory: { label: "Mod DB" },
+  contentdb: { label: "ContentDB" },
+  idgames: { label: "idgames" },
 };
 
 type Offered = NonNullable<GameSearchPage["sources"]>;
@@ -58,8 +64,8 @@ type Offered = NonNullable<GameSearchPage["sources"]>;
  * Clicking a card opens the mod's page; the download button installs its main file.
  */
 export default function GameDiscover({ detail, openMod, afterInstall, openOnNexus, goLauncherSettings, goMods, openCollection }: Props) {
-  // Single mods, or Nexus Mods collections (whole lists of mods).
-  const [showing, setShowing] = useState<"mods" | "collections">("mods");
+  // Single mods, Nexus Mods collections (whole lists of mods), or every website with mods for it.
+  const [showing, setShowing] = useState<"mods" | "collections" | "sites">("mods");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   // Games on several sites start with all of them, mixed, as Minecraft's Discover does.
@@ -188,7 +194,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
   const sourceLabel = (id: string) => offered.find((source) => source.id === id)?.label ?? BADGE[id]?.label ?? id;
   const label = provider === "any" ? "every site" : sourceLabel(provider);
   const showsNexus = Boolean(detail.nexus) && (provider === "any" || provider === "nexus");
-  const hasTips = !!MORE_SITES[detail.id] || (showsNexus && !!account && !account.premium);
+  const hasTips = showsNexus && !!account && !account.premium;
   useEffect(() => {
     if (!infoOpen) return;
     const away = (event: MouseEvent) => {
@@ -223,8 +229,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
               <div className="dc-info" ref={infoRef}>
                 <Button
                   variant="ghost"
-                  aria-label="More sites and notes"
-                  title="More sites and notes"
+                  aria-label="Notes on installing"
+                  title="Notes on installing"
                   aria-expanded={infoOpen}
                   aria-controls="discover-info"
                   icon={<Info size={16} aria-hidden="true" />}
@@ -232,28 +238,6 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
                 />
                 {infoOpen && (
                   <div id="discover-info" className="dc-info__panel" data-testid="more-sites">
-                    {MORE_SITES[detail.id] && (
-                      <>
-                        <div className="dc-info__sites">
-                          <span className="dc-info__label">More sites</span>
-                          {MORE_SITES[detail.id]!.map((site) => (
-                            <Button
-                              key={site.url}
-                              size="sm"
-                              variant="ghost"
-                              icon={<ExternalLink size={13} aria-hidden="true" />}
-                              data-tip={`${site.about}. Opens in your browser`}
-                              onClick={() => window.gamesAPI.openUrl(site.url).catch((err) => setMessage({ tone: "bad", text: errorText(err) }))}
-                            >
-                              {site.name}
-                            </Button>
-                          ))}
-                        </div>
-                        <p title="These sites don't let apps list their mods.">
-                          Download there, then <button type="button" className="dc-link" onClick={() => { setInfoOpen(false); goMods(); }}>Add from Downloads</button>.
-                        </p>
-                      </>
-                    )}
                     {showsNexus && account && !account.premium && (
                       <p title={`Using ${account.name}'s Nexus Mods key. Nexus only lets apps download straight away for Premium accounts, so Install opens the file's download on the website: press the download button there and the launcher installs it by itself.`}>
                         Nexus: Install opens the download on the site; press its button and the launcher finishes.
@@ -266,18 +250,17 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
           </div>
         )}
         <div className="dc-bar__row dc-bar__row--tabs">
-          {detail.nexus && (
-            <div className="dc-tabs"><Tabs
-              label="Discover"
-              idBase="discover"
-              value={showing}
-              onChange={setShowing}
-              tabs={[
-                { value: "mods", label: "Mods" },
-                { value: "collections", label: "Collections" },
-              ]}
-            /></div>
-          )}
+          <div className={`dc-tabs${detail.nexus ? " dc-tabs--three" : ""}`}><Tabs
+            label="Discover"
+            idBase="discover"
+            value={showing}
+            onChange={setShowing}
+            tabs={[
+              { value: "mods", label: "Mods" },
+              ...(detail.nexus ? [{ value: "collections" as const, label: "Collections" }] : []),
+              { value: "sites", label: "Sites", count: modSitesFor(detail.id, offered).length },
+            ]}
+          /></div>
           {showing === "mods" && offered.length > 1 && (
             <Select size="sm" wrapperClassName="dc-bar__source" value={provider} onChange={(event) => setProvider(event.target.value as "any" | GameModProvider)} aria-label="Where to search">
               <option value="any">Any site</option>
@@ -300,6 +283,8 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
       </div>
       {showing === "collections" ? (
         <CollectionsList detail={detail} openCollection={openCollection} />
+      ) : showing === "sites" ? (
+        <GameSites detail={detail} sources={offered} checking={loading && !offered.length} goMods={goMods} />
       ) : (
       <>
 

@@ -1,12 +1,15 @@
 /*
- * Unity Launcher's CurseForge proxy, a Cloudflare Worker.
+ * Unity Launcher's proxy, a Cloudflare Worker: CurseForge, and the Steam Workshop.
  *
  * CurseForge gives API keys to apps, not players, and anything inside a downloaded app
  * can be read out of it. So the launcher carries no key: it asks this Worker, which adds
- * the key on Cloudflare's side and passes the answer back. The key lives only in the
- * Worker's secret store (wrangler secret put CURSEFORGE_API_KEY).
+ * the key on Cloudflare's side and passes the answer back. The keys live only in the
+ * Worker's secret store (wrangler secret put CURSEFORGE_API_KEY, STEAM_WEB_API_KEY).
  *
- * Only the requests the launcher makes get through, at a limited rate, so the key
+ * Steam's Workshop search needs a Steam Web API key too. Players can add their own in the
+ * launcher's Settings; everyone else's searches come here, under /steam/.
+ *
+ * Only the requests the launcher makes get through, at a limited rate, so the keys
  * can't be borrowed for anything else.
  */
 
@@ -27,6 +30,62 @@ const POST_ROUTES = {
   "/v1/mods": "modIds",
   "/v1/mods/files": "fileIds",
 };
+
+const STEAM = "https://api.steampowered.com";
+
+// Query words a Steam request may carry, each with what it may hold. Anything else is
+// dropped, a caller's own "key" included.
+const number = (max) => (value) => /^\d{1,20}$/.test(value) && (max === undefined || Number(value) <= max);
+const flag = (value) => value === "true" || value === "false";
+const text = (max) => (value) => value.length <= max;
+
+// Workshop calls the launcher makes, and how long (in seconds) an answer may be reused.
+const STEAM_ROUTES = {
+  "/steam/IPublishedFileService/QueryFiles/v1/": {
+    cache: 300,
+    required: ["appid"],
+    params: {
+      appid: number(),
+      query_type: number(100),
+      page: number(1000),
+      numperpage: number(100),
+      days: number(3650),
+      filetype: number(100),
+      return_vote_data: flag,
+      return_short_description: flag,
+      return_details: flag,
+      totalonly: flag,
+      search_text: text(200),
+      cursor: text(200),
+    },
+  },
+  "/steam/IPublishedFileService/GetDetails/v1/": {
+    cache: 600,
+    required: ["publishedfileids[0]"],
+    params: {
+      ...Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`publishedfileids[${i}]`, number()])),
+      includeadditionalpreviews: flag,
+      includechildren: flag,
+    },
+  },
+  "/steam/ISteamUser/GetPlayerSummaries/v2/": {
+    cache: 3600,
+    required: ["steamids"],
+    params: { steamids: (value) => /^\d{1,20}(,\d{1,20}){0,99}$/.test(value) },
+  },
+};
+
+/* A Steam request's query, rebuilt from the words it may carry, or null if one is wrong. */
+function steamQuery(route, search) {
+  const out = new URLSearchParams();
+  for (const [name, value] of search) {
+    const valid = route.params[name];
+    if (!valid) continue;
+    if (!valid(value)) return null;
+    out.set(name, value);
+  }
+  return route.required.every((name) => out.has(name)) ? out : null;
+}
 
 const MAX_IDS = 50;
 const MAX_BODY_BYTES = 4096;
@@ -81,24 +140,60 @@ async function batchBody(request, field) {
   return valid ? JSON.stringify({ [field]: ids }) : null;
 }
 
+/* A Workshop request, with the launcher's Steam key added. */
+async function steam(request, env, url, route) {
+  if (!env.STEAM_WEB_API_KEY) return reply(503, "This proxy has no Steam key yet.");
+  if (request.method !== "GET") return reply(405, "Only GET here.");
+
+  const query = steamQuery(route, url.searchParams);
+  if (!query) return reply(400, "That isn't a request the launcher makes.");
+
+  const caller = request.headers.get("cf-connecting-ip") ?? "unknown";
+  if (!(await allow(env, `steam:${caller}`))) return busy();
+
+  query.set("key", env.STEAM_WEB_API_KEY);
+  const upstream = await fetch(`${STEAM}${url.pathname.slice("/steam".length)}?${query}`, {
+    headers: { Accept: "application/json", "User-Agent": "UnityLauncher-proxy/1.0 (+https://github.com/harryforest2003/Launcher)" },
+    cf: { cacheTtl: route.cache, cacheEverything: true },
+  });
+  if (upstream.status === 429) return busy();
+
+  const out = new Headers({ "Content-Type": upstream.headers.get("Content-Type") ?? "application/json" });
+  if (upstream.ok) out.set("Cache-Control", `public, max-age=${route.cache}`);
+  return new Response(upstream.body, { status: upstream.status, headers: out });
+}
+
+// Counted per address. Many players can share one (a school network, say), so the
+// limit is generous; it's there to stop someone using a key for something else.
+async function allow(env, key) {
+  return env.LIMITER ? (await env.LIMITER.limit({ key })).success : fallbackLimit(key);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (!env.CURSEFORGE_API_KEY) {
-      return reply(503, "This proxy has no CurseForge key yet.");
+    // Which sites this proxy has a key for, so the launcher knows what to ask it.
+    if (url.pathname === "/status" && request.method === "GET") {
+      return new Response(JSON.stringify({ curseforge: Boolean(env.CURSEFORGE_API_KEY), steam: Boolean(env.STEAM_WEB_API_KEY) }), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" },
+      });
     }
+
+    const steamRoute = STEAM_ROUTES[url.pathname];
+    if (steamRoute) return steam(request, env, url, steamRoute);
 
     const getRoute = request.method === "GET" && GET_ROUTES.find((route) => route.path.test(url.pathname));
     const postField = request.method === "POST" && POST_ROUTES[url.pathname];
 
     if (!getRoute && !postField) return reply(404, "Not something this proxy does.");
 
-    // Counted per address. Many players can share one (a school network, say), so the
-    // limit is generous; it's there to stop someone using the key for something else.
+    if (!env.CURSEFORGE_API_KEY) {
+      return reply(503, "This proxy has no CurseForge key yet.");
+    }
+
     const caller = request.headers.get("cf-connecting-ip") ?? "unknown";
-    const allowed = env.LIMITER ? (await env.LIMITER.limit({ key: caller })).success : fallbackLimit(caller);
-    if (!allowed) return busy();
+    if (!(await allow(env, caller))) return busy();
 
     const headers = {
       "x-api-key": env.CURSEFORGE_API_KEY,

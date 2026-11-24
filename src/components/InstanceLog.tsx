@@ -71,6 +71,8 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
   const [jumps, setJumps] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [shared, setShared] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   // The latest content change that can be undone, offered when the game crashes.
   const [lastBatch, setLastBatch] = useState<Awaited<ReturnType<typeof window.instanceAPI.lastUpdate>>>(null);
   const view = useRef<HTMLDivElement>(null);
@@ -331,6 +333,15 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
       )}
 
       {notice && <div style={{ color: "var(--color-success-text)", fontSize: 13 }}>{notice}</div>}
+      {shared && (
+        <div data-testid="log-shared" style={{ color: "var(--color-text-secondary)", fontSize: 13, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          Shared at
+          <a href={shared} onClick={(e) => { e.preventDefault(); window.modAPI.openUrl(shared).catch((err) => setError(message(err))); }}>
+            {shared}
+          </a>
+          (the link is copied)
+        </div>
+      )}
       {error && (
         <div role="alert" style={{ color: "var(--color-danger-text)", fontSize: 13 }}>
           {error}
@@ -385,6 +396,28 @@ export default function InstanceLog({ instanceName, onRepair, onOpenTab }: Props
           }
         >
           Copy
+        </button>
+        <button
+          className="sidebar-button"
+          style={{ padding: "6px 12px", fontSize: 12 }}
+          disabled={!lines.length || sharing}
+          title="Upload the log to mclo.gs and copy a link to it, to send to whoever is helping you"
+          onClick={async () => {
+            if (!window.confirm("Upload this log to mclo.gs so you can share a link to it? Anyone with the link can read it. Your login token, email addresses and your computer's user name are hidden first.")) return;
+            setSharing(true);
+            setError(null);
+            try {
+              const { url } = await window.instanceAPI.shareLog(instanceName);
+              setShared(url);
+              await navigator.clipboard.writeText(url).catch(() => {});
+            } catch (err) {
+              setError(message(err));
+            } finally {
+              setSharing(false);
+            }
+          }}
+        >
+          {sharing ? "Sharing…" : "Share"}
         </button>
         <button className="sidebar-button" style={{ padding: "6px 12px", fontSize: 12 }} onClick={() => window.instanceAPI.openLogFile(instanceName).catch((err) => setError(message(err)))}>
           Open Logs Folder

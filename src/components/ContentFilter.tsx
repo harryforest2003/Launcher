@@ -81,6 +81,7 @@ export default function ContentFilter({ filters, counts, matching, onChange, onC
           <Section title="Updates">
             <Grid>
               <Check label="Has an update" count={counts.updates.update ?? 0} checked={filters.updates.includes("update")} onChange={() => set({ updates: toggle(filters.updates, "update") })} />
+              <Check label="Kept at its version" count={counts.updates.kept ?? 0} checked={filters.updates.includes("kept")} onChange={() => set({ updates: toggle(filters.updates, "kept") })} />
               <Check label="Up to date" count={counts.updates.current ?? 0} checked={filters.updates.includes("current")} onChange={() => set({ updates: toggle(filters.updates, "current") })} />
               <Check label="Can't be checked" count={counts.updates.unknown ?? 0} checked={filters.updates.includes("unknown")} onChange={() => set({ updates: toggle(filters.updates, "unknown") })} />
             </Grid>

@@ -1,4 +1,5 @@
 import BackgroundLogo from "../components/BackgroundLogo";
+import { onLaunchRequest } from "../utils/launchRequests";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import CreateInstancePanel from "../components/CreateInstancePanel";
 import InstanceArt from "../components/InstanceArt";
@@ -20,6 +21,7 @@ import {
   LayoutGrid,
   List,
   Loader2,
+  MonitorUp,
   MoreHorizontal,
   Package,
   PackageOpen,
@@ -222,6 +224,20 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
               }),
             1500
           );
+      }),
+    []
+  );
+
+  // A desktop shortcut asked for an instance: it's shown and played.
+  const playRef = useRef(play);
+  useEffect(() => {
+    playRef.current = play;
+  });
+  useEffect(
+    () =>
+      onLaunchRequest((name) => {
+        setCurrent(name);
+        void playRef.current(name);
       }),
     []
   );
@@ -1358,6 +1374,25 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
             }}
           >
             <Folder size={15} aria-hidden="true" /> Open folder
+          </button>
+          <button
+            role="menuitem"
+            data-testid="menu-desktop-shortcut"
+            onClick={() => {
+              const name = menu.name;
+              setMenu(null);
+              window.instanceAPI
+                .desktopShortcut(name)
+                .then((made) =>
+                  setMessage({
+                    tone: "good",
+                    text: made.replaced ? `Replaced ${name}'s desktop shortcut.` : `Added ${name} to your desktop. Opening the shortcut plays it.`,
+                  }),
+                )
+                .catch((err) => setMessage({ tone: "bad", text: plain(err) }));
+            }}
+          >
+            <MonitorUp size={15} aria-hidden="true" /> Add to desktop
           </button>
           <hr />
           <button

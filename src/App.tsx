@@ -19,6 +19,7 @@ import AppSidebar, { type ShellTarget } from "./components/ui/AppSidebar";
 import { ShellContext, navKey, type McPage, type PageNav, type Shell } from "./components/ui/shellContext";
 import Toaster from "./components/ui/Toaster";
 import { leaveBlockbench } from "./components/leaveBlockbench";
+import { requestLaunch } from "./utils/launchRequests";
 
 export type Screen =
   | "home"
@@ -109,6 +110,16 @@ function App() {
     }, LEAVE_MS);
   }, []);
   useEffect(() => () => window.clearTimeout(swap.current), []);
+
+  // A desktop shortcut: the Library opens and plays that instance.
+  useEffect(
+    () =>
+      window.instanceAPI?.onShortcutLaunch?.((name) => {
+        requestLaunch(name);
+        navigate((now) => ({ ...now, screen: "library", modGame: undefined }));
+      }),
+    [navigate]
+  );
 
   const setScreen = useCallback((screen: Screen) => navigate((now) => ({ ...now, screen, modGame: undefined })), [navigate]);
   const openGame = useCallback((gameId: GameId) => navigate(() => ({ screen: "game", gameId })), [navigate]);
