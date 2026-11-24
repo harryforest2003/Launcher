@@ -227,6 +227,54 @@ const CC_PICTURES: Record<string, string> = {
 };
 
 const setsByGame: Partial<Record<GameId, GameSet[]>> = { sims4: [{ id: "s1", name: "Gameplay", keys: ["m:mccc", "m:ww"] }] };
+// Mod profiles, as the launcher keeps them: each with the mods that were on when it was left.
+type MockProfiles = { active: string; list: (GameProfile & { on: string[] })[] };
+const profilesByGame: Partial<Record<GameId, MockProfiles>> = {};
+function profilesNow(id: GameId): GameProfiles {
+  const data = profilesByGame[id];
+  if (!data) return { active: null, profiles: [], turnedOff: 0 };
+  const have = new Set((MODS[id] ?? []).map((m) => m.key));
+  const anywhere = new Set(data.list.flatMap((p) => p.keys));
+  const active = data.list.find((p) => p.id === data.active)!;
+  for (const key of have) if (!anywhere.has(key)) active.keys.push(key);
+  return { active: data.active, profiles: data.list.map((p) => ({ id: p.id, name: p.name, keys: p.keys.filter((k) => have.has(k)) })), turnedOff: 0 };
+}
+// A Bethesda game's INI files and modding tools, for the preview.
+const INI_TEXT: Record<string, string> = {
+  "Skyrim.ini": "[General]\nsLanguage=ENGLISH\nuGridsToLoad=5\n\n[Archive]\nbInvalidateOlderFiles=1\nsResourceArchiveList=Skyrim - Misc.bsa, Skyrim - Shaders.bsa\n\n[Display]\nfShadowLODMaxStartFade=1000.0000\n",
+  "SkyrimPrefs.ini": "[Display]\niSize W=1920\niSize H=1080\nbFull Screen=1\n\n[Imagespace]\nbDoDepthOfField=1\n",
+  "SkyrimCustom.ini": "",
+};
+const iniBackups: Record<string, IniBackup[]> = { "Skyrim.ini": [{ id: "1732300000000", at: "2026-11-22T18:26:40.000Z", size: 180 }] };
+const iniHas = (text: string, key: string, value: string) => text.split("\n").some((line) => line.trim().toLowerCase() === `${key.toLowerCase()}=${value}`);
+function iniNow(id: GameId): IniFiles {
+  if (id !== "skyrimse") throw new Error("Fallout 4 hasn't made its settings folder yet: start the game once, then try again.");
+  const papyrus = ["bEnableLogging", "bEnableTrace", "bLoadDebugInformation"].map((key) => iniHas(INI_TEXT["Skyrim.ini"], key, "1"));
+  return {
+    game: "Skyrim Special Edition",
+    folder: "C:/users/crossover/Documents/My Games/Skyrim Special Edition",
+    files: Object.keys(INI_TEXT).map((name) => ({ name, size: INI_TEXT[name].length, modified: "2026-11-23T20:10:00.000Z", backups: iniBackups[name]?.length ?? 0 })),
+    presets: [
+      {
+        id: "papyrus",
+        label: "Papyrus script logs",
+        detail: "Writes script logs (My Games > Logs > Script) for finding a broken mod. Slows the game a little: turn off when done.",
+        file: "Skyrim.ini",
+        state: papyrus.every(Boolean) ? "on" : papyrus.some(Boolean) ? "partial" : "off",
+      },
+    ],
+  };
+}
+const iniFile = (name: string): IniFile => ({ name, text: INI_TEXT[name] ?? "", backups: iniBackups[name] ?? [] });
+const SSE_BOTTLE = "/Users/you/Library/Application Support/CrossOver/Bottles/Steam/drive_c/Program Files (x86)/Steam/steamapps/common/Skyrim Special Edition";
+const toolsByGame: Partial<Record<GameId, ModTool[]>> = {
+  skyrimse: [
+    { id: "t1", name: "xEdit", kind: "xedit", about: "Cleans and checks plugins, and patches conflicts.", exe: `${SSE_BOTTLE}/SSEEdit/SSEEdit.exe`, args: "", found: true, exists: true },
+    { id: "t2", name: "BodySlide", kind: "bodyslide", about: "Builds body and outfit meshes for the sliders you pick.", exe: `${SSE_BOTTLE}/Data/CalienteTools/BodySlide/BodySlide x64.exe`, args: "", found: true, exists: true },
+    { id: "t3", name: "Nemesis", kind: "nemesis", about: "Builds animation behaviour files: run after adding or removing animation mods.", exe: `${SSE_BOTTLE}/Data/Nemesis_Engine/Nemesis Unlimited Behavior Engine.exe`, args: "", found: true, exists: true },
+  ],
+};
+const toolsNow = (id: GameId): ModTools => ({ tools: toolsByGame[id] ?? [], hidden: 0, howToRun: id === "skyrimse" ? null : "The game isn't in a CrossOver bottle yet." });
 let finderState: { phase: GameFinder["phase"]; suspects: string[]; testing: string[]; round: number } | null = null;
 const finderStatus = (id: GameId): GameFinder => {
   if (!finderState) return { active: false };
@@ -588,7 +636,7 @@ export const gamesBridge = {
   checkUpdates: async (id: GameId): Promise<GameUpdateCheck> => ({
     updates: (MODS[id] ?? [])
       .filter((m) => updatable.has(m.key))
-      .map((m) => ({ key: m.key, name: m.name, provider: "nexus" as const, modId: "123", fromVersion: "2025.9", toVersion: "2025.11", toFileId: "9", toName: m.name, date: daysAgo(3), size: 2_000_000 })),
+      .map((m) => ({ key: m.key, name: m.name, provider: "nexus" as const, modId: "123", fromVersion: "2025.9", toVersion: "2025.11", toFileId: "9", toName: m.name, date: daysAgo(3), size: 2_000_000, kept: m.kept || undefined })),
     checked: (MODS[id] ?? []).filter((m) => m.managed).length,
     unknown: 0,
     needsKey: 0,
@@ -616,6 +664,25 @@ export const gamesBridge = {
     }
     updatable.add(key);
     return { restored: key, version: "2025.9" };
+  },
+  // A made-up code: the desktop app squeezes the real list; the preview only shows it.
+  shareCode: async (id: GameId) => {
+    const mods = (MODS[id] ?? []).filter((m) => m.enabled);
+    const linked = mods.filter((m) => m.managed && m.source?.provider !== "hand");
+    return { code: `unity1:preview-${id}-${linked.length}-mods`, linked: linked.length, missing: mods.filter((m) => !linked.includes(m)).map((m) => m.name) };
+  },
+  readShareCode: async (id: GameId, code: string) => {
+    if (!code.trim().startsWith("unity1:")) throw new Error("That isn't a share code this launcher can read. Check it was copied whole.");
+    const have = new Set((MODS[id] ?? []).map((m) => m.name));
+    const mods = ["SkyUI", "Unofficial Patch", "Better Dialogue Controls"].map((name, i) => ({ provider: "nexus", modId: String(100 + i), fileId: null, name, installed: have.has(name) }));
+    return { mods, missing: ["My own tweak"] };
+  },
+  keepVersion: async (_id: GameId, key: string, kept: boolean) => {
+    for (const list of Object.values(MODS)) {
+      const found = list?.find((m) => m.key === key);
+      if (found) found.kept = kept || undefined;
+    }
+    return { kept };
   },
   nexusAccount: async () => ({ name: "PreviewUser", premium: false }),
   // As the desktop app: Steam's signed-in player for games found in Steam, else where sign-in happens.
@@ -734,6 +801,106 @@ export const gamesBridge = {
       }
     }
     return { changed };
+  },
+
+  profiles: async (id: GameId) => profilesNow(id),
+  saveProfile: async (id: GameId, profile: { id?: string | null; name: string; copyOf?: string | null }) => {
+    const mods = MODS[id] ?? [];
+    const data = (profilesByGame[id] ??= { active: "p0", list: [{ id: "p0", name: "Default", keys: mods.map((m) => m.key), on: [] }] });
+    const name = profile.name.trim();
+    if (!name) throw new Error("A profile needs a name.");
+    if (data.list.some((p) => p.id !== profile.id && p.name.toLowerCase() === name.toLowerCase())) throw new Error(`There's already a profile called ${name}.`);
+    const existing = profile.id && data.list.find((p) => p.id === profile.id);
+    if (existing) {
+      existing.name = name;
+      return profilesNow(id);
+    }
+    const fromId = profile.copyOf === "active" ? data.active : profile.copyOf;
+    const from = fromId ? data.list.find((p) => p.id === fromId) : null;
+    const on = from ? (from.id === data.active ? mods.filter((m) => m.enabled && from.keys.includes(m.key)).map((m) => m.key) : from.on) : [];
+    const created = { id: `p${Date.now()}`, name, keys: from ? [...from.keys] : [], on: [...on] };
+    data.list.push(created);
+    return { ...profilesNow(id), created: created.id };
+  },
+  deleteProfile: async (id: GameId, profileId: string) => {
+    const data = profilesByGame[id];
+    if (!data) return profilesNow(id);
+    if (profileId === data.active && data.list.length > 1) throw new Error("Pick another profile before deleting this one.");
+    data.list = data.list.filter((p) => p.id !== profileId);
+    if (!data.list.length) delete profilesByGame[id];
+    return profilesNow(id);
+  },
+  switchProfile: async (id: GameId, profileId: string) => {
+    const data = profilesByGame[id];
+    const target = data?.list.find((p) => p.id === profileId);
+    if (!data || !target) throw new Error("That profile isn't there any more.");
+    const leaving = data.list.find((p) => p.id === data.active)!;
+    const mods = MODS[id] ?? [];
+    leaving.on = mods.filter((m) => m.enabled && leaving.keys.includes(m.key)).map((m) => m.key);
+    data.active = profileId;
+    let changed = 0;
+    for (const m of mods) {
+      const want = target.keys.includes(m.key) && target.on.includes(m.key);
+      if (m.enabled !== want) {
+        m.enabled = want;
+        changed += 1;
+      }
+    }
+    return { ...profilesNow(id), changed, problems: [] };
+  },
+  profileMember: async (id: GameId, profileId: string, key: string, member: boolean) => {
+    const data = profilesByGame[id];
+    const profile = data?.list.find((p) => p.id === profileId);
+    if (!data || !profile) throw new Error("That profile isn't there any more.");
+    if (member) profile.keys = [...new Set([...profile.keys, key])];
+    else {
+      if (data.list.filter((p) => p.keys.includes(key)).length <= 1) throw new Error("A mod has to be in at least one profile. Delete it to remove it.");
+      profile.keys = profile.keys.filter((k) => k !== key);
+      profile.on = profile.on.filter((k) => k !== key);
+      const mod = (MODS[id] ?? []).find((m) => m.key === key);
+      if (mod && profileId === data.active) mod.enabled = false;
+    }
+    return profilesNow(id);
+  },
+
+  iniList: async (id: GameId) => iniNow(id),
+  iniRead: async (_id: GameId, name: string) => iniFile(name),
+  iniSave: async (_id: GameId, name: string, text: string) => {
+    if (INI_TEXT[name] !== text) {
+      iniBackups[name] = [{ id: String(Date.now()), at: new Date().toISOString(), size: INI_TEXT[name]?.length ?? 0 }, ...(iniBackups[name] ?? [])].slice(0, 10);
+      INI_TEXT[name] = text;
+    }
+    return iniFile(name);
+  },
+  iniRestore: async (_id: GameId, name: string) => iniFile(name),
+  iniPreset: async (id: GameId, _presetId: string, on: boolean) => {
+    const keys = ["bEnableLogging", "bEnableTrace", "bLoadDebugInformation"];
+    const lines = INI_TEXT["Skyrim.ini"].split("\n").filter((line) => !keys.some((key) => line.toLowerCase().startsWith(`${key.toLowerCase()}=`)) && line.trim() !== "[Papyrus]");
+    while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    INI_TEXT["Skyrim.ini"] = [...lines, "", "[Papyrus]", ...keys.map((key) => `${key}=${on ? 1 : 0}`), ""].join("\n");
+    return iniNow(id);
+  },
+  openIniFolder: async () => undefined,
+  tools: async (id: GameId) => toolsNow(id),
+  addTool: async (id: GameId) => {
+    const list = (toolsByGame[id] ??= []);
+    list.push({ id: `t${Date.now()}`, name: "Pandora", kind: "pandora", about: "Builds animation behaviour files (newer than Nemesis): run after animation mods change.", exe: `${SSE_BOTTLE}/Pandora/Pandora Behaviour Engine+.exe`, args: "", found: false, exists: true });
+    return toolsNow(id);
+  },
+  saveTool: async (id: GameId, toolId: string, change: { name: string; args: string }) => {
+    const tool = toolsByGame[id]?.find((entry) => entry.id === toolId);
+    if (tool) Object.assign(tool, { name: change.name.trim() || tool.name, args: change.args });
+    return toolsNow(id);
+  },
+  removeTool: async (id: GameId, toolId: string) => {
+    toolsByGame[id] = (toolsByGame[id] ?? []).filter((entry) => entry.id !== toolId);
+    return { ...toolsNow(id), hidden: 1 };
+  },
+  showAllTools: async (id: GameId) => toolsNow(id),
+  runTool: async (id: GameId, toolId: string) => {
+    const tool = toolsByGame[id]?.find((entry) => entry.id === toolId);
+    if (!tool) throw new Error("That tool isn't on the list any more.");
+    return { started: tool.name, bottle: "Steam" };
   },
 
   finder: async (id: GameId) => finderStatus(id),

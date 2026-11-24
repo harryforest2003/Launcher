@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   Shirt,
   Sparkles,
+  Wrench,
 } from "lucide-react";
 import logoMark from "../../assets/logo-mark.png";
 import AccountSwitcher from "../AccountSwitcher";
@@ -54,12 +55,13 @@ const MC_ITEMS: { page: McPage; label: string; icon: ReactNode }[] = [
   { page: "settings", label: "Settings", icon: <SlidersHorizontal size={15} /> },
 ];
 
-const GAME_PAGES: { page: GamePageKey; label: string; icon: ReactNode; when?: "cc" | "loadorder" }[] = [
+const GAME_PAGES: { page: GamePageKey; label: string; icon: ReactNode; when?: "cc" | "loadorder" | "tools" }[] = [
   { page: "home", label: "Home", icon: <House size={16} /> },
   { page: "mods", label: "Mods", icon: <Puzzle size={15} /> },
   { page: "discover", label: "Discover Mods", icon: <Compass size={15} /> },
   { page: "cc", label: "Custom Content (CC)", icon: <Sparkles size={15} />, when: "cc" },
   { page: "loadorder", label: "Load Order", icon: <ListOrdered size={15} />, when: "loadorder" },
+  { page: "tools", label: "Tools & INI", icon: <Wrench size={15} />, when: "tools" },
   { page: "settings", label: "Settings", icon: <SlidersHorizontal size={15} /> },
 ];
 
@@ -217,7 +219,7 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
                     item("modGame:browse", "Browse Mods", <Compass size={15} />, () => go({ kind: "modGame", page: "browse" })),
                   ]
                 : openGame && GAME_PAGES.filter(({ when }) =>
-                    !when || (when === "cc" ? gameNav?.hasCC : gameNav?.hasLoadOrder),
+                    !when || (when === "cc" ? gameNav?.hasCC : when === "tools" ? gameNav?.hasTools : gameNav?.hasLoadOrder),
                   ).map(({ page, label, icon }) => [
                     item(`game:${openGame}:${page}`, label, icon, () => go({ kind: "game", id: openGame, page })),
                     page === "discover" && backRow,

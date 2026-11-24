@@ -476,4 +476,5 @@ module.exports = {
     downloadPackFile,
     extractOverrides,
     resolveCurseForgeFiles,
+    resolveModrinthFiles,
 };

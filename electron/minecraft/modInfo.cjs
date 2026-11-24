@@ -14,7 +14,7 @@ const { withZip } = require("./zipFile.cjs");
 const cache = new Map();
 
 // What a jar we can't read, or a file that isn't a mod, is known to contain.
-const EMPTY = { ids: [], name: null, version: null, packages: [], mixinConfigs: [], depends: [], provides: [], authors: [], icon: null, requires: {}, breaks: {}, flavour: null };
+const EMPTY = { ids: [], name: null, version: null, packages: [], mixinConfigs: [], depends: [], provides: [], authors: [], icon: null, requires: {}, breaks: {}, flavour: null, environment: null };
 
 // Packages that belong to Minecraft, Java or a loader, never to a mod.
 const NOT_A_MOD = /^(net\/minecraft|com\/mojang|java|javax|jdk|sun|org\/lwjgl|org\/spongepowered|net\/fabricmc|org\/quiltmc|cpw\/mods|net\/neoforged\/fml|net\/minecraftforge\/fml|io\/netty|com\/google|org\/apache|it\/unimi|org\/slf4j|kotlin|org\/objectweb)\//;
@@ -163,6 +163,9 @@ async function readEntries(entries) {
             info.requires = fabricRanges(json, "depends");
             info.breaks = fabricRanges(json, "breaks");
             info.flavour = "fabric";
+            // Which side it runs on: "client" ones have no place on a server.
+            const side = json.environment ?? meta.minecraft?.environment;
+            if (side === "client" || side === "server" || side === "dedicated_server") info.environment = side === "client" ? "client" : "server";
             nested.push(...[].concat(json.jars ?? meta.jars ?? []).map((jar) => (typeof jar === "string" ? jar : jar?.file)).filter(Boolean));
         } catch {
             // A broken fabric.mod.json: the jar is still known by its file name.
@@ -180,6 +183,7 @@ async function readEntries(entries) {
             if (!info.authors.length) info.authors.push(...found.authors);
             info.icon ??= found.icon;
             if (!info.flavour) Object.assign(info, { requires: found.requires, breaks: found.breaks, flavour: "forge" });
+            if (/^\s*clientSideOnly\s*=\s*true\b/m.test(text)) info.environment ??= "client";
         }
     }
     // Forge and NeoForge bundle jars here.

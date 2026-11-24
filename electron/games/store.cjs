@@ -95,10 +95,16 @@ function move(from, to) {
     }
 }
 
-/* Removes folders left empty, up to (not including) stop. */
-function pruneEmpty(dir, stop) {
+/*
+ * Removes folders left empty, up to (not including) stop. In the game's own folders the
+ * top ones (The Sims 4's Mods, Skyrim's Data) are the game's and stay, even with no mods
+ * left in them: only a mods folder's own top folders (one per mod) go.
+ */
+function pruneEmpty(dir, stop, base = "mods") {
     let current = dir;
-    while (current.startsWith(path.resolve(stop) + path.sep)) {
+    const top = path.resolve(stop);
+    while (current.startsWith(top + path.sep)) {
+        if (base !== "mods" && path.dirname(current) === top) return;
         try {
             if (fs.readdirSync(current).length) return;
             fs.rmdirSync(current);
@@ -341,6 +347,7 @@ async function install(gameId, filePath, meta = {}) {
         if (previous) {
             setAside(gameId, previous, id);
             sets.renameKey(gameId, `m:${previous.id}`, `m:${id}`);
+            require("./profiles.cjs").renameKey(gameId, `m:${previous.id}`, `m:${id}`);
         }
 
         const fresh = readState(gameId);
@@ -473,7 +480,7 @@ function setEnabled(gameId, modId, enabled) {
             // Its copy is the one in the game: it's put away, and the next mod's (or the game's own) goes in.
             if (fs.existsSync(live)) move(live, parked);
             handOver(gameId, loc, state, mod, file);
-            if (!fs.existsSync(live)) pruneEmpty(path.dirname(live), baseDir(loc, file.base));
+            if (!fs.existsSync(live)) pruneEmpty(path.dirname(live), baseDir(loc, file.base), file.base);
         } else if (fs.existsSync(kept)) {
             // Another mod's copy is in the game; this one's is put away with the rest.
             fs.mkdirSync(path.dirname(parked), { recursive: true });
@@ -509,7 +516,7 @@ function removeMod(gameId, modId) {
             const live = within(root, file.to);
             fs.rmSync(live, { force: true });
             handOver(gameId, loc, state, mod, file);
-            if (!fs.existsSync(live)) pruneEmpty(path.dirname(live), root);
+            if (!fs.existsSync(live)) pruneEmpty(path.dirname(live), root, file.base);
         }
     }
     if (mod.plugins?.length) {
@@ -644,7 +651,7 @@ function setHandAddedEnabled(gameId, key, enabled) {
         const folder = fs.statSync(live).isDirectory();
         move(live, parked);
         if (folder) fs.writeFileSync(path.join(parked, ".unity-folder"), "");
-        pruneEmpty(path.dirname(live), baseDir(loc, base));
+        pruneEmpty(path.dirname(live), baseDir(loc, base), base);
     }
     return { key, enabled };
 }
@@ -688,6 +695,7 @@ function describe(game, mod, state = readState(game.id)) {
         since: mod.installedAt,
         version: mod.source?.version ?? mod.source?.nexus?.version ?? null,
         canUndo: (state.previous ?? []).some((previous) => previous.supersededBy === mod.id),
+        kept: Boolean(mod.kept),
     };
 }
 
@@ -807,6 +815,7 @@ function undoReplace(gameId, key) {
     writeState(gameId, fresh);
     if (wasEnabled) setEnabled(gameId, previous.id, true);
     sets.renameKey(gameId, `m:${modId}`, `m:${previous.id}`);
+    require("./profiles.cjs").renameKey(gameId, `m:${modId}`, `m:${previous.id}`);
     return { restored: previous.name, version: previous.source?.version ?? previous.source?.nexus?.version ?? null };
 }
 
@@ -829,7 +838,19 @@ function deleteManaged(gameId, modId) {
     return result;
 }
 
+/* A mod kept at its version isn't offered for updating, or updated by Update all, until it's let go. */
+function setKept(gameId, key, kept) {
+    if (!String(key).startsWith("m:")) throw new Error("Only mods the launcher installed can be kept at a version.");
+    const state = readState(gameId);
+    const mod = state.mods.find((m) => m.id === String(key).slice(2));
+    if (!mod) throw new Error("That mod isn't installed any more.");
+    if (kept) mod.kept = true;
+    else delete mod.kept;
+    writeState(gameId, state, { quiet: true });
+    return { kept: Boolean(mod.kept) };
+}
+
 const setModEnabled = (gameId, key, enabled) => (key.startsWith("m:") ? setEnabled(gameId, key.slice(2), enabled) : setHandAddedEnabled(gameId, key, enabled));
 const deleteMod = (gameId, key) => (key.startsWith("m:") ? deleteManaged(gameId, key.slice(2)) : removeHandAdded(gameId, key));
 
-module.exports = { install, list, setModEnabled, deleteMod, readState, undoReplace, rememberSource, nexusIdsInName, touch, sharedFiles, setWinner };
+module.exports = { install, list, setModEnabled, deleteMod, setKept, readState, undoReplace, rememberSource, nexusIdsInName, touch, sharedFiles, setWinner };

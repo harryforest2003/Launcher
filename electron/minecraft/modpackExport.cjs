@@ -46,6 +46,24 @@ function walk(dir, base = dir) {
 
 const toZipPath = (rel) => rel.split(path.sep).join("/");
 
+/* Writes a yazl zip beside the target first, so a failed export leaves no half-file. */
+async function writeZip(zip, target) {
+    const partial = `${target}.partial-${crypto.randomUUID().slice(0, 8)}`;
+    try {
+        await new Promise((resolve, reject) => {
+            const out = fs.createWriteStream(partial);
+            out.on("close", resolve);
+            out.on("error", reject);
+            zip.outputStream.on("error", reject).pipe(out);
+            zip.end();
+        });
+        fs.renameSync(partial, target);
+    } catch (err) {
+        fs.rmSync(partial, { force: true });
+        throw err;
+    }
+}
+
 /*
  * { name, version, worlds, options } -> writes target, and says what went in.
  */
@@ -106,16 +124,7 @@ async function exportModpack(instance, folder, target, { name, version = "1.0.0"
     };
     zip.addBuffer(Buffer.from(JSON.stringify(index, null, 2)), "modrinth.index.json");
 
-    // Written beside the target first, so a failed export leaves no half-file.
-    const partial = `${target}.partial-${crypto.randomUUID().slice(0, 8)}`;
-    await new Promise((resolve, reject) => {
-        const out = fs.createWriteStream(partial);
-        out.on("close", resolve);
-        out.on("error", reject);
-        zip.outputStream.on("error", reject).pipe(out);
-        zip.end();
-    });
-    fs.renameSync(partial, target);
+    await writeZip(zip, target);
 
     return {
         file: target,
@@ -126,4 +135,4 @@ async function exportModpack(instance, folder, target, { name, version = "1.0.0"
     };
 }
 
-module.exports = { exportModpack };
+module.exports = { exportModpack, writeZip, walk, toZipPath, CONFIG_FOLDERS, FOLDERS, LOADER_KEYS };

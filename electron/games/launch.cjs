@@ -196,4 +196,4 @@ async function launch(game, loc, { safe = false, open }) {
     return { how, safe };
 }
 
-module.exports = { launch, PARKED_LOADER, LOADERS };
+module.exports = { launch, PARKED_LOADER, LOADERS, CROSSOVER_WINE, startDetached, inBottle };

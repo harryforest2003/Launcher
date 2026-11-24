@@ -14,6 +14,8 @@ import { curseForgeType, modrinthType } from "../../electron/shared/contentTypes
 
 // Instance pictures chosen in the preview, kept until the page reloads.
 const mockPictures = new Map<string, string>();
+// The modpack record before a preview "update", for Undo.
+const previewPackUndo = new Map<string, { time: string; pack: InstanceModpack }>();
 
 /* The real bridges are loosely typed JSON over IPC, and this mirrors them. */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -868,6 +870,38 @@ const instanceBridge = {
     throw new Error("Desktop shortcuts work in the installed launcher, not this preview.");
   },
   onShortcutLaunch: () => () => {},
+  rememberModpack: async (name: string, pack: InstanceModpack) => {
+    findInstance(name).modpack = pack;
+    persist();
+    return pack;
+  },
+  identifyModpackFile: async () => null,
+  // Moves the record only: the preview has no files to change.
+  updateModpack: async (name: string, versionId: string): Promise<ModpackUpdateResult> => {
+    const instance = findInstance(name);
+    const pack = instance.modpack;
+    if (!pack) throw new Error(`${name} wasn't made from a modpack.`);
+    const versions = ((await window.launcherAPI.getProject(pack.source, pack.projectId))?.versions ?? []) as { id: string | number; version_number?: string; name?: string }[];
+    const picked = versions.find((v) => String(v.id) === versionId);
+    const to = { versionId, versionName: picked?.version_number || picked?.name || versionId };
+    const from = { versionId: pack.versionId, versionName: pack.versionName };
+    previewPackUndo.set(name, { time: new Date().toISOString(), pack: { ...pack } });
+    instance.modpack = { ...pack, ...to };
+    persist();
+    return { from, to, added: 2, updated: 14, removed: 1, unchanged: 120, blocked: [], loader: null, notes: [] };
+  },
+  lastModpackUpdate: async (name: string) => {
+    const saved = previewPackUndo.get(name);
+    return saved ? { time: saved.time, from: saved.pack.versionName, to: findInstance(name).modpack?.versionName ?? "" } : null;
+  },
+  undoModpackUpdate: async (name: string) => {
+    const saved = previewPackUndo.get(name);
+    if (!saved) throw new Error("There's no modpack update to undo.");
+    findInstance(name).modpack = saved.pack;
+    previewPackUndo.delete(name);
+    persist();
+    return { version: saved.pack.versionName };
+  },
   servers: async (name: string) => previewServers.get(name) ?? [],
   addServer: async (name: string, server: { name: string; address: string }) => {
     const list = previewServers.get(name) ?? [];
@@ -989,6 +1023,20 @@ const instanceBridge = {
   }),
   exportModpack: async () => {
     throw new Error("Exporting a modpack needs the desktop app.");
+  },
+  exportCurseForge: async () => {
+    throw new Error("Exporting a modpack needs the desktop app.");
+  },
+  exportServerPack: async () => {
+    throw new Error("Exporting a server pack needs the desktop app.");
+  },
+  shareCode: async (name: string) => ({ code: `unity1:preview-${encodeURIComponent(name)}`, linked: 12, missing: ["handmade-tweak"] }),
+  readShareCode: async (code: string) => {
+    if (!code.trim().startsWith("unity1:")) throw new Error("That isn't a share code this launcher can read. Check it was copied whole.");
+    return { name: "Shared pack", version: "1.21.1", loader: "fabric", loaderVersion: "0.16.9", files: 12, missing: ["handmade-tweak"] };
+  },
+  importShareCode: async () => {
+    throw new Error("Making an instance from a share code needs the desktop app.");
   },
 
   onProgress: (callback: Listener) => subscribe("instance:progress", callback),

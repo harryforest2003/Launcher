@@ -123,7 +123,7 @@ const lastResults = new Map();
 
 /*
  * Which of a game's installed mods have a newer version.
- * -> { updates: [{ key, name, provider, modId, fromVersion, toVersion, toFileId, toName, date, size }],
+ * -> { updates: [{ key, name, provider, modId, fromVersion, toVersion, toFileId, toName, date, size, kept? }],
  *      checked, unknown, needsKey, error }
  */
 async function check(gameId) {
@@ -203,6 +203,9 @@ async function check(gameId) {
 
     // A few at a time.
     for (let i = 0; i < work.length; i += 4) await Promise.all(work.slice(i, i + 4).map((run) => run()));
+    // Mods kept at their version are still listed (so the newer one shows), marked kept.
+    const kept = new Set(state.mods.filter((mod) => mod.kept).map((mod) => `m:${mod.id}`));
+    for (const found of out.updates) if (kept.has(found.key)) found.kept = true;
     writeCache(context.cache);
     out.fetched = context.fetched;
     lastResults.set(gameId, out);
@@ -263,4 +266,9 @@ function forget(gameId, key) {
     if (results) results.updates = results.updates.filter((u) => u.key !== key);
 }
 
-module.exports = { check, update, idsInName, newerFile };
+function markKept(gameId, key, kept) {
+    const found = lastResults.get(gameId)?.updates.find((u) => u.key === key);
+    if (found) found.kept = kept || undefined;
+}
+
+module.exports = { check, update, markKept, idsInName, newerFile };

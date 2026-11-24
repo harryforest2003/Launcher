@@ -378,6 +378,7 @@ async function installLoader({
 }
 
 module.exports = {
+    installerUrl,
     installLoader,
     getLatestLoaderVersion,
     listLoaderVersions,

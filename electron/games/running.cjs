@@ -109,4 +109,15 @@ function isOpen(watch, running) {
     );
 }
 
-module.exports = { watchFor, canWatch, processes, isOpen };
+/* Whether a game is open now; false when that can't be told. */
+async function gameOpen(gameId) {
+    try {
+        const watch = watchFor(require("./registry.cjs").getGame(gameId), require("./detect.cjs").locate(gameId));
+        if (!canWatch(watch)) return false;
+        return isOpen(watch, await processes());
+    } catch {
+        return false;
+    }
+}
+
+module.exports = { watchFor, canWatch, processes, isOpen, gameOpen };

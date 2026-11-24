@@ -48,6 +48,8 @@
   min-height: 44px;
 }
 .gm-header .ui-button { white-space: nowrap; flex-shrink: 0; }
+.gm-header .gm-profile { gap: 6px; max-width: 170px; }
+.gm-profile__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .gm-header__main { flex: 0 1 auto; min-width: 70px; display: flex; flex-direction: column; margin-right: var(--space-1); }
 .gm-header__title { margin: 0; font-size: var(--font-size-lg); line-height: var(--leading-tight); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gm-header__meta { color: var(--color-text-muted); font-size: var(--font-size-xs); white-space: nowrap; }
@@ -317,12 +319,17 @@ html[data-spacing="wide"] .gm-row { --gm-date: 116px; }
 
 /* ---------- Narrow (the preview pane) ---------- */
 
-@container (max-width: 600px) {
+@container (max-width: 700px) {
   .gm-long { display: none; }
   .gm-short { display: inline; }
 }
 @container (max-width: 700px) {
   .gm-updates--good .gm-updates__text { display: none; }
+}
+/* The profile button: just its icon when none is chosen, a shorter name when one is. */
+@container (max-width: 760px) {
+  .gm-profile--none .gm-profile__name { display: none; }
+  .gm-header .gm-profile { max-width: 120px; }
 }
 @container (max-width: 560px) {
   .gm-row { grid-template-columns: 40px minmax(0, 1fr) var(--gm-date, 76px) 104px; }

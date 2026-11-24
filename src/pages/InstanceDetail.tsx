@@ -5,6 +5,8 @@ import { dependencyNote } from "../utils/dependencyNote";
 import InstanceContentList from "../components/InstanceContentList";
 import { useContentUpdates } from "../components/useContentUpdates";
 import LoaderUpdate from "../components/LoaderUpdate";
+import ModpackUpdate from "../components/ModpackUpdate";
+import ShareCodeBox from "../components/ShareCodeBox";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import { GameWindowCard, LaunchCommandsCard } from "../components/InstanceLaunchSettings";
@@ -147,6 +149,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
   // What an exported modpack includes beyond mods and config.
   const [exportWorlds, setExportWorlds] = useState(false);
   const [exportOptions, setExportOptions] = useState(false);
+  const [shareCode, setShareCode] = useState<{ for: string; code: string; linked: number; missing: string[] } | null>(null);
+  const [exportFormat, setExportFormat] = useState<"modrinth" | "curseforge">("modrinth");
   // The name typed for a copy, or null for the suggested one.
   const [copyName, setCopyName] = useState<string | null>(null);
   const [system, setSystem] = useState<LauncherSettings["system"] | null>(null);
@@ -469,6 +473,9 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 }}
               />
             )}
+            {instance.modpack && instance.installed && (
+              <ModpackUpdate instance={instance} busy={busy === "modpack"} run={run} onNotice={setNotice} />
+            )}
             <Badge>{instance.ram} GB RAM</Badge>
             <span className="id-meta-played">{instance.lastPlayed ? `Played ${new Date(instance.lastPlayed).toLocaleDateString()}` : "Not played yet"}</span>
           </div>
@@ -585,7 +592,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
       )}
 
-      {progress && progress.stage !== "done" && (busy === "repair" || busy === "cloud" || (busy === "launch" && progress.stage === "java")) && (
+      {progress && progress.stage !== "done" && (busy === "repair" || busy === "cloud" || busy === "modpack" || (busy === "launch" && progress.stage === "java")) && (
         <div style={{ ...card, marginBottom: 16 }}>
           <div style={{ color: "var(--color-accent-text)", marginBottom: 8 }}>
             {progress.detail ?? progress.stage} ({progress.percent}%)
@@ -775,10 +782,22 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
 
           <div style={card} data-testid="instance-export">
             <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>Export as a modpack</p>
+            <div style={{ marginBottom: 8 }} data-testid="export-format">
+              <Segmented
+                label="Modpack format"
+                value={exportFormat}
+                onChange={setExportFormat}
+                options={[
+                  { value: "modrinth", label: "Modrinth (.mrpack)" },
+                  { value: "curseforge", label: "CurseForge (.zip)" },
+                ]}
+              />
+            </div>
             <p style={{ color: "var(--color-text-muted)", fontSize: 13, marginBottom: 10 }}>
-              Saves it as a Modrinth modpack (.mrpack) to share, which the Modrinth App, Prism and this
-              launcher can install. Mods on Modrinth are linked, so it stays small; others, and its
-              config, go inside it. Disabled mods are left out.
+              {exportFormat === "modrinth"
+                ? "Saves it as a Modrinth modpack (.mrpack) to share, which the Modrinth App, Prism and this launcher can install. Mods on Modrinth are linked, so it stays small; others, and its config, go inside it."
+                : "Saves it as a CurseForge modpack (.zip), which the CurseForge app, Prism and this launcher can install. Mods on CurseForge are linked; others, and its config, go inside it."}{" "}
+              Disabled mods are left out.
             </p>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
               <label style={{ color: "var(--color-text-secondary)", fontSize: 13, display: "flex", gap: 6, alignItems: "center" }}>
@@ -795,13 +814,18 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
                 disabled={busy === "export"}
                 onClick={() =>
                   run("export", async () => {
-                    const done = await window.instanceAPI.exportModpack(instanceName, { worlds: exportWorlds, options: exportOptions });
+                    const settings = { worlds: exportWorlds, options: exportOptions };
+                    const done =
+                      exportFormat === "curseforge"
+                        ? await window.instanceAPI.exportCurseForge(instanceName, settings)
+                        : await window.instanceAPI.exportModpack(instanceName, settings);
                     if (!done) return;
                     setNotice(
-                      `Saved ${done.file.split(/[\\/]/).pop()} (${formatBytes(done.bytes)}): ${done.linked} linked from Modrinth` +
+                      `Saved ${done.file.split(/[\\/]/).pop()} (${formatBytes(done.bytes)}): ${done.linked} linked from ${exportFormat === "curseforge" ? "CurseForge" : "Modrinth"}` +
                         (done.included.length ? `, ${done.included.length} packed in` : "") +
                         (done.configFiles ? `, plus ${done.configFiles} config file${done.configFiles === 1 ? "" : "s"}` : "") +
-                        "."
+                        "." +
+                        ("partial" in done && done.partial ? " CurseForge's file lookup wasn't reachable, so only mods installed from CurseForge could be linked." : "")
                     );
                   })
                 }
@@ -810,6 +834,67 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               </button>
             </div>
           </div>
+
+          <div style={card} data-testid="instance-share">
+            <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>Share code</p>
+            <p style={{ color: "var(--color-text-muted)", fontSize: 13, marginBottom: 10 }}>
+              A line of text to paste to a friend. Pasting it into Import, under From a share code, makes the same instance and
+              downloads its mods, resource packs and shaders from Modrinth and CurseForge. No file to send, and nothing is uploaded.
+            </p>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                className="sidebar-button"
+                data-testid="make-share-code"
+                disabled={busy === "share"}
+                onClick={() =>
+                  run("share", async () => setShareCode({ for: instanceName, ...(await window.instanceAPI.shareCode(instanceName)) }))
+                }
+              >
+                {busy === "share" ? "Making..." : shareCode?.for === instanceName ? "Make again" : "Make share code"}
+              </button>
+            </div>
+            {shareCode?.for === instanceName && (
+              <ShareCodeBox
+                code={shareCode.code}
+                note={
+                  `${shareCode.linked} file${shareCode.linked === 1 ? "" : "s"} linked.` +
+                  (shareCode.missing.length ? ` Not on Modrinth or CurseForge, so send these yourself: ${shareCode.missing.join(", ")}.` : "") +
+                  " Config and worlds aren't included."
+                }
+              />
+            )}
+          </div>
+
+          {instance.loader !== "vanilla" && (
+            <div style={card} data-testid="instance-server-pack">
+              <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>Server pack</p>
+              <p style={{ color: "var(--color-text-muted)", fontSize: 13, marginBottom: 10 }}>
+                A .zip to run this instance as a server: its mods (client-only ones like minimaps and
+                shaders left out), config, the {loaderLabel} server installer, and start scripts for
+                macOS, Linux and Windows.
+              </p>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  className="sidebar-button"
+                  data-testid="export-server-pack"
+                  disabled={busy === "server-pack"}
+                  onClick={() =>
+                    run("server-pack", async () => {
+                      const done = await window.instanceAPI.exportServerPack(instanceName);
+                      if (!done) return;
+                      setNotice(
+                        `Saved ${done.file.split(/[\\/]/).pop()} (${formatBytes(done.bytes)}) with ${done.mods} mod${done.mods === 1 ? "" : "s"}` +
+                          (done.skipped.length ? `. Left out as client-only: ${done.skipped.join(", ")}` : "") +
+                          ". Its README says how to start it."
+                      );
+                    })
+                  }
+                >
+                  {busy === "server-pack" ? "Exporting..." : "Export server pack..."}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={card} data-testid="instance-java">
             <p style={{ color: "var(--color-accent-text)", marginBottom: 6 }}>Java</p>

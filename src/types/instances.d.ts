@@ -33,6 +33,28 @@ declare global {
         keptVersions?: string[];
         /** Back up its worlds before updating mods or its loader. */
         backupWorldsBeforeUpdates?: boolean;
+        /** The modpack it was made from, for updating it to another version of the pack. */
+        modpack?: InstanceModpack;
+    };
+
+    type InstanceModpack = {
+        source: "modrinth" | "curseforge";
+        projectId: string;
+        versionId: string;
+        versionName: string;
+        name: string;
+    };
+
+    type ModpackUpdateResult = {
+        from: { versionId: string; versionName: string };
+        to: { versionId: string; versionName: string };
+        added: number;
+        updated: number;
+        removed: number;
+        unchanged: number;
+        blocked: { name?: string; fileName?: string; reason?: string }[];
+        loader: { from: string; to: string } | null;
+        notes: string[];
     };
 
     /** A size of null is Minecraft's own (854 x 480). */
@@ -633,6 +655,31 @@ declare global {
             clearPicture(name: string): Promise<null>;
             /** Puts a shortcut that plays it on the desktop (the installed app only). */
             desktopShortcut(name: string): Promise<{ path: string; replaced: boolean }>;
+            /** Notes the modpack (and version of it) an instance was made from, so it can be updated. */
+            rememberModpack(name: string, pack: { source: "modrinth" | "curseforge"; projectId: string; versionId: string; versionName: string; name: string }): Promise<InstanceModpack>;
+            /** A .mrpack added from a file: looks it up on Modrinth by its hash. null when it isn't there. */
+            identifyModpackFile(name: string, file: string): Promise<InstanceModpack | null>;
+            /** Moves the instance to another version of its modpack, keeping the player's own mods and settings. */
+            updateModpack(name: string, versionId: string): Promise<ModpackUpdateResult>;
+            /** The latest modpack update Undo can put back, or null. */
+            lastModpackUpdate(name: string): Promise<{ time: string; from: string; to: string } | null>;
+            undoModpackUpdate(name: string): Promise<{ version: string }>;
+            /** Asks where to save it, then writes a CurseForge modpack (.zip). Null if cancelled. partial: CurseForge's file lookup wasn't reachable. */
+            exportCurseForge(
+                name: string,
+                options: { worlds?: boolean; options?: boolean }
+            ): Promise<{ file: string; bytes: number; linked: number; included: string[]; configFiles: number; partial: boolean } | null>;
+            /** Asks where to save it, then writes a server pack (.zip): server-side mods, config, the loader's installer and start scripts. */
+            exportServerPack(name: string): Promise<{ file: string; bytes: number; mods: number; skipped: string[]; configFiles: number } | null>;
+            /** The instance as a share code: version, loader, and each file by its Modrinth or CurseForge ID. */
+            shareCode(name: string): Promise<{ code: string; linked: number; missing: string[] }>;
+            /** What a pasted share code holds, without making anything. */
+            readShareCode(code: string): Promise<{ name: string; version: string; loader: string; loaderVersion: string | null; files: number; missing: string[] }>;
+            /** A new instance from a share code, its files downloaded. */
+            importShareCode(
+                code: string,
+                name?: string
+            ): Promise<{ name: string; installed: number; blocked: { name: string; url: string | null }[]; failed: { name: string; error: string }[]; missing: string[]; notFound: number }>;
             /** A desktop shortcut asked for an instance to be played. */
             onShortcutLaunch(cb: (name: string) => void): () => void;
 

@@ -21,6 +21,10 @@ const saves = require("./saves.cjs");
 const plugins = require("./plugins.cjs");
 const requirements = require("./requirements.cjs");
 const sets = require("./sets.cjs");
+const profiles = require("./profiles.cjs");
+const ini = require("./ini.cjs");
+const tools = require("./tools.cjs");
+const share = require("./share.cjs");
 const finder = require("./finder.cjs");
 const loot = require("./loot.cjs");
 const modorder = require("./modorder.cjs");
@@ -592,6 +596,33 @@ function registerGamesIpc() {
         if (failed) throw new Error(failed);
     });
 
+    // A Bethesda game's INI files, and its modding tools (xEdit, BodySlide, Nemesis...).
+    ipcMain.handle("games:iniList", (_e, id) => ini.list(need(id).id));
+    ipcMain.handle("games:iniRead", (_e, id, name) => ini.read(need(id).id, String(name)));
+    ipcMain.handle("games:iniSave", (_e, id, name, text) => ini.save(need(id).id, String(name), text));
+    ipcMain.handle("games:iniRestore", (_e, id, name, copyId) => ini.restore(need(id).id, String(name), String(copyId)));
+    ipcMain.handle("games:iniPreset", (_e, id, presetId, on) => ini.preset(need(id).id, String(presetId), on !== false));
+    ipcMain.handle("games:openIniFolder", async (_e, id) => {
+        const failed = await shell.openPath(ini.folder(need(id).id));
+        if (failed) throw new Error(failed);
+    });
+    ipcMain.handle("games:tools", (_e, id) => tools.list(need(id).id));
+    ipcMain.handle("games:addTool", async (event, id) => {
+        const game = need(id);
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: `A modding tool for ${game.name}`,
+            message: process.platform === "darwin" ? "Choose the tool's .exe (in a CrossOver bottle, or anywhere)." : undefined,
+            filters: [{ name: "Windows programs", extensions: ["exe"] }],
+            properties: ["openFile", "treatPackageAsDirectory"],
+        });
+        if (picked.canceled || !picked.filePaths.length) return null;
+        return tools.add(game.id, picked.filePaths[0]);
+    });
+    ipcMain.handle("games:saveTool", (_e, id, toolId, change) => tools.update(need(id).id, String(toolId), { name: change?.name, args: change?.args }));
+    ipcMain.handle("games:removeTool", (_e, id, toolId) => tools.remove(need(id).id, String(toolId)));
+    ipcMain.handle("games:showAllTools", (_e, id) => tools.showAll(need(id).id));
+    ipcMain.handle("games:runTool", (_e, id, toolId) => tools.run(need(id).id, String(toolId)));
+
     // Skyrim's and Fallout 4's load order.
     // The order, and what fixing it would change (nothing, when it's fine). Missing masters
     // come with the Nexus mod that has each.
@@ -706,12 +737,31 @@ function registerGamesIpc() {
     ipcMain.handle("games:saveSet", (_e, id, set) => sets.save(need(id).id, { id: set?.id ?? null, name: set?.name }));
     ipcMain.handle("games:deleteSet", (_e, id, setId) => sets.remove(need(id).id, String(setId)));
     ipcMain.handle("games:setMember", (_e, id, setId, key, member) => sets.setMember(need(id).id, String(setId), String(key), member === true));
+    // Mod profiles: separate setups of a game's mods, one in the game's folder at a time.
+    ipcMain.handle("games:profiles", (_e, id) => profiles.list(need(id).id));
+    ipcMain.handle("games:saveProfile", (_e, id, profile) => {
+        const gameId = need(id).id;
+        if (profile?.id) return profiles.rename(gameId, String(profile.id), profile.name);
+        return profiles.create(gameId, { name: profile?.name, copyOf: profile?.copyOf ? String(profile.copyOf) : null });
+    });
+    ipcMain.handle("games:deleteProfile", (_e, id, profileId) => profiles.remove(need(id).id, String(profileId)));
+    ipcMain.handle("games:switchProfile", async (_e, id, profileId) => {
+        const gameId = need(id).id;
+        const result = await profiles.use(gameId, String(profileId));
+        // Which copy of a file two of its mods share is in the game.
+        await conflicts.resolve(gameId).catch(() => 0);
+        return result;
+    });
+    ipcMain.handle("games:profileMember", (_e, id, profileId, key, member) => profiles.setMember(need(id).id, String(profileId), String(key), member === true));
     ipcMain.handle("games:useSet", (_e, id, setId) => {
         const set = sets.list(need(id).id).find((s) => s.id === setId);
         if (!set) throw new Error("That set isn't there any more.");
         const keys = new Set(set.keys);
+        // Mods of profiles that aren't chosen stay out of it.
+        const hidden = profiles.hiddenKeys(need(id).id);
         let changed = 0;
         for (const mod of store.list(id).mods) {
+            if (hidden.has(mod.key)) continue;
             const want = keys.has(mod.key);
             if (mod.enabled !== want) {
                 store.setModEnabled(id, mod.key, want);
@@ -874,6 +924,8 @@ function registerGamesIpc() {
                 const file = await curseforge.resolveDownload(String(modId), fileId ? String(fileId) : null);
                 return queueMissing(id, await withMissing(id, await installFromUrl(game, file.downloadUrl, { name: String(name || file.name), source: { provider, modId: String(modId), fileId: file.id } }, progress, { sha1: file.sha1 })));
             }
+            // A shared Nexus mod without its file: the mod's page, to pick one there.
+            if (!fileId) return { needsWebsite: `https://www.nexusmods.com/${game.nexus}/mods/${encodeURIComponent(String(modId))}?tab=files`, reason: "Pick the file on the mod's page." };
             const url = await nexus.downloadUrl(game.nexus, String(modId), String(fileId));
             return queueMissing(id, await withMissing(id, await installFromUrl(game, url, { name: String(name || `Nexus mod ${modId}`), source: { provider: "nexus", modId: String(modId), fileId: String(fileId) } }, progress)));
         } catch (err) {
@@ -898,6 +950,15 @@ function registerGamesIpc() {
         }
     });
     ipcMain.handle("games:undoUpdate", (_e, id, key) => store.undoReplace(need(id).id, String(key)));
+    // Share codes for a game's mod list: making one, and reading a pasted one.
+    ipcMain.handle("games:shareCode", (_e, id) => share.gameShareCode(need(id).id));
+    ipcMain.handle("games:readShareCode", (_e, id, code) => share.readGameShareCode(need(id).id, String(code ?? "")));
+    ipcMain.handle("games:keepVersion", (_e, id, key, kept) => {
+        const result = store.setKept(need(id).id, String(key), Boolean(kept));
+        // A kept mod's update shows as kept straight away, without checking again.
+        updates.markKept(id, String(key), result.kept);
+        return result;
+    });
 
     ipcMain.handle("games:adultStatus", async (_e, recheck) => {
         if (recheck) nexus.forgetAccount();

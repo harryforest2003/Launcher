@@ -211,6 +211,16 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
         fileId: String(chosenVersion.id),
         name: instanceName.trim() || chosen.name,
       });
+      // Noted so the instance can move to newer versions of the pack later.
+      await window.instanceAPI
+        .rememberModpack(created.name, {
+          source: source.source,
+          projectId: source.id,
+          versionId: String(chosenVersion.id),
+          versionName: versionLabel(chosenVersion),
+          name: chosen.name,
+        })
+        .catch(() => {});
       const blocked = created.pack?.blocked?.length ?? 0;
 
       if (blocked) {

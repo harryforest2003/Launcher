@@ -8,7 +8,7 @@ import { createContext, useContext, useId, useLayoutEffect } from "react";
  */
 
 export type McPage = "minecraft" | "discover" | "library" | "skins" | "skinbuilder" | "settings";
-export type GamePageKey = "home" | "mods" | "discover" | "cc" | "loadorder" | "settings";
+export type GamePageKey = "home" | "mods" | "discover" | "cc" | "loadorder" | "tools" | "settings";
 
 export type PageNav =
   | {
@@ -23,6 +23,7 @@ export type PageNav =
       page: GamePageKey | null;
       hasCC: boolean;
       hasLoadOrder: boolean;
+      hasTools: boolean;
       go: (page: GamePageKey) => void;
       back: { label: string; run: () => void } | null;
       badges?: Partial<Record<GamePageKey, unknown>>;
@@ -40,7 +41,7 @@ export const ShellContext = createContext<Shell | null>(null);
 /** What a page's nav looks like, for deciding when the sidebar must redraw (handlers aside). */
 export const navKey = (nav: PageNav) =>
   nav.area === "game"
-    ? `game|${nav.game}|${nav.page}|${nav.hasCC}|${nav.hasLoadOrder}|${nav.back?.label ?? ""}|${Object.keys(nav.badges ?? {}).join(",")}`
+    ? `game|${nav.game}|${nav.page}|${nav.hasCC}|${nav.hasLoadOrder}|${nav.hasTools}|${nav.back?.label ?? ""}|${Object.keys(nav.badges ?? {}).join(",")}`
     : nav.area === "minecraft"
       ? `mc|${nav.page}|${nav.back?.label ?? ""}`
       : nav.area === "modGame" ? `modGame|${nav.game}|${nav.page}` : `launcher|${nav.page}`;

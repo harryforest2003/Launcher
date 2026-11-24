@@ -25,10 +25,12 @@ const GET_ROUTES = [
   { path: /^\/v1\/games$/, cache: 86400 },
 ];
 
-// Batch lookups, used when installing a modpack. Each takes one list of numbers.
+// Batch lookups, used when installing or exporting a modpack. Each takes one list of numbers.
 const POST_ROUTES = {
   "/v1/mods": "modIds",
   "/v1/mods/files": "fileIds",
+  // Which Minecraft files CurseForge has, by fingerprint, for exporting a CurseForge pack.
+  "/v1/fingerprints/432": "fingerprints",
 };
 
 const STEAM = "https://api.steampowered.com";

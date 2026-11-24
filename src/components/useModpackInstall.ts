@@ -33,6 +33,10 @@ export function useModpackInstall() {
         fileId: String(version.id),
         name: pack.name,
       });
+      // Noted so the instance can move to newer versions of the pack later.
+      await window.instanceAPI
+        .rememberModpack(created.name, { source: pack.source, projectId: pack.projectId, versionId: String(version.id), versionName: versionLabel(version), name: pack.name })
+        .catch(() => {});
       const blocked = created.pack?.blocked?.length ?? 0;
       setResult(
         `Created instance "${created.name}" from ${versionLabel(version)}: Minecraft ${created.version}, ` +

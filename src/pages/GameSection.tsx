@@ -8,6 +8,7 @@ import GameMods from "./games/GameMods";
 import GameSettings from "./games/GameSettings";
 import LoadOrderPage from "./games/LoadOrderPage";
 import ModOrderPage from "./games/ModOrderPage";
+import GameTools from "./games/GameTools";
 import CCBrowser from "./games/CCBrowser";
 import PlayPrompt from "./games/PlayPrompt";
 import GameStore, { PriceText } from "./games/GameStore";
@@ -226,7 +227,9 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
 
   /* Updates everything with a newer version, on the queue. */
   function updateAll() {
-    const list = (updates?.updates ?? []).filter((found) => !found.website);
+    // Mods kept at their version stay as they are.
+    const kept = new Set(mods.filter((mod) => mod.kept).map((mod) => mod.key));
+    const list = (updates?.updates ?? []).filter((found) => !found.website && !kept.has(found.key));
     if (!list.length) return;
     setUpdating(`all:0/${list.length}`);
     queueAdd(
@@ -356,6 +359,7 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
       <GameSidebar
         game={detail?.name ?? ""}
         hasLoadOrder={Boolean(detail?.loadOrder)}
+        hasTools={detail?.loadOrder === "plugins"}
         hasCC={gameId === "sims4"}
         current={deeper ? null : page}
         go={go}
@@ -558,6 +562,8 @@ export default function GameSection({ gameId, onLauncher, onLauncherSettings }: 
                 ) : (
                   <ModOrderPage detail={detail} />
                 ))}
+
+              {page === "tools" && !openMod && <GameTools detail={detail} />}
 
               {page === "settings" && !openMod && <GameSettings detail={detail} reload={reload} goLauncherSettings={onLauncherSettings} onRemoved={onLauncher} />}
             </>

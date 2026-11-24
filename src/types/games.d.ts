@@ -158,6 +158,8 @@ declare global {
         version?: string | null;
         /* An update replaced an earlier copy, which Undo puts back. */
         canUndo?: boolean;
+        /* Kept at this version: not updated until it's let go. */
+        kept?: boolean;
     };
 
     /* Where a mod comes from: Nexus Mods, CurseForge, or one of the other sites (sources/index.cjs). */
@@ -176,6 +178,8 @@ declare global {
         size: number;
         /* CurseForge: only downloadable from its website. */
         website?: boolean;
+        /* The mod is kept at the version installed, so this isn't offered. */
+        kept?: boolean;
     };
 
     type GameUpdateCheck = {
@@ -284,6 +288,24 @@ declare global {
     };
 
     type GameSet = { id: string; name: string; keys: string[] };
+    /* A separate setup of a game's mods; only the chosen one's mods are in the game's folder. */
+    type GameProfile = { id: string; name: string; keys: string[] };
+    /* active is null while the game has just its one setup. */
+    type GameProfiles = { active: string | null; profiles: GameProfile[]; turnedOff: number };
+    /** A Bethesda game's INI files in its My Games folder, and the presets that set a few well-known lines. */
+    type IniPreset = { id: string; label: string; detail: string; file: string; state: "on" | "off" | "partial" };
+    type IniFiles = {
+        game: string;
+        folder: string | null;
+        files: { name: string; size: number; modified: string; backups: number }[];
+        presets: IniPreset[];
+    };
+    type IniBackup = { id: string; at: string; size: number };
+    type IniFile = { name: string; text: string; backups: IniBackup[] };
+    /** A modding tool (xEdit, BodySlide, Nemesis...): found near the game, or added by hand. */
+    type ModTool = { id: string; name: string; kind: string; about: string | null; exe: string; args: string; found: boolean; exists: boolean };
+    /** howToRun: why tools can't start from the launcher here, or null. hidden: found ones taken off the list. */
+    type ModTools = { tools: ModTool[]; hidden: number; howToRun: string | null };
 
     /* Mods changing the same thing inside the game: tuning, a CC item, script modules (Sims), records (Skyrim, Fallout 4), redscript functions (Cyberpunk), loaded assets (Stardew). */
     type GameClash = {
@@ -472,6 +494,15 @@ declare global {
             checkUpdates: (id: GameId) => Promise<GameUpdateCheck>;
             update: (id: GameId, key: string) => Promise<GameInstallResult>;
             undoUpdate: (id: GameId, key: string) => Promise<{ restored: string; version: string | null }>;
+            /* Keeps a mod at the version installed (or lets it update again). */
+            keepVersion: (id: GameId, key: string, kept: boolean) => Promise<{ kept: boolean }>;
+            /** The game's enabled mods as a share code; hand-added ones go by name only. */
+            shareCode: (id: GameId) => Promise<{ code: string; linked: number; missing: string[] }>;
+            /** A pasted mod-list code for this game, each mod marked if it's installed already. */
+            readShareCode: (
+                id: GameId,
+                code: string
+            ) => Promise<{ mods: { provider: string; modId: string; fileId: string | null; name: string; installed: boolean }[]; missing: string[] }>;
             nexusAccount: () => Promise<{ name: string; premium: boolean } | null>;
             /** Who the game signs in as: Steam's signed-in player (display name only), or which app handles sign-in. */
             account: (id: GameId) => Promise<GameStoreAccount>;
@@ -508,6 +539,24 @@ declare global {
             deleteSet: (id: GameId, setId: string) => Promise<GameSet[]>;
             setMember: (id: GameId, setId: string, key: string, member: boolean) => Promise<GameSet[]>;
             useSet: (id: GameId, setId: string) => Promise<{ changed: number }>;
+            profiles: (id: GameId) => Promise<GameProfiles>;
+            /* With an id: renames it. Without: makes one, empty or a copy of copyOf (an ID, or "active"). */
+            saveProfile: (id: GameId, profile: { id?: string | null; name: string; copyOf?: string | null }) => Promise<GameProfiles & { created?: string }>;
+            deleteProfile: (id: GameId, profileId: string) => Promise<GameProfiles>;
+            switchProfile: (id: GameId, profileId: string) => Promise<GameProfiles & { changed: number; problems: string[] }>;
+            profileMember: (id: GameId, profileId: string, key: string, member: boolean) => Promise<GameProfiles>;
+            iniList: (id: GameId) => Promise<IniFiles>;
+            iniRead: (id: GameId, name: string) => Promise<IniFile>;
+            iniSave: (id: GameId, name: string, text: string) => Promise<IniFile>;
+            iniRestore: (id: GameId, name: string, copyId: string) => Promise<IniFile>;
+            iniPreset: (id: GameId, presetId: string, on: boolean) => Promise<IniFiles>;
+            openIniFolder: (id: GameId) => Promise<void>;
+            tools: (id: GameId) => Promise<ModTools>;
+            addTool: (id: GameId) => Promise<ModTools | null>;
+            saveTool: (id: GameId, toolId: string, change: { name: string; args: string }) => Promise<ModTools>;
+            removeTool: (id: GameId, toolId: string) => Promise<ModTools>;
+            showAllTools: (id: GameId) => Promise<ModTools>;
+            runTool: (id: GameId, toolId: string) => Promise<{ started: string; bottle?: string }>;
 
             finder: (id: GameId) => Promise<GameFinder>;
             finderStart: (id: GameId) => Promise<GameFinder>;

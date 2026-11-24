@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bug, ChevronDown, Folder, ListFilter, MoreHorizontal, Play, Power, Trash2, TriangleAlert, Undo2, Download, Plus, RefreshCw, FileUp, Ellipsis, X } from "lucide-react";
+import { Bug, ChevronDown, ClipboardPaste, Folder, ListFilter, MoreHorizontal, Play, Power, Share2, Trash2, TriangleAlert, Undo2, Download, Plus, RefreshCw, FileUp, Ellipsis, X, Pin, PinOff } from "lucide-react";
 import SearchDropdown from "../../components/SearchDropdown";
 import FinderPanel from "./FinderPanel";
 import LoadOrderNotice from "./LoadOrderNotice";
@@ -8,6 +8,9 @@ import ConflictsPanel from "./ConflictsPanel";
 import ClashesPanel from "./ClashesPanel";
 import RequirementsPanel from "./RequirementsPanel";
 import SetMenu from "./SetMenu";
+import GameSharePanel from "./GameSharePanel";
+import ProfileMenu, { ProfileBar } from "./ProfileMenu";
+import useGameProfiles, { type ProfileForm } from "./useGameProfiles";
 import ModNameCell from "./ModNameCell";
 import { Badge, Button, Menu, Notice, SearchField } from "../../components/ui";
 import type { Tone } from "../../components/ui";
@@ -70,7 +73,7 @@ const FILTERS: { id: Filter; label: string }[] = [
  */
 export default function GameMods({
   detail,
-  mods,
+  mods: allMods,
   reload,
   onPlay,
   playing,
@@ -95,16 +98,26 @@ export default function GameMods({
   finderApi,
   goLoadOrder,
 }: Props) {
+  const [message, setMessage] = useState<{ tone: "good" | "bad" | "warn"; text: string; notes?: string[] } | null>(null);
+  // Mod profiles: only the chosen one's mods are listed, as only they're in the game's folder.
+  const profileApi = useGameProfiles(detail.id, allMods, reload, setMessage);
+  const [profileForm, setProfileForm] = useState<ProfileForm | null>(null);
+  const mods = useMemo(() => (profileApi.hidden.size ? allMods.filter((mod) => !profileApi.hidden.has(mod.key)) : allMods), [allMods, profileApi.hidden]);
   // A set shown on its own ("All mods" for every one), and naming a new set or renaming one.
   const [setShown, setSetShown] = useState(ALL);
   const [naming, setNaming] = useState<{ id: string | null; name: string } | null>(null);
   const currentSet = sets.find((set) => set.name === setShown) ?? null;
-  const newer = useMemo(() => new Map((updates?.updates ?? []).map((found) => [found.key, found])), [updates]);
+  // Updates for mods kept at their version aren't offered, only named on the Kept badge.
+  const allNewer = useMemo(() => new Map((updates?.updates ?? []).map((one) => [one.key, one])), [updates]);
+  const newer = useMemo(() => {
+    const kept = new Set(mods.filter((mod) => mod.kept).map((mod) => mod.key));
+    return new Map([...allNewer].filter(([key]) => !kept.has(key)));
+  }, [allNewer, mods]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [sharing, setSharing] = useState<"make" | "paste" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ tone: "good" | "bad" | "warn"; text: string; notes?: string[] } | null>(null);
   const [showDownloads, setShowDownloads] = useState(false);
   const [downloads, setDownloads] = useState<GameDownload[] | null>(null);
   // Ticked for installing together: to start with, the new ones that look like this game's mods.
@@ -335,6 +348,7 @@ export default function GameMods({
             {onCount} of {mods.length} mod{mods.length === 1 ? "" : "s"} on
           </div>
         </div>
+        <ProfileMenu api={profileApi} onForm={setProfileForm} />
         {/* ISSUES: a small chip; the details open over the list */}
         <div ref={strip} className={`gm-strip gm-strip--${worst}`} data-testid="issues-strip" hidden={issueTotal === 0}>
           <button type="button" className="gm-strip__bar" aria-expanded={issuesOpen} aria-controls="gm-strip-body" onClick={() => setIssuesOpen((now) => !now)}>
@@ -534,6 +548,8 @@ export default function GameMods({
           trigger={<Ellipsis size={16} aria-hidden="true" />}
           items={[
             { label: "Install from a file...", icon: <FileUp size={14} aria-hidden="true" />, onSelect: () => install() },
+            { label: "Share this mod list", icon: <Share2 size={14} aria-hidden="true" />, onSelect: () => setSharing("make") },
+            { label: "Install a shared list...", icon: <ClipboardPaste size={14} aria-hidden="true" />, onSelect: () => setSharing("paste") },
             {
               label: checking ? "Checking for updates..." : "Check for updates",
               icon: <RefreshCw size={14} aria-hidden="true" />,
@@ -555,6 +571,8 @@ export default function GameMods({
           ]}
         />
       </header>
+
+      {profileForm && <ProfileBar api={profileApi} form={profileForm} setForm={setProfileForm} />}
 
       {/* TOAST-LIKE RESULT OF THE LAST ACTION */}
       {message && (
@@ -704,6 +722,8 @@ export default function GameMods({
       )}
 
       {/* DOWNLOADS */}
+      {sharing && <GameSharePanel key={sharing} detail={detail} mode={sharing} onClose={() => setSharing(null)} reload={reload} onInstalled={onInstalled} />}
+
       {showDownloads && (
         <section className="gm-downloads" data-testid="downloads-panel">
           <div className="gm-downloads__head">
@@ -783,7 +803,9 @@ export default function GameMods({
         {shown.length === 0 ? (
           <div className="gm-empty">
             {mods.length === 0
-              ? detail.found
+              ? profileApi.active && allMods.length
+                ? `No mods in ${profileApi.active.name} yet. Add some from Downloads or Discover Mods, or pick another profile and put its mods in this one from each mod's ... menu.`
+                : detail.found
                 ? "No mods yet. Add one from Downloads, or find some in Discover Mods."
                 : "Once the game's found, its mods show here."
               : "No mods match."}
@@ -809,7 +831,15 @@ export default function GameMods({
                     mod={mod}
                     extra={extra}
                     badge={
-                      update ? (
+                      mod.kept ? (
+                        <Badge
+                          tone="neutral"
+                          data-testid="kept-badge"
+                          data-tip={`Kept at ${mod.version || "this version"}${allNewer.get(mod.key) ? `. ${allNewer.get(mod.key)?.toVersion || "A newer version"} is out` : ""}. Let it update from the ... menu`}
+                        >
+                          Kept
+                        </Badge>
+                      ) : update ? (
                         <Badge
                           tone="success"
                           data-testid="update-badge"
@@ -904,6 +934,28 @@ export default function GameMods({
                             ? [{ label: `Update to ${update.toVersion || update.toName}`, icon: <Download size={14} aria-hidden="true" />, disabled: Boolean(updating), onSelect: () => onUpdate(update) }]
                             : []),
                           ...(mod.canUndo ? [{ label: "Undo the update", icon: <Undo2 size={14} aria-hidden="true" />, onSelect: () => onUndo(mod) }] : []),
+                          ...(mod.managed
+                            ? [
+                                {
+                                  label: mod.kept ? "Let it update" : "Keep this version",
+                                  icon: mod.kept ? <PinOff size={14} aria-hidden="true" /> : <Pin size={14} aria-hidden="true" />,
+                                  disabled: busy === mod.key,
+                                  onSelect: () => act(mod.key, () => window.gamesAPI.keepVersion(detail.id, mod.key, !mod.kept)),
+                                },
+                              ]
+                            : []),
+                          // Which profiles it's in: taken out of the chosen one, it leaves the list and the game.
+                          ...(profileApi.profiles.length > 1 ? ["separator" as const] : []),
+                          ...(profileApi.profiles.length > 1
+                            ? profileApi.profiles.map((profile) => {
+                                const member = profile.keys.includes(mod.key) || profile.id === profileApi.active?.id;
+                                return {
+                                  label: `${member ? "✓ " : ""}In ${profile.name}${profile.id === profileApi.active?.id ? " (chosen)" : ""}`,
+                                  disabled: Boolean(profileApi.busy),
+                                  onSelect: () => void profileApi.member(profile.id, mod.key, !member),
+                                };
+                              })
+                            : []),
                           "separator" as const,
                           {
                             label: mod.managed ? "Delete this mod" : "Delete from the game's folders",

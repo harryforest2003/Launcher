@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { Cloud, FileArchive, FolderOpen, Radar } from "lucide-react";
+import { ClipboardPaste, Cloud, FileArchive, FolderOpen, Radar } from "lucide-react";
 import { Button, Notice } from "./ui";
 import "../pages/library.css";
 
 /*
  * Backs the "Import" tab of the New Instance page: scanning other launchers, importing a
- * folder or zip, and restoring from the cloud folder.
+ * folder or zip, pasting a share code, and restoring from the cloud folder.
  */
 
 type Props = {
   onImported: (name: string) => void;
 };
 
-type Mode = "idle" | "launchers" | "cloud";
+type Mode = "idle" | "launchers" | "code" | "cloud";
+type SharedPreview = Awaited<ReturnType<typeof window.instanceAPI.readShareCode>>;
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 B";
@@ -36,6 +37,10 @@ export default function ImportPanel({ onImported }: Props) {
   const [cloudFolder, setCloudFolder] = useState("");
   const [cloudDetected, setCloudDetected] = useState<CloudFolder[]>([]);
   const [cloudInstances, setCloudInstances] = useState<CloudInstance[]>([]);
+
+  const [code, setCode] = useState("");
+  const [shared, setShared] = useState<SharedPreview | null>(null);
+  const [made, setMade] = useState<string | null>(null);
 
   useEffect(() => {
     return window.instanceAPI.onProgress(setProgress);
@@ -117,6 +122,8 @@ export default function ImportPanel({ onImported }: Props) {
         const info = picked.info;
 
         const created = await window.instanceAPI.importModpackFile(picked.file);
+        // Looked up on Modrinth, so a known pack can be updated later. Not found is fine.
+        await window.instanceAPI.identifyModpackFile(created.name, picked.file).catch(() => null);
 
         setNotice(`Installed modpack "${info.name}" as "${created.name}" (Minecraft ${created.version}, ${created.loader}).`);
 
@@ -128,6 +135,33 @@ export default function ImportPanel({ onImported }: Props) {
 
       setNotice(`Restored "${created.name}" from the export.`);
       onImported(created.name);
+    });
+  }
+
+  /* ---------------- share code ---------------- */
+
+  async function readCode(text: string) {
+    setCode(text);
+    setShared(null);
+    setMade(null);
+    if (!text.trim()) return;
+    await run("read-code", async () => setShared(await window.instanceAPI.readShareCode(text)));
+  }
+
+  async function importCode() {
+    await run("code", async () => {
+      const done = await window.instanceAPI.importShareCode(code);
+      const problems = [
+        done.blocked.length ? `Not allowed to download outside CurseForge, so get them from their pages: ${done.blocked.map((b) => b.name).join(", ")}.` : "",
+        done.failed.length ? `Couldn't download: ${done.failed.map((f) => f.name).join(", ")}.` : "",
+        done.notFound ? `${done.notFound} file${done.notFound === 1 ? " is" : "s are"} no longer on Modrinth or CurseForge.` : "",
+        done.missing.length ? `Not on either site, so ask whoever shared it for: ${done.missing.join(", ")}.` : "",
+      ].filter(Boolean);
+      setNotice(`Made "${done.name}" with ${done.installed} file${done.installed === 1 ? "" : "s"}.${problems.length ? ` ${problems.join(" ")}` : ""}`);
+      setCode("");
+      setShared(null);
+      if (problems.length) setMade(done.name);
+      else onImported(done.name);
     });
   }
 
@@ -207,6 +241,18 @@ export default function ImportPanel({ onImported }: Props) {
       current: false,
     },
     {
+      id: "code",
+      icon: ClipboardPaste,
+      title: "From a share code",
+      text: "A code from Share code on someone's instance. It downloads the same mods from Modrinth and CurseForge.",
+      action: () => {
+        setMode("code");
+        setMade(null);
+      },
+      label: "Paste Code",
+      current: mode === "code",
+    },
+    {
       id: "cloud",
       icon: Cloud,
       title: "From your cloud folder",
@@ -281,6 +327,45 @@ export default function ImportPanel({ onImported }: Props) {
               </div>
             ))}
           </div>
+        </>
+      )}
+
+      {/* ---------------- share code ---------------- */}
+      {mode === "code" && (
+        <>
+          <h2 className="im-section-title">Share code</h2>
+          <p className="im-lead">Paste the code. Nothing is made until you press Make instance.</p>
+          <textarea
+            data-testid="share-code-input"
+            className="ui-input ui-input--mono"
+            aria-label="Share code"
+            placeholder="unity1:..."
+            rows={3}
+            value={code}
+            disabled={busy === "code"}
+            onChange={(e) => void readCode(e.target.value)}
+            style={{ width: "100%", padding: "var(--space-2) var(--space-3)", fontSize: 12, resize: "vertical" }}
+          />
+          {shared && (
+            <div className="im-row" data-testid="share-code-preview" style={{ marginTop: "var(--space-3)" }}>
+              <div className="im-row-text">
+                <div className="im-row-name">{shared.name}</div>
+                <div className="im-row-meta">
+                  Minecraft {shared.version}, {shared.loader === "vanilla" ? "Vanilla" : `${shared.loader}${shared.loaderVersion ? ` ${shared.loaderVersion}` : ""}`}, {shared.files} file
+                  {shared.files === 1 ? "" : "s"} to download
+                </div>
+                {shared.missing.length > 0 && <div className="im-row-meta">Not included (on neither site): {shared.missing.join(", ")}</div>}
+              </div>
+              <Button variant="primary" disabled={!!busy} onClick={importCode}>
+                {busy === "code" ? "Making..." : "Make instance"}
+              </Button>
+            </div>
+          )}
+          {made && (
+            <Button size="sm" style={{ marginTop: "var(--space-3)" }} onClick={() => onImported(made)}>
+              Open {made}
+            </Button>
+          )}
         </>
       )}
 

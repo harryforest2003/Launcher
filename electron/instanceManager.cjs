@@ -906,6 +906,7 @@ module.exports = {
     repairInstance,
     changeLoaderVersion,
     restoreLoader,
+    writeInstanceFields,
     deleteInstance,
     launchInstance,
     getLog,

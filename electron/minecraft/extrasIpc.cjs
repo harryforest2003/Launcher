@@ -1,12 +1,16 @@
 const fs = require("fs");
 const path = require("path");
-const { ipcMain, nativeImage } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, nativeImage } = require("electron");
 
 const instanceManager = require("../instanceManager.cjs");
 const servers = require("./servers.cjs");
 const worldBackups = require("./worldBackups.cjs");
 const { shareLog } = require("./shareLog.cjs");
 const discord = require("./discord.cjs");
+const modpackUpdate = require("./modpackUpdate.cjs");
+const packExports = require("./packExports.cjs");
+const instanceShare = require("./instanceShare.cjs");
+const { fetchJson, sha1 } = require("./net.cjs");
 const { desktopShortcut } = require("./shortcuts.cjs");
 
 /*
@@ -106,6 +110,89 @@ function registerExtrasIpc() {
         const folder = instanceManager.instanceFolder(instance.name);
         return desktopShortcut({ name: instance.name, folder, picture: path.join(folder, "picture.png") });
     });
+
+    /* ---------------- modpack updates ---------------- */
+
+    ipcMain.handle("modpack:remember", (_e, name, pack) => modpackUpdate.rememberModpack(String(name ?? ""), pack));
+
+    // A .mrpack added from a file: Modrinth knows which pack it is by its hash.
+    ipcMain.handle("modpack:identifyFile", async (_e, name, file) => {
+        instanceManager.getInstance(name);
+        const chosen = String(file ?? "");
+        if (!/\.mrpack$/i.test(chosen) || !fs.existsSync(chosen)) return null;
+        try {
+            const version = await fetchJson(`https://api.modrinth.com/v2/version_file/${await sha1(chosen)}?algorithm=sha1`);
+            if (!version?.project_id) return null;
+            return modpackUpdate.rememberModpack(name, { source: "modrinth", projectId: version.project_id, versionId: version.id, versionName: version.version_number || version.name, name: "" });
+        } catch {
+            return null; // Not on Modrinth (or offline): it just can't be updated from here.
+        }
+    });
+
+    ipcMain.handle("modpack:update", (event, name, versionId) =>
+        modpackUpdate.updateModpack(String(name ?? ""), String(versionId ?? ""), {
+            onProgress: (progress) => event.sender.send("instance:progress", { name, ...progress }),
+        })
+    );
+
+    ipcMain.handle("modpack:lastUpdate", (_e, name) => modpackUpdate.lastModpackUpdate(String(name ?? "")));
+
+    ipcMain.handle("modpack:undo", (event, name) =>
+        modpackUpdate.undoModpackUpdate(String(name ?? ""), {
+            onProgress: (progress) => event.sender.send("instance:progress", { name, ...progress }),
+        })
+    );
+
+    /* ---------------- CurseForge and server pack exports ---------------- */
+
+    const safeName = (name) => String(name).replace(/[/\\:*?"<>|]/g, "-");
+    const askWhere = async (event, title, file, filter) => {
+        const picked = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+            title,
+            defaultPath: path.join(app.getPath("downloads"), file),
+            filters: [filter],
+        });
+        return picked.canceled || !picked.filePath ? null : picked.filePath;
+    };
+
+    // Asks where to save it, then writes a CurseForge modpack zip. Null if cancelled.
+    ipcMain.handle("instance:exportCurseForge", async (event, name, options = {}) => {
+        const instance = instanceManager.getInstance(name);
+        const target = await askWhere(event, `Export ${name} for CurseForge`, `${safeName(name)}-curseforge.zip`, { name: "CurseForge modpack", extensions: ["zip"] });
+        if (!target) return null;
+        return packExports.exportCurseForge(instance, instanceManager.instanceFolder(name), target, {
+            name: instance.name,
+            worlds: Boolean(options.worlds),
+            options: Boolean(options.options),
+        });
+    });
+
+    // Asks where to save it, then writes a server pack zip. Null if cancelled.
+    ipcMain.handle("instance:exportServerPack", async (event, name) => {
+        const instance = instanceManager.getInstance(name);
+        if (String(instance.loader || "vanilla").toLowerCase() === "vanilla") {
+            throw new Error("A vanilla instance needs no server pack: Minecraft's own server runs it.");
+        }
+        const target = await askWhere(event, `Export a server pack of ${name}`, `${safeName(name)}-server.zip`, { name: "Server pack", extensions: ["zip"] });
+        if (!target) return null;
+        return packExports.exportServerPack(instance, instanceManager.instanceFolder(name), target);
+    });
+
+    /* ---------------- share codes ---------------- */
+
+    // The instance as a share code: { code, linked, missing }.
+    ipcMain.handle("share:instanceCode", (_event, name) => instanceShare.instanceShareCode(name));
+    // What a pasted code holds, without making anything.
+    ipcMain.handle("share:readInstanceCode", (_event, code) => instanceShare.readInstanceCode(code));
+    // A new instance from a pasted code, with its files downloaded.
+    ipcMain.handle("share:importInstance", (event, code, name) =>
+        instanceShare.importInstanceCode(code, {
+            name: typeof name === "string" ? name : undefined,
+            onProgress: (progress) => {
+                if (!event.sender.isDestroyed()) event.sender.send("instance:progress", progress);
+            },
+        })
+    );
 
     /* ---------------- Discord status ---------------- */
 
