@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import logoMark from "../../assets/logo-mark.png";
 import AccountSwitcher from "../AccountSwitcher";
+import RunningGames from "./RunningGames";
 import { useGameArt } from "../../pages/gameArt";
 import Monogram from "./Monogram";
 import { useDownloads } from "./downloadsContext";
@@ -250,6 +251,7 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
       </div>
 
       <div className="ui-shell__foot">
+        <RunningGames tip={tip} onOpen={() => go({ kind: "mc", page: "library" })} />
         <button
           type="button"
           className="ui-shell__item"

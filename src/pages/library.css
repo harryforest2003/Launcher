@@ -578,11 +578,20 @@
 
 /* ---------- the picture: a monogram over a pattern made from the name ---------- */
 
+/*
+ * The pattern's colours are the user's colour turned round the colour wheel by the
+ * instance's own amount (--art-hue, set from its name), so neighbouring instances differ
+ * the way real pack icons do, at the same lightness and strength as the user's colour.
+ */
 .lx-art {
+  --art-hue: 0;
+  --art-bg: oklch(from var(--color-accent-subtle) l c calc(h + var(--art-hue)));
+  --art-line: oklch(from var(--color-accent-line) l c calc(h + var(--art-hue)));
+  --art-text: oklch(from var(--color-accent-text) l c calc(h + var(--art-hue)));
   position: relative;
   display: block;
   overflow: hidden;
-  background: var(--color-accent-subtle);
+  background: var(--art-bg);
   border-radius: var(--radius-cut);
   corner-shape: var(--corner-cut);
 }
@@ -613,7 +622,7 @@
 }
 
 .lx-art .px {
-  fill: var(--color-accent-line);
+  fill: var(--art-line);
   opacity: 0.28;
 }
 
@@ -622,8 +631,8 @@
 }
 
 .lx-art text {
-  fill: var(--color-accent-text);
-  stroke: var(--color-accent-subtle);
+  fill: var(--art-text);
+  stroke: var(--art-bg);
   paint-order: stroke;
   stroke-linejoin: round;
   font-family: var(--font-display);

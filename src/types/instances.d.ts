@@ -730,6 +730,8 @@ declare global {
             /** Saves a picture (a PNG data URL) as the instance's own; gives it back as saved. */
             setPicture(name: string, dataUrl: string): Promise<string>;
             clearPicture(name: string): Promise<null>;
+            /** A picture from an https address (a modpack's icon) as a data URL, for the page to cut square. */
+            downloadPicture(url: string): Promise<string>;
             /** Puts a shortcut that plays it on the desktop (the installed app only). */
             desktopShortcut(name: string): Promise<{ path: string; replaced: boolean }>;
             /** Notes the modpack (and version of it) an instance was made from, so it can be updated. */

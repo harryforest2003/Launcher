@@ -50,7 +50,7 @@ const SIZE = 256;
  * A picture file cut to a square from its middle and made 256 px (smaller ones keep their
  * size), as a PNG data URL. Anything the page can show works: PNG, JPEG, WebP, GIF, BMP.
  */
-export async function squarePicture(file: File): Promise<string> {
+export async function squarePicture(file: Blob): Promise<string> {
   const bitmap = await createImageBitmap(file).catch(() => {
     throw new Error("That file isn't a picture the launcher can read.");
   });
@@ -67,4 +67,40 @@ export async function squarePicture(file: File): Promise<string> {
   context.drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, out, out);
   bitmap.close();
   return canvas.toDataURL("image/png");
+}
+
+/*
+ * A new modpack instance takes its pack's icon as its picture, the way other launchers show
+ * a pack's own art. Only when the instance has no picture yet, and quietly: a missing or
+ * unreadable icon just leaves the pattern.
+ */
+export async function adoptPackPicture(name: string, iconUrl: string | null | undefined) {
+  if (!iconUrl || !/^https:\/\//.test(iconUrl)) return;
+  try {
+    if (await window.instanceAPI.picture(name)) return;
+    const data = await window.instanceAPI.downloadPicture(iconUrl);
+    const blob = await (await fetch(data)).blob();
+    setInstancePicture(name, await window.instanceAPI.setPicture(name, await squarePicture(blob)));
+  } catch {
+    // The pattern made from the name stays.
+  }
+}
+
+const backfilled = new Set<string>();
+
+/*
+ * Instances made from a Modrinth or CurseForge pack before pack icons were kept: each one
+ * without a picture takes its pack's icon, once per session.
+ */
+export function backfillPackPictures(instances: { name: string; modpack?: { source: "modrinth" | "curseforge"; projectId: string } }[]) {
+  for (const instance of instances) {
+    const pack = instance.modpack;
+    if (!pack?.projectId || backfilled.has(instance.name)) continue;
+    backfilled.add(instance.name);
+    if (pictures.get(instance.name)) continue;
+    void window.launcherAPI
+      .getProject(pack.source, pack.projectId)
+      .then((project: { icon?: string | null } | null) => adoptPackPicture(instance.name, project?.icon))
+      .catch(() => {});
+  }
 }

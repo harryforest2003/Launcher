@@ -1,6 +1,5 @@
-import BackgroundLogo from "../components/BackgroundLogo";
 import { useEffect, useRef, useState } from "react";
-import { Clock, Download, ExternalLink, KeyRound, SlidersHorizontal } from "lucide-react";
+import { Clock, Download, ExternalLink, KeyRound } from "lucide-react";
 import { Badge, Button, EmptyState, Monogram, Notice, ProgressBar, SearchField, Select, Skeleton, Tabs } from "../components/ui";
 import "./discover.css";
 import InstallToInstance from "../components/InstallToInstance";
@@ -162,10 +161,8 @@ function MCDiscover({
     if (next !== "modpacks" && siteFromSource(source)) setSource("Any Source");
   };
 
-  // The loader, version, source and sort choices live behind one Filters button, so the
-  // content tabs can take the full width of the page.
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const filtersRef = useRef<HTMLDivElement>(null);
+  // The loader, version, source and sort choices stay in a column beside the results, the
+  // way the mod sites themselves list them, so what's narrowing the list is always in view.
   const activeFilters = [loader !== "Any Loader", version !== "Any Version", source !== "Any Source", sort !== "Relevance"].filter(Boolean).length;
   const resetFilters = () => {
     setLoader("Any Loader");
@@ -173,21 +170,6 @@ function MCDiscover({
     setSource("Any Source");
     setSort("Relevance");
   };
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const away = (event: MouseEvent) => {
-      if (!filtersRef.current?.contains(event.target as Node)) setFiltersOpen(false);
-    };
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFiltersOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [filtersOpen]);
 
   const [versions, setVersions] = useState<(string | { version?: string; id?: string })[]>([]);
   const [result, setResult] = useState<CatalogPage | null>(null);
@@ -227,7 +209,7 @@ function MCDiscover({
 
   function installModpack(item: CatalogItem, version: PackVersion) {
     setPickingPack(null);
-    void installPack({ source: item.source, projectId: item.id, name: item.name }, version);
+    void installPack({ source: item.source, projectId: item.id, name: item.name, icon: item.icon }, version);
   }
 
   /* ---------------- versions ---------------- */
@@ -349,78 +331,11 @@ function MCDiscover({
       />
 
       <div style={{ flex: 1, minWidth: 0, position: "relative", overflow: "hidden", display: "flex" }}>
-      <BackgroundLogo />
       <div ref={discoverScroll} className="app-page dc-workspace">
         {/* One sticky toolbar: search, filters and the count, then the content types */}
         <div className="dc-bar">
           <div className="dc-bar__row">
             <SearchField wrapperClassName="dc-searchfield" label="Search Minecraft mods and modpacks" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Minecraft mods" />
-            <div className="dc-filters" ref={filtersRef}>
-              <Button
-                variant={activeFilters ? "primary" : "secondary"}
-                icon={<SlidersHorizontal size={16} aria-hidden="true" />}
-                aria-expanded={filtersOpen}
-                aria-controls="discover-filters"
-                onClick={() => setFiltersOpen((open) => !open)}
-              >
-                Filters
-                {activeFilters > 0 && <span className="dc-filters__count">{activeFilters}</span>}
-              </Button>
-
-              {filtersOpen && (
-                <div id="discover-filters" role="group" aria-label="Filters" className="dc-filters__panel" style={{ left: "auto", right: 0 }}>
-                  <label className="dc-field">
-                    <span>Loader</span>
-                    <Select value={loader} onChange={(e) => setLoader(e.target.value)}>
-                      <option>Any Loader</option>
-                      <option>Fabric</option>
-                      <option>Forge</option>
-                      <option>NeoForge</option>
-                      <option>Quilt</option>
-                    </Select>
-                  </label>
-
-                  <label className="dc-field">
-                    <span>Minecraft version</span>
-                    <Select value={version} onChange={(e) => setVersion(e.target.value)}>
-                      <option>Any Version</option>
-                      {versions.map((v, i) => {
-                        const val = typeof v === "string" ? v : v.version || v.id;
-                        return <option key={i}>{val}</option>;
-                      })}
-                    </Select>
-                  </label>
-
-                  <label className="dc-field">
-                    <span>Source</span>
-                    <Select value={source} onChange={(e) => setSource(e.target.value)}>
-                      <option>Any Source</option>
-                      <option>Modrinth</option>
-                      <option>CurseForge</option>
-                      {tab === "modpacks" && PLATFORM_SITES.map((site) => <option key={site}>{PLATFORM_NAMES[site]}</option>)}
-                    </Select>
-                  </label>
-
-                  <label className="dc-field">
-                    <span>Sort by</span>
-                    <Select value={sort} onChange={(e) => setSort(e.target.value)}>
-                      <option>Relevance</option>
-                      <option>Downloads</option>
-                      <option>Newest</option>
-                    </Select>
-                  </label>
-
-                  <div className="dc-filters__actions">
-                    <Button size="sm" variant="ghost" onClick={resetFilters} disabled={!activeFilters}>
-                      Reset
-                    </Button>
-                    <Button size="sm" onClick={() => setFiltersOpen(false)}>
-                      Done
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
             {totals && !platformSite && (
               <div data-testid="page-summary" className="dc-bar__count">
                 {source !== "CurseForge" && `${compact(totals.modrinth)} on Modrinth`}
@@ -443,6 +358,56 @@ function MCDiscover({
           </div>
         </div>
 
+        <div className="dc-body">
+        <aside className="dc-facets" aria-label="Filters">
+          <div className="dc-facets__head">
+            <span className="dc-facets__title">Filters</span>
+            <Button size="sm" variant="ghost" onClick={resetFilters} disabled={!activeFilters}>
+              Reset
+            </Button>
+          </div>
+          <label className="dc-field">
+            <span>Loader</span>
+            <Select value={loader} onChange={(e) => setLoader(e.target.value)}>
+              <option>Any Loader</option>
+              <option>Fabric</option>
+              <option>Forge</option>
+              <option>NeoForge</option>
+              <option>Quilt</option>
+            </Select>
+          </label>
+
+          <label className="dc-field">
+            <span>Minecraft version</span>
+            <Select value={version} onChange={(e) => setVersion(e.target.value)}>
+              <option>Any Version</option>
+              {versions.map((v, i) => {
+                const val = typeof v === "string" ? v : v.version || v.id;
+                return <option key={i}>{val}</option>;
+              })}
+            </Select>
+          </label>
+
+          <label className="dc-field">
+            <span>Source</span>
+            <Select value={source} onChange={(e) => setSource(e.target.value)}>
+              <option>Any Source</option>
+              <option>Modrinth</option>
+              <option>CurseForge</option>
+              {tab === "modpacks" && PLATFORM_SITES.map((site) => <option key={site}>{PLATFORM_NAMES[site]}</option>)}
+            </Select>
+          </label>
+
+          <label className="dc-field">
+            <span>Sort by</span>
+            <Select value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option>Relevance</option>
+              <option>Downloads</option>
+              <option>Newest</option>
+            </Select>
+          </label>
+        </aside>
+        <div className="dc-results">
         <div className="dc-notices">
           {packError && <Notice tone="danger" style={{ whiteSpace: "pre-wrap" }}>{packError}</Notice>}
           {packResult && <Notice tone="success">{packResult}</Notice>}
@@ -471,7 +436,7 @@ function MCDiscover({
             loader={loader === "Any Loader" ? undefined : loader}
             mcVersion={version === "Any Version" ? undefined : version}
             installing={installingPack}
-            onInstall={(item, picked) => void installPack({ source: item.source, projectId: item.id, name: item.name }, picked)}
+            onInstall={(item, picked) => void installPack({ source: item.source, projectId: item.id, name: item.name, icon: item.icon }, picked)}
           />
         ) : (
         <>
@@ -493,7 +458,7 @@ function MCDiscover({
             icon={pickingPlatform.icon}
             onPick={(picked) => {
               setPickingPlatform(null);
-              void installPack({ source: pickingPlatform.source, projectId: pickingPlatform.id, name: pickingPlatform.name }, picked);
+              void installPack({ source: pickingPlatform.source, projectId: pickingPlatform.id, name: pickingPlatform.name, icon: pickingPlatform.icon }, picked);
             }}
             onClose={() => setPickingPlatform(null)}
           />
@@ -621,6 +586,8 @@ function MCDiscover({
             CurseForge only lets apps reach the first 10,000 results of a search. Search or filter to get to the rest.
           </p>
         )}
+        </div>
+        </div>
       </div>
       </div>
     </div>

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { versionLabel, type PackVersion } from "./packVersions";
+import { adoptPackPicture } from "../utils/instancePictures";
 
-type Pack = { source: "modrinth" | "curseforge" | PlatformPackSite; projectId: string; name: string };
+/** icon: the pack's icon on its site, which becomes the new instance's picture. */
+type Pack = { source: "modrinth" | "curseforge" | PlatformPackSite; projectId: string; name: string; icon?: string | null };
 
 const PLATFORM_SITES: string[] = ["ftb", "technic", "atlauncher"];
 const isPlatform = (source: Pack["source"]): source is PlatformPackSite => PLATFORM_SITES.includes(source);
@@ -34,6 +36,7 @@ export function useModpackInstall() {
       // FTB, Technic and ATLauncher packs: installed from their own sites, not kept up to date.
       if (isPlatform(pack.source)) {
         const created = await window.instanceAPI.installPlatformPack(pack.source, pack.projectId, String(version.id), pack.name);
+        void adoptPackPicture(created.name, pack.icon);
         const { blocked, failed, firstError, notes } = created.pack;
         setResult(
           [
@@ -55,6 +58,7 @@ export function useModpackInstall() {
         fileId: String(version.id),
         name: pack.name,
       });
+      void adoptPackPicture(created.name, pack.icon);
       // Noted so the instance can move to newer versions of the pack later.
       await window.instanceAPI
         .rememberModpack(created.name, { source: pack.source, projectId: pack.projectId, versionId: String(version.id), versionName: versionLabel(version), name: pack.name })

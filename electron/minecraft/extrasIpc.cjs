@@ -92,6 +92,22 @@ function registerExtrasIpc() {
         return asDataUrl(png);
     });
 
+    // A modpack's icon from its site, for the page to cut square and save as the instance's
+    // picture. The page can't download it itself (its connections stay on the launcher), so
+    // it comes through here: https only, a picture type, at most 4 MB.
+    const PICTURE_TYPES = /^image\/(png|jpeg|webp|gif)$/;
+    ipcMain.handle("instance:downloadPicture", async (_e, url) => {
+        const address = new URL(String(url ?? ""));
+        if (address.protocol !== "https:") throw new Error("Pack icons only come over https.");
+        const res = await fetch(address, { signal: AbortSignal.timeout(20 * 1000) });
+        if (!res.ok) throw new Error(`${address.host} answered HTTP ${res.status}.`);
+        const type = String(res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+        if (!PICTURE_TYPES.test(type)) throw new Error("That address isn't a picture.");
+        const buffer = Buffer.from(await res.arrayBuffer());
+        if (!buffer.length || buffer.length > 4 * 1024 * 1024) throw new Error("That picture is too big to use.");
+        return `data:${type};base64,${buffer.toString("base64")}`;
+    });
+
     ipcMain.handle("instance:clearPicture", (_e, name) => {
         fs.rmSync(pictureFile(name), { force: true });
         return null;

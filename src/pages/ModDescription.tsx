@@ -197,7 +197,7 @@ function ModDescription(props: Props) {
 
   function installPack(version: PackVersion) {
     setPickingVersion(false);
-    pack.install({ source, projectId, name: packName }, version);
+    pack.install({ source, projectId, name: packName, icon: mod?.icon }, version);
   }
 
   return shell(

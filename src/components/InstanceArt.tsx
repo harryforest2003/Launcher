@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { initials } from "../pages/playedAgo";
 import { useInstancePicture } from "../utils/instancePictures";
 
@@ -10,6 +11,9 @@ type Props = {
   /** Always the pattern, never the instance's own picture (for a name still being typed). */
   plain?: boolean;
 };
+
+// How far round the colour wheel an instance's pattern turns from the user's colour (library.css .lx-art).
+const HUE_TURNS = [0, 40, 80, 140, 200, 250, 310];
 
 // A small, steady hash of the name (FNV-1a), so an instance always gets the same pattern.
 function hash(text: string) {
@@ -35,7 +39,7 @@ function random(seed: number) {
 /*
  * An instance's own picture when it has one (over a blurred copy of itself, so it fills a
  * wide banner too). Otherwise the picture for an instance that has none: its initials over a mirrored pixel pattern made
- * from its name, in the user's colour (library.css .lx-art). Every instance looks different,
+ * from its name, in the user's colour turned by an amount of its own (library.css .lx-art). Every instance looks different,
  * none of them is a grey cube, and the letters stay readable on any colour (they get a halo
  * of the background colour).
  */
@@ -57,7 +61,8 @@ export default function InstanceArt({ name, cols = 6, rows = 6, className, plain
     );
   }
 
-  const next = random(hash(name.trim().toLowerCase() || "?"));
+  const seed = hash(name.trim().toLowerCase() || "?");
+  const next = random(seed);
   const half = Math.ceil(cols / 2);
   const cells: { x: number; y: number; strong: boolean }[] = [];
   for (let y = 0; y < rows; y += 1) {
@@ -76,7 +81,11 @@ export default function InstanceArt({ name, cols = 6, rows = 6, className, plain
   const fontSize = height * (text.length > 2 ? 0.3 : 0.38);
 
   return (
-    <span className={["lx-art", className].filter(Boolean).join(" ")} aria-hidden="true">
+    <span
+      className={["lx-art", className].filter(Boolean).join(" ")}
+      style={{ "--art-hue": HUE_TURNS[seed % HUE_TURNS.length] } as CSSProperties}
+      aria-hidden="true"
+    >
       <svg viewBox={`0 0 ${cols * size} ${height}`} preserveAspectRatio="xMidYMid slice" focusable="false">
         {cells.map((cell) => (
           <rect

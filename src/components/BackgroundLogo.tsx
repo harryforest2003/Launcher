@@ -8,6 +8,8 @@ import "./ui/ui.css";
  * background of its own, so no box shows around it, and it's sized from the box it's in,
  * as large as fits there once turned, the same way on every page. It takes on the colour
  * the user picked (inside .app-logo-tint the wrapper does that instead).
+ * Pages that are mostly a grid or list of things (the Library, Discover) leave it out, so
+ * nothing shows through behind their pictures and rows.
  */
 export default function BackgroundLogo() {
   return (

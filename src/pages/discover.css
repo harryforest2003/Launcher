@@ -76,54 +76,56 @@
   margin-top: var(--space-2);
 }
 
-.dc-filters {
-  position: relative;
-  flex-shrink: 0;
-  padding-bottom: var(--space-1);
-}
-
-.dc-filters__count {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  margin-left: var(--space-1);
-  border-radius: var(--radius-full);
-  background: var(--color-on-accent);
-  color: var(--color-accent);
-  font-size: var(--font-size-xs);
-  font-weight: var(--weight-semibold);
-  font-variant-numeric: tabular-nums;
-}
-
-.dc-filters__panel {
-  position: absolute;
-  z-index: var(--z-dropdown);
-  top: calc(100% + var(--space-2));
-  left: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(170px, 1fr));
-  gap: var(--space-3);
-  width: min(420px, 80vw);
-  padding: var(--space-4);
-  border: var(--border-width) solid var(--ui-hairline, var(--color-border));
-  border-radius: var(--ui-radius-card, var(--radius-lg));
-  background: var(--color-surface-raised);
-  box-shadow: var(--edge-highlight), var(--shadow-lg);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .dc-filters__panel {
-    animation: dc-pop var(--duration-fast) var(--ease-out);
-  }
-}
-
 @keyframes dc-pop {
   from {
     opacity: 0;
     transform: translateY(-4px);
   }
+}
+
+/* ---------------- the filters, in a column beside the results ---------------- */
+
+.dc-body {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.dc-results {
+  min-width: 0;
+}
+
+.dc-facets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: var(--border-width) solid var(--ui-hairline, var(--color-border));
+  border-radius: var(--ui-radius-card, var(--radius-lg));
+  background: var(--color-surface);
+}
+
+.dc-facets__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--control-sm);
+}
+
+.dc-facets__title {
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+/* Narrow: the filters go above the results, two to a row. */
+@container discover (max-width: 760px) {
+  .dc-body { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .dc-facets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dc-facets__head { grid-column: 1 / -1; }
 }
 
 .dc-field {
@@ -140,13 +142,6 @@
 .dc-field__hint {
   color: var(--color-warning-text);
   line-height: var(--leading-normal);
-}
-
-.dc-filters__actions {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
 }
 
 .dc-tabs {
@@ -181,7 +176,6 @@
   .dc-status__text:empty { display: none; }
   .dc-toolbar { flex-wrap: wrap; align-items: center; }
   .dc-tabs { flex-basis: 100%; order: 2; }
-  .dc-filters { padding-bottom: 0; }
   .dc-row { grid-template-columns: 48px minmax(0, 1fr) auto; gap: var(--space-3); }
 }
 
@@ -195,7 +189,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* CurseForge switched off: one slim line, the full reason in its tooltip and in the Filters panel. */
+/* CurseForge switched off: one slim line, the full reason in its tooltip. */
 .dc-off {
   display: inline-flex;
   align-items: center;
@@ -842,16 +836,10 @@
 }
 
 .dc-page, .dc-workspace { container: discover / inline-size; }
-.dc-filters__panel {
-  box-sizing: border-box;
-  width: min(420px, 100cqi);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 @container discover (max-width: 500px) {
   .dc-head__row { flex-wrap: wrap; gap: var(--space-3); }
   .dc-head__title { width: 100%; }
   .dc-search { flex-basis: 100%; }
-  .dc-filters__panel { grid-template-columns: minmax(0, 1fr); max-height: 65vh; overflow-y: auto; }
   .dc-toolbar { flex-wrap: wrap; align-items: center; }
 }
 
@@ -890,7 +878,6 @@
   white-space: nowrap;
 }
 .dc-bar .dc-tabs { flex: 1; min-width: 0; margin: 0; }
-.dc-bar .dc-filters { padding: 0; }
 .dc-bar .ui-tabs__tab { height: var(--control-sm); }
 
 /* Small info popover for the notes that used to sit above the list. */

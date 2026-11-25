@@ -636,6 +636,47 @@
   box-shadow: 0 0 0 2px var(--color-chrome);
 }
 
+/* A game is open: a live dot, and the game's name with who it's playing as. */
+.ui-shell__dot--live {
+  background: var(--color-success-solid);
+  animation: ui-shell-live 2s ease-in-out infinite;
+}
+
+@keyframes ui-shell-live {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-shell__dot--live {
+    animation: none;
+  }
+}
+
+.ui-shell__running {
+  color: var(--color-text);
+}
+
+.ui-shell__running-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.ui-shell__running-name,
+.ui-shell__running-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-shell__running-meta {
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-regular, 400);
+  color: var(--color-text-muted);
+}
+
 /* Back out of something opened inside a page, drawn under that page. */
 .ui-shell__back {
   position: relative;

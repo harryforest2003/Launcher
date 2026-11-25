@@ -2,7 +2,6 @@ import { Component, useContext, useEffect, useRef, useState, type ReactNode } fr
 import { ArrowLeft, Box, Compass, FolderPlus, LayoutGrid, LogIn, Play, Shirt, UserRound } from "lucide-react";
 import CreateInstancePanel from "../components/CreateInstancePanel";
 import BackgroundLogo from "../components/BackgroundLogo";
-import AccountSwitcher from "../components/AccountSwitcher";
 import Sidebar from "../components/MCSidebar";
 import SkinPreview from "../components/SkinPreview";
 import SkinFront from "../components/SkinFront";
@@ -284,15 +283,10 @@ function MinecraftMenu({
                   )}
                 </div>
 
+                {/* Who's playing, once: switching accounts is the sidebar's account card. */}
                 <div className="mh-player__info">
+                  <span className="mh-player__label">Playing as</span>
                   <strong className="mh-player__name">{account.username}</strong>
-                  <span className="mh-player__uuid" title="Your Minecraft player ID (UUID)">
-                    {account.uuid}
-                  </span>
-                </div>
-
-                <div className="mh-player__switch">
-                  <AccountSwitcher />
                 </div>
                 <div className="mh-player__actions">
                   <Button size="sm" variant="ghost" icon={<Shirt size={14} aria-hidden="true" />} onClick={goSkinSelector}>

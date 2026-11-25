@@ -116,6 +116,7 @@ expose("instanceAPI", {
     picture: (name) => ipcRenderer.invoke("instance:picture", name),
     setPicture: (name, dataUrl) => ipcRenderer.invoke("instance:setPicture", name, dataUrl),
     clearPicture: (name) => ipcRenderer.invoke("instance:clearPicture", name),
+    downloadPicture: (url) => ipcRenderer.invoke("instance:downloadPicture", url),
     desktopShortcut: (name) => ipcRenderer.invoke("instance:desktopShortcut", name),
     // ----- modpack updates -----
     rememberModpack: (name, pack) => ipcRenderer.invoke("modpack:remember", name, pack),

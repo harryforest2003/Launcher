@@ -1,8 +1,8 @@
-import BackgroundLogo from "../components/BackgroundLogo";
 import { onLaunchRequest, onOpenInstanceRequest } from "../utils/launchRequests";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import CreateInstancePanel from "../components/CreateInstancePanel";
 import InstanceArt from "../components/InstanceArt";
+import { backfillPackPictures } from "../utils/instancePictures";
 import Sidebar from "../components/MCSidebar";
 import { Badge, Button, Notice, SearchField, Select } from "../components/ui";
 import { BinIcon, RefreshIcon } from "../components/Icons";
@@ -179,7 +179,9 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
   async function loadInstances() {
     try {
       const data = await window.instanceAPI.list();
-      setInstances(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setInstances(list);
+      backfillPackPictures(list);
     } catch (err) {
       console.error("Failed to load instances:", err);
       setInstances([]);
@@ -644,9 +646,6 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
         />
 
         <div className="app-main" style={{ display: "flex" }}>
-          <div className="app-logo-tint">
-            <BackgroundLogo />
-          </div>
           <InstanceDetail instanceName={open} onBack={backToList} />
         </div>
       </div>
@@ -1078,9 +1077,6 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
       />
 
       <main className="app-main lx-container">
-        <div className="app-logo-tint">
-          <BackgroundLogo />
-        </div>
 
         {creating ? (
           <div className="app-page">

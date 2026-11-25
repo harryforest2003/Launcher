@@ -479,16 +479,17 @@ export default function GameSection({ gameId, initialPage, onLauncher, onLaunche
                   {(() => {
                     const on = mods.filter((mod) => mod.enabled).length;
                     const off = mods.length - on;
+                    // Always a full row of four, so the overview never shrinks to one lonely card:
+                    // the game's version when it's known, otherwise how many mods it has.
                     const facts = [
-                      detail.lastPlayed ? { label: "Last launched", value: timeAgo(detail.lastPlayed) } : null,
-                      detail.version ? { label: "Version", value: detail.version } : null,
-                      mods.length > 0 ? { label: "Enabled mods", value: String(on) } : null,
-                      off > 0 ? { label: "Turned off", value: String(off) } : null,
-                    ].filter((fact): fact is { label: string; value: string } => fact !== null);
-                    if (!facts.length) return null;
+                      { label: "Last launched", value: (detail.lastPlayed && timeAgo(detail.lastPlayed)) || "Not yet" },
+                      detail.version ? { label: "Version", value: detail.version } : { label: "Mods installed", value: String(mods.length) },
+                      { label: "Enabled mods", value: String(on) },
+                      { label: "Turned off", value: String(off) },
+                    ];
                     return (
                       <section className="db-card" aria-label="Game overview">
-                        <dl className="db-kpis" style={{ "--kpi-cols": Math.min(facts.length, 4) } as React.CSSProperties}>
+                        <dl className="db-kpis" style={{ "--kpi-cols": facts.length } as React.CSSProperties}>
                           {facts.map((fact) => <div key={fact.label}><dt>{fact.label}</dt><dd title={fact.value}>{fact.value}</dd></div>)}
                         </dl>
                       </section>

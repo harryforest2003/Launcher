@@ -895,20 +895,6 @@
   white-space: nowrap;
 }
 
-.mh-player__uuid {
-  max-width: 100%;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.mh-player__switch > * {
-  width: 100%;
-}
-
 .mh-player__actions {
   display: flex;
   justify-content: center;
