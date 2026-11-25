@@ -218,6 +218,7 @@ async function runCheck() {
         );
         pending = { commit: info.commit, committed: info.committed, file };
         set({ status: "ready", latest, progress: 1, checkedAt: new Date().toISOString() });
+        require("./launcherApp.cjs").notify("Launcher update ready", "Restart Unity Launcher to put the new version in.");
     } catch (err) {
         set({ status: pending ? "ready" : "error", message: err.message, checkedAt: new Date().toISOString() });
     }

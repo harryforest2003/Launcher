@@ -1719,6 +1719,27 @@ if (!window.launcherAPI) {
     },
     onState: () => () => {},
   };
+  let previewCache = 184_000_000;
+  let previewLogin = false;
+  const previewStorage = () => ({ dataDir: "~/Library/Application Support/Unity Launcher", dataBytes: 2_310_000_000 + previewCache, cacheBytes: previewCache, updateBytes: 0 });
+  target.appAPI = {
+    about: async () => ({ version: "0.0.0", commit: "c1281b1", built: new Date().toISOString(), packaged: false, electron: "45.3.2", chrome: "146.0", node: "24.13", platform: "darwin", arch: "arm64" }),
+    storage: async () => previewStorage(),
+    clearCache: async () => {
+      const freedBytes = previewCache;
+      previewCache = 0;
+      return { freedBytes, ...previewStorage() };
+    },
+    openDataFolder: async () => {},
+    startup: async () => ({ supported: true, openAtLogin: previewLogin }),
+    setStartup: async ({ openAtLogin }: { openAtLogin?: boolean }) => {
+      if (typeof openAtLogin === "boolean") previewLogin = openAtLogin;
+      return { supported: true, openAtLogin: previewLogin };
+    },
+    testNotification: async () => {},
+    exportSettings: async () => "~/Documents/Unity Launcher settings.json",
+    importSettings: async () => null,
+  };
 
   if (document.body) showPreviewLabel();
   else document.addEventListener("DOMContentLoaded", showPreviewLabel, { once: true });

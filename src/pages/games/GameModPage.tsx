@@ -78,7 +78,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
         tone: "info",
         text: mod.hasKey
           ? `Opened ${file ? file.name : "its files"} on Nexus Mods: press the download button there and the launcher installs it by itself.`
-          : `Opened on Nexus Mods. To install with the launcher, add your Nexus Mods API key in Settings → API keys, then press "Mod Manager Download" there.`,
+          : `Opened on Nexus Mods. To install with the launcher, add your Nexus Mods API key in Settings → Mod sites, then press "Mod Manager Download" there.`,
       });
       return;
     }
@@ -250,7 +250,7 @@ export default function GameModPage({ detail, provider, modId, afterInstall, ope
           {viaWebsite
             ? mod.hasKey
               ? `Opens ${mainFile ? "its main file's download" : "its files"} on Nexus Mods: one click on the download button there and the launcher puts it in the right folders.`
-              : `Opens it on Nexus Mods. Add your Nexus Mods key in Settings → API keys and its download there installs it here.`
+              : `Opens it on Nexus Mods. Add your Nexus Mods key in Settings → Mod sites and its download there installs it here.`
             : provider === "workshop"
               ? "Opens its page in Steam. Press Subscribe there and Steam downloads it and keeps it up to date."
               : mainFile

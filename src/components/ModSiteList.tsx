@@ -108,6 +108,7 @@ export default function ModSiteList({ apiKeys, onChange }: Props) {
                     environmentVariable={site.environmentVariable ?? ""}
                     status={apiKeys?.[site.key]}
                     onChange={onChange}
+                    getKey={site.keyUrl ? { url: site.keyUrl, steps: site.keySteps } : undefined}
                   >
                     <Help site={site} />
                   </ApiKeyRow>

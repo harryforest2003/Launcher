@@ -1,0 +1,92 @@
+/* The first-run welcome (Welcome.tsx). */
+
+.welcome-steps {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+.welcome-steps__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.welcome-steps__item[data-done] {
+  color: var(--color-text);
+}
+
+.welcome-steps__item[aria-current="step"] {
+  border-color: var(--color-accent-line);
+  background: var(--color-accent-subtle);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.welcome-step {
+  display: grid;
+  gap: 14px;
+  min-height: 260px;
+  align-content: start;
+}
+
+.welcome-step__lead {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.welcome-games {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-game {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.welcome-game__art {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.welcome-game__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.welcome-keys {
+  max-height: 46vh;
+  overflow: auto;
+}
+
+.welcome-foot__gap {
+  flex: 1;
+}

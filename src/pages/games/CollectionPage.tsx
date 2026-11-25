@@ -89,7 +89,7 @@ export default function CollectionPage({ detail, slug }: Props) {
             ? "With Premium they all download by themselves."
             : account
               ? "On a free Nexus account each one opens on Nexus Mods in turn: one click on the download button there each."
-              : "Add your Nexus Mods key in Settings → API keys to install them."}
+              : "Add your Nexus Mods key in Settings → Mod sites to install them."}
         </span>
         <button
           className="sidebar-button"

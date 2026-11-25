@@ -472,6 +472,8 @@ app.whenReady().then(() => {
     registerBlockbenchIpc();
     // Home's play time, activity, news and Steam deals.
     registerDashboardIpc();
+    // Settings' About, storage, startup, notifications and settings backup.
+    require("./launcherApp.cjs").registerLauncherAppIpc();
     // Downloads newer builds from GitHub and puts them in when the launcher quits.
     require("./updater.cjs").registerUpdater();
     createWindow();

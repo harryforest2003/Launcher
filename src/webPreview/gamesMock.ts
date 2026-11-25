@@ -377,7 +377,14 @@ const finderStatus = (id: GameId): GameFinder => {
 const updatable = new Set(["m:mccc", "m:ww"]);
 
 // The downloads queue, simulated: "Skip this one" stands in for pressing Nexus' download button.
-const queueItems: GameQueueItem[] = [];
+const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+/* Earlier downloads, for the Downloads page's history. */
+const queueItems: GameQueueItem[] = [
+  { id: "h1", gameId: "skyrimse", kind: "update", name: "SkyUI", status: "done", addedAt: ago(190), finishedAt: ago(188) },
+  { id: "h2", gameId: "skyrimse", kind: "requirement", name: "SKSE64", status: "failed", error: "Nexus Mods said the file is no longer available (404). The author may have replaced it with a newer one.", addedAt: ago(189), finishedAt: ago(187) },
+  { id: "h3", gameId: "sims4", kind: "update", name: "MC Command Center", status: "done", detail: "Opened on its own site", addedAt: ago(1500), finishedAt: ago(1499) },
+  { id: "h4", gameId: "stardew", kind: "nexus-file", name: "Stardew Valley Expanded", status: "skipped", addedAt: ago(3000), finishedAt: ago(2990) },
+];
 const queueListeners = new Set<(q: GameQueue) => void>();
 
 /* A sample FOMOD installer for the choice screen; window.__mockFomod() shows it in the preview. */
@@ -485,10 +492,48 @@ const FOUND_SAMPLE: Omit<GameFound, "existing">[] = (
   name, steamAppId, nexus, nexusGameId: null, nexusMods, curseforge, installed: i === 7, art: steamHeader(steamAppId), artAlt: null,
 }));
 
+/* Sample play time for games other than Minecraft: what playTracker.cjs records in the app. */
+const SAMPLE_PLAY: Partial<Record<string, number[]>> = {
+  // Minutes on each of the last 14 days, oldest first.
+  sims4: [0, 95, 0, 0, 140, 60, 0, 0, 0, 210, 0, 45, 0, 80],
+  stardew: [30, 0, 0, 75, 0, 0, 120, 0, 50, 0, 0, 0, 65, 0],
+  skyrimse: [0, 0, 180, 0, 0, 0, 0, 90, 0, 0, 0, 0, 0, 0],
+};
+const playingNow = new Map<string, { id: string; name: string; since: string }>();
+const playingListeners = new Set<(list: GamePlaying[]) => void>();
+const announcePlaying = () => {
+  const list = [...playingNow.values()];
+  for (const listener of playingListeners) listener(list);
+};
+
+function samplePlayStats(): GamePlayStats {
+  const games: GamePlayStats["games"] = {};
+  const daily: GamePlayStats["daily"] = [];
+  const today = new Date();
+  for (let i = 89; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() - i);
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const byGame: Record<string, number> = {};
+    for (const [id, minutes] of Object.entries(SAMPLE_PLAY)) {
+      const m = i < 14 ? minutes?.[13 - i] ?? 0 : 0;
+      if (!m) continue;
+      byGame[id] = m * 60;
+      const entry = (games[id] ??= { playSeconds: 0, sessions: 0, lastPlayed: null });
+      entry.playSeconds += m * 60;
+      entry.sessions += 1;
+      entry.lastPlayed = new Date(d.getTime() + 20 * 3600_000).toISOString();
+    }
+    daily.push({ date, seconds: Object.values(byGame).reduce((a, b) => a + b, 0), byGame });
+  }
+  return { games, daily };
+}
+
 const summary = (game: GameSummary): GameSummary => ({
   ...game,
   modCount: (MODS[game.id] ?? []).filter((m) => m.enabled).length,
   updated: game.id === "sims4" ? simsUpdated : null,
+  playSeconds: samplePlayStats().games[game.id]?.playSeconds ?? null,
+  lastPlayed: samplePlayStats().games[game.id]?.lastPlayed ?? game.lastPlayed ?? null,
 });
 
 const need = (id: GameId) => {
@@ -538,6 +583,12 @@ const sampleMods = (game: GameSummary, provider: "nexus" | "curseforge", query: 
 
 export const gamesBridge = {
   list: async () => GAMES.map(summary),
+  playing: async () => [...playingNow.values()],
+  playStats: async () => samplePlayStats(),
+  onPlaying: (listener: (list: GamePlaying[]) => void) => {
+    playingListeners.add(listener);
+    return () => { playingListeners.delete(listener); };
+  },
   collections: async (): Promise<{ total: number; collections: GameCollectionSummary[] }> => ({
     total: 2,
     collections: [
@@ -731,6 +782,12 @@ export const gamesBridge = {
       simsUpdated = null;
       for (const m of MODS.sims4 ?? []) m.mayNeedUpdate = m.hooks && !!options?.safe && m.mayNeedUpdate;
     }
+    // The preview's game "opens" a moment later and closes after a minute.
+    setTimeout(() => {
+      playingNow.set(id, { id, name: need(id).name, since: new Date().toISOString() });
+      announcePlaying();
+      setTimeout(() => { playingNow.delete(id); announcePlaying(); }, 60_000);
+    }, 1500);
     return { how: id === "sims4" ? "The Sims 4 app" : "Steam", safe: Boolean(options?.safe), backedUp: backups[0] ?? null, backupError: null };
   },
   setSimsOptions: async (options: { mods?: boolean; scripts?: boolean }) => {
@@ -1164,7 +1221,7 @@ export const gamesBridge = {
     emitQueue();
     return list.length;
   },
-  queueControl: async (action: string) => {
+  queueControl: async (action: string, id?: string) => {
     const current = queueItems.find((i) => i.status === "website");
     if (action === "skip" && current) {
       current.status = "done";
@@ -1172,6 +1229,17 @@ export const gamesBridge = {
       if (next) next.status = "website";
     }
     if (action === "stop") queueItems.forEach((i) => (i.status === "waiting" || i.status === "website") && (i.status = "skipped"));
+    if (action === "retry") {
+      for (const item of queueItems) {
+        if (id ? item.id === id && (item.status === "failed" || item.status === "skipped") : item.status === "failed") {
+          Object.assign(item, { status: "done", error: null, addedAt: new Date().toISOString(), finishedAt: new Date().toISOString() });
+        }
+      }
+    }
+    if (action === "remove" && id) {
+      const at = queueItems.findIndex((i) => i.id === id && ["done", "failed", "skipped"].includes(i.status));
+      if (at >= 0) queueItems.splice(at, 1);
+    }
     if (action === "clear") queueItems.splice(0, queueItems.length, ...queueItems.filter((i) => i.status === "waiting" || i.status === "website"));
     emitQueue();
     return queueSnap();

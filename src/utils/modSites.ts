@@ -27,6 +27,9 @@ export type ModSite = {
   about: string;
   /** Its home page, opened from the list. */
   url: string;
+  /** For a key: the page that makes one, and what to do there. */
+  keyUrl?: string;
+  keySteps?: string[];
 };
 
 export const MOD_SITES: ModSite[] = [
@@ -40,6 +43,12 @@ export const MOD_SITES: ModSite[] = [
     environmentVariable: "NEXUS_API_KEY",
     about: "Needed to browse Nexus Mods. Find yours on nexusmods.com, in your account's API Keys settings.",
     url: "https://www.nexusmods.com/",
+    keyUrl: "https://www.nexusmods.com/settings/api-keys",
+    keySteps: [
+      "Sign in at nexusmods.com (a free account is enough).",
+      "On the API Keys page, find Personal API Key at the bottom and press Request an API Key.",
+      "Copy the key and paste it here.",
+    ],
   },
   {
     id: "modio",
@@ -51,6 +60,12 @@ export const MOD_SITES: ModSite[] = [
     environmentVariable: "MODIO_API_KEY",
     about: "Needed to browse and install from mod.io. Get a read-only API key at mod.io, in your account's API access settings.",
     url: "https://mod.io/",
+    keyUrl: "https://mod.io/me/access",
+    keySteps: [
+      "Sign in at mod.io and open API access.",
+      "Agree to the API terms, then create an API key (a read-only key; not an OAuth token).",
+      "Copy the API key and paste it here.",
+    ],
   },
   {
     id: "workshop",
@@ -63,6 +78,12 @@ export const MOD_SITES: ModSite[] = [
     about:
       "The launcher's host can search the Workshop for you. Your own Steam Web API key is used first, and works if the host can't. Installing still happens in Steam: you press Subscribe there. Get a key at steamcommunity.com/dev/apikey.",
     url: "https://steamcommunity.com/workshop/",
+    keyUrl: "https://steamcommunity.com/dev/apikey",
+    keySteps: [
+      "Sign in on Steam's website.",
+      "Type any domain name, such as localhost, and agree to the Steam Web API terms.",
+      "Copy the key and paste it here.",
+    ],
   },
   {
     id: "factorio",
@@ -74,6 +95,12 @@ export const MOD_SITES: ModSite[] = [
     about:
       "Browsing works without it; search and downloads need it. Paste it as username:token, with the token from your profile on factorio.com.",
     url: "https://mods.factorio.com/",
+    keyUrl: "https://factorio.com/profile",
+    keySteps: [
+      "Sign in at factorio.com and open your profile.",
+      "Copy the token shown there (press Reveal if it's hidden).",
+      "Paste it here as your username, a colon, then the token: name:token.",
+    ],
   },
   {
     id: "modrinth",
@@ -85,6 +112,12 @@ export const MOD_SITES: ModSite[] = [
     about:
       "Browsing and installing don't need a key. One lets the launcher see your own unlisted and draft projects. Create one at modrinth.com/settings/pats.",
     url: "https://modrinth.com/",
+    keyUrl: "https://modrinth.com/settings/pats",
+    keySteps: [
+      "Sign in at modrinth.com and open Personal access tokens.",
+      "Create a token with Read projects and Read versions ticked.",
+      "Copy the token and paste it here.",
+    ],
   },
   {
     id: "github",
@@ -97,6 +130,12 @@ export const MOD_SITES: ModSite[] = [
     about:
       "Installs from GitHub allow 60 lookups an hour without a token, and 5,000 with one. Create one at github.com/settings/tokens; it needs no permissions.",
     url: "https://github.com/",
+    keyUrl: "https://github.com/settings/tokens/new?description=Unity%20Launcher",
+    keySteps: [
+      "Sign in on GitHub.",
+      "Leave every permission unticked, pick an expiry, and press Generate token.",
+      "Copy the token and paste it here.",
+    ],
   },
   {
     id: "curseforge",

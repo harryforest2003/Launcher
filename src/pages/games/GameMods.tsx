@@ -595,7 +595,7 @@ export default function GameMods({
             {updates && updates.needsKey > 0 && (
               <>
                 {" "}
-                <button type="button" className="gm-link" title={`${updates.needsKey} from Nexus Mods can be checked once your Nexus Mods key is in Settings → API keys`} onClick={goLauncherSettings}>
+                <button type="button" className="gm-link" title={`${updates.needsKey} from Nexus Mods can be checked once your Nexus Mods key is in Settings → Mod sites`} onClick={goLauncherSettings}>
                   Add key
                 </button>
               </>

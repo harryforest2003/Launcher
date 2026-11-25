@@ -9,6 +9,7 @@ import ModlistsPanel from "./ModlistsPanel";
 import GameSites from "./GameSites";
 import { countText, errorText, installSummary, modSitesFor, shortDate } from "./shared";
 import { Badge, Button, EmptyState, Monogram, Notice, SearchField, Select, Skeleton, Tabs } from "../../components/ui";
+import { MOD_SITES } from "../../utils/modSites";
 
 type Props = {
   detail: GameDetail;
@@ -120,6 +121,10 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
   }, [searchKey, detail.id, provider, debounced, sort, page]);
 
   const loading = loaded?.key !== searchKey;
+  // Sites with mods for this game that wait for the player's own key.
+  const locked = offered.filter((source) => !source.ready && source.id !== "nexus");
+  const lockedOne = provider !== "any" ? locked.find((source) => source.id === provider) : locked.length === 1 ? locked[0] : undefined;
+  const lockedGuide = lockedOne ? MOD_SITES.find((site) => site.id === lockedOne.id) : undefined;
   const result = loaded?.result ?? null;
   const loadError = loading ? null : (loaded?.error ?? null);
 
@@ -150,7 +155,7 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
           await openOnNexus({ modId: mod.id, name: mod.name, page: main ? `${mod.url}?tab=files&file_id=${main.id}&nmm=1` : `${mod.url}?tab=files` });
         } else {
           await window.gamesAPI.openUrl(`${mod.url}?tab=files`);
-          setMessage({ tone: "info", text: `Opened ${mod.name} on Nexus Mods. To install with the launcher, add your Nexus Mods key in Settings → API keys first.` });
+          setMessage({ tone: "info", text: `Opened ${mod.name} on Nexus Mods. To install with the launcher, add your Nexus Mods key in Settings → Mod sites first.` });
         }
       } else {
         let fileId: string | null = null;
@@ -293,9 +298,30 @@ export default function GameDiscover({ detail, openMod, afterInstall, openOnNexu
       <>
 
       <div className="dc-notices">
+        {locked.length > 0 && (provider === "any" || locked.some((source) => source.id === provider)) && (
+          <Notice
+            tone="info"
+            data-testid="discover-locked-sources"
+            actions={
+              <>
+                {lockedGuide?.keyUrl && (
+                  <Button size="sm" variant="secondary" onClick={() => void window.gamesAPI.openUrl(lockedGuide.keyUrl!).catch(() => {})}>
+                    Get a {lockedGuide.name} key ↗
+                  </Button>
+                )}
+                <Button size="sm" onClick={goLauncherSettings}>Add it in Settings</Button>
+              </>
+            }
+          >
+            {provider !== "any"
+              ? `${locked.find((source) => source.id === provider)?.label} isn't searched until you add your own key for it.`
+              : `Not searched yet: ${locked.map((source) => source.label).join(" and ")}. ${locked.length === 1 ? "It needs" : "Each needs"} a free key from your account on that site; the results here come from the others.`}{" "}
+            Settings → Mod sites shows where to get {locked.length === 1 || provider !== "any" ? "it" : "each"}, step by step.
+          </Notice>
+        )}
         {showsNexus && account === null && (
           <Notice tone="warning" actions={<Button size="sm" onClick={goLauncherSettings}>Open Settings</Button>}>
-            Searching Nexus Mods needs no key, but installing does: add your personal Nexus Mods API key in Settings → API keys.
+            Searching Nexus Mods needs no key, but installing does: add your personal Nexus Mods API key in Settings → Mod sites.
           </Notice>
         )}
         {message && (

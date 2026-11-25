@@ -39,7 +39,7 @@ function snapshot() {
     const open = items.filter((i) => ["waiting", "working", "website"].includes(i.status));
     const finished = items.filter((i) => ["done", "failed", "skipped"].includes(i.status));
     return {
-        items: [...open, ...finished.slice(-40).reverse()],
+        items: [...open, ...finished.slice(-200).reverse()],
         current: items.find((i) => i.status === "working" || i.status === "website") ?? null,
         counts: {
             waiting: items.filter((i) => i.status === "waiting").length,
@@ -52,6 +52,12 @@ function snapshot() {
 }
 
 const same = (a, b) => a.gameId === b.gameId && a.kind === b.kind && (a.key ?? "") === (b.key ?? "") && String(a.modId ?? "") === String(b.modId ?? "") && String(a.fileId ?? "") === String(b.fileId ?? "");
+
+/* An item is over: when, for the Downloads page's history. */
+function finish(item, status) {
+    item.status = status;
+    item.finishedAt = new Date().toISOString();
+}
 
 /* Adds items (not ones already waiting) and starts working through them. -> how many were added. */
 function add(newItems) {
@@ -95,16 +101,16 @@ async function kick() {
                     break;
                 }
                 if (result?.failed) {
-                    item.status = "failed";
+                    finish(item, "failed");
                     item.error = result.failed;
                 } else {
-                    item.status = "done";
+                    finish(item, "done");
                     item.detail = result?.opened ? "Opened on its own site" : null;
                     if (result?.missing?.length) add(result.missing.map((entry) => ({ gameId: item.gameId, kind: "requirement", key: entry.key, name: entry.name, modId: entry.modId ?? undefined })));
                 }
                 handlers.changed?.(item.gameId);
             } catch (err) {
-                item.status = "failed";
+                finish(item, "failed");
                 item.error = err.message;
             }
             save();
@@ -118,7 +124,7 @@ async function kick() {
 function arrived(gameId, modId, result) {
     const waiting = items.find((i) => i.status === "website" && i.gameId === gameId && String(i.modId ?? "") === String(modId));
     if (waiting) {
-        waiting.status = "done";
+        finish(waiting, "done");
         waiting.detail = null;
     }
     if (result?.missing?.length) add(result.missing.map((entry) => ({ gameId, kind: "requirement", key: entry.key, name: entry.name, modId: entry.modId ?? undefined })));
@@ -126,14 +132,25 @@ function arrived(gameId, modId, result) {
     kick();
 }
 
-/* skip: past the current one; stop: drop what's waiting; open: the current page again; clear: forget finished ones; retry: failed ones again. */
-function control(action) {
+/*
+ * skip: past the current one; stop: drop what's waiting; open: the current page again;
+ * clear: forget finished ones; retry: failed ones again (or only `id`, failed or skipped);
+ * remove: forget the finished one `id`.
+ */
+function control(action, id) {
     const current = items.find((i) => i.status === "working" || i.status === "website");
-    if (action === "skip" && current?.status === "website") current.status = "skipped";
-    if (action === "stop") for (const item of items) if (item.status === "waiting" || item.status === "website") item.status = "skipped";
+    const finished = (i) => ["done", "failed", "skipped"].includes(i.status);
+    if (action === "skip" && current?.status === "website") finish(current, "skipped");
+    if (action === "stop") for (const item of items) if (item.status === "waiting" || item.status === "website") finish(item, "skipped");
     if (action === "open" && current?.page) handlers?.open(current.page);
-    if (action === "clear") items = items.filter((i) => ["waiting", "working", "website"].includes(i.status));
-    if (action === "retry") for (const item of items) if (item.status === "failed") Object.assign(item, { status: "waiting", error: null });
+    if (action === "clear") items = items.filter((i) => !finished(i));
+    if (action === "retry") {
+        for (const item of items) {
+            const again = id ? item.id === id && (item.status === "failed" || item.status === "skipped") : item.status === "failed";
+            if (again) Object.assign(item, { status: "waiting", error: null, detail: null, finishedAt: null, addedAt: new Date().toISOString() });
+        }
+    }
+    if (action === "remove" && id) items = items.filter((i) => i.id !== id || !finished(i));
     save();
     kick();
     return snapshot();

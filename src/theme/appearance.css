@@ -1023,6 +1023,165 @@
   margin-left: var(--space-1);
 }
 
+/* About and Storage: label and value pairs, two columns where there's room. */
+.set-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3) var(--space-4);
+  margin: 0;
+}
+
+.set-facts > div {
+  min-width: 0;
+}
+
+.set-facts dt {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.set-facts dd {
+  margin: 2px 0 0;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.set-facts__path {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xs) !important;
+}
+
+/* A mod site key's "How to get one": the steps and a link to the page that makes it. */
+.set-keyguide {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.set-keyguide summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+}
+
+.set-keyguide ol {
+  margin: var(--space-2) 0;
+  padding-left: 1.4em;
+  line-height: var(--leading-normal);
+}
+
+.set-keyguide[open] .ui-button {
+  margin-top: var(--space-1);
+}
+
+/* ---------------- Downloads page ---------------- */
+
+.dl-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.dl-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: var(--content-max);
+}
+
+.dl-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.dl-section__title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-semibold);
+}
+
+.dl-section__sub {
+  margin: var(--space-2) 0 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+}
+
+.dl-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dl-current {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dl-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2-5, 10px) 0;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.dl-row:first-child {
+  border-top: 0;
+}
+
+.dl-row__main {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.dl-row__name {
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
+.dl-row__meta {
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-regular, 400);
+  color: var(--color-text-muted);
+}
+
+.dl-row__error {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-danger-text);
+  overflow-wrap: anywhere;
+}
+
+.dl-row__advice {
+  color: var(--color-text-muted);
+}
+
+.dl-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
 /* ---------------- memory ---------------- */
 
 .set-figure {

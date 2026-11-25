@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import HomeScreen from "./pages/GameMenu";
 import LauncherSettings from "./pages/LauncherSettings";
+import Downloads from "./pages/Downloads";
 import MinecraftMenu from "./pages/MinecraftMenu";
 import DiscoverContent from "./pages/MCDiscover";
 import Library from "./pages/MCLibrary";
@@ -13,6 +14,7 @@ import GameSection from "./pages/GameSection";
 import SkinBuilder from "./pages/SkinBuilder";
 import { SkinBuilderNavContext } from "./skinBuilder/navContext";
 import DownloadQueue from "./components/DownloadQueue";
+import Welcome from "./components/Welcome";
 import { DownloadsContext, useDownloadQueueState } from "./components/ui/downloadsContext";
 import { SidebarBackLabel } from "./components/ui/sidebarContext";
 import AppSidebar, { type ShellTarget } from "./components/ui/AppSidebar";
@@ -37,6 +39,7 @@ export type Screen =
   | "skinbuilder"
   | "settings"
   | "launcherSettings"
+  | "downloads"
   | "modmanager"
   | "game";
 
@@ -77,6 +80,8 @@ function currentItem({ screen, gameId }: Route, nav: PageNav | null): string {
       return "home";
     case "launcherSettings":
       return "settings";
+    case "downloads":
+      return "downloads";
     case "modmanager":
       return nav?.area === "modGame" ? `modGame:${nav.page}` : "modmanager";
     case "mod":
@@ -283,7 +288,7 @@ function App() {
     } else {
       const own = page?.area === "launcher" ? page.handlers[target.kind] : undefined;
       if (own) own();
-      else setScreen(target.kind === "home" ? "home" : target.kind === "settings" ? "launcherSettings" : "modmanager");
+      else setScreen(target.kind === "home" ? "home" : target.kind === "settings" ? "launcherSettings" : target.kind === "downloads" ? "downloads" : "modmanager");
     }
   };
 
@@ -309,8 +314,10 @@ function App() {
             </div>
           </div>
           {/* The game sections' downloads carry on, and show, whichever page is open. */}
-          <DownloadQueue />
+          <DownloadQueue hidden={shown.screen === "downloads"} onOpenAll={() => void go({ kind: "downloads" })} />
           <Toaster />
+          {/* The first time it opens: games found, account, mod-site keys, look. */}
+          <Welcome />
           {/* A game mod's installer options, asked while it installs. */}
           <FomodDialog />
           {searching && <CommandPalette onClose={() => setSearching(false)} go={go} actions={paletteActions} />}
@@ -404,7 +411,10 @@ function Screens({
       return <GameSection key={gameId} gameId={gameId} initialPage={gamePage} onLauncher={navigation.goHome} onLauncherSettings={() => setScreen("launcherSettings")} />;
 
     case "launcherSettings":
-      return <LauncherSettings onHome={navigation.goHome} onModManager={() => setScreen("modmanager")} />;
+      return <LauncherSettings onHome={navigation.goHome} onModManager={() => setScreen("modmanager")} onDownloads={() => setScreen("downloads")} />;
+
+    case "downloads":
+      return <Downloads onHome={navigation.goHome} />;
 
     case "modmanager":
       return (

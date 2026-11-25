@@ -9,6 +9,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
+import GameCover from "../components/ui/GameCover";
 import LauncherSidebar from "../components/LauncherSidebar";
 import { Badge, Button, Notice, SearchField, Segmented, Tabs, type Tone } from "../components/ui";
 import { formatHours } from "../components/charts";
@@ -20,9 +21,10 @@ import { defaultRange, type Range } from "./dashboard/range";
 import { useDashboard } from "./dashboard/useDashboard";
 import { useInstances } from "./dashboard/useInstances";
 import { artOf, useGameArt } from "./gameArt";
-import { initials, timeAgo } from "./playedAgo";
+import { timeAgo } from "./playedAgo";
 import { useScrollMemory } from "./useScrollMemory";
 import HomeGamePanel, { type HomePanelTarget } from "./HomeGamePanel";
+import { usePlayingGames } from "../components/ui/playingGames";
 import type { GamePageKey, McPage } from "../components/ui/shellContext";
 import "./dashboard/dashboard.css";
 
@@ -135,7 +137,7 @@ function GameArt({ id, name }: { id: string; name: string }) {
           onError={() => setFailed(true)}
         />
       ) : (
-        <span className="db-thumb__mark">{initials(name)}</span>
+        <GameCover name={name} variant="thumb" />
       )}
     </span>
   );
@@ -197,6 +199,15 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
   const { instances, loaded: instancesLoaded, loadError: instanceLoadError, reload: reloadInstances } =
     useInstances();
   const { stats, activity, news, refreshNews, deals, refreshDeals } = useDashboard(true, { feed: "gaming", deals: true });
+  // Other games' timed play, read again whenever one opens or closes.
+  const playingGames = usePlayingGames();
+  const [gamePlay, setGamePlay] = useState<GamePlayStats | null>(null);
+  const playingKey = playingGames.map((g) => g.id).join(",");
+  useEffect(() => {
+    let live = true;
+    window.gamesAPI.playStats?.().then((value) => live && setGamePlay(value), () => {});
+    return () => { live = false; };
+  }, [playingKey]);
   // The time range for the play time cards; until chosen, one that has play in it.
   const [chosenRange, setRange] = useState<Range | null>(null);
   const range = chosenRange ?? defaultRange(stats.data);
@@ -287,8 +298,11 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
     // "All good" would read oddly next to "Can't run on this Mac".
     const shown = (game.found ? summarise(all) : all).filter((c) => !(game.cantRun && c.tone === "success"));
     const checked = !game.found || statuses[game.id] || looking.length > 0;
+    const timed = gamePlay?.games[game.id]?.playSeconds ?? game.playSeconds ?? null;
+    const isPlaying = playingGames.some((g) => g.id === game.id);
+    // Every found game's line reads the same way: play time, then what's in it.
     const meta = game.found
-      ? plural(game.modCount, "enabled mod", "enabled mods")
+      ? `${timed ? `${formatHours(timed)} played` : "No play time yet"} · ${plural(game.modCount, "enabled mod", "enabled mods")}`
       : game.windowsOnly && isMac
         ? "Windows game: CrossOver or Whisky"
         : "Choose its folder to set it up";
@@ -307,11 +321,11 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
           <GameArt id={game.id} name={game.name} />
           <span className="db-game__text">
             <span className="db-game__name">{game.name}</span>
-            <span className="db-game__meta">
+            <span className="db-game__meta" title={game.lastPlayed ? `Last played ${timeAgo(game.lastPlayed)}` : undefined}>
               {meta}
-              {game.lastPlayed && ` · played ${timeAgo(game.lastPlayed)}`}
             </span>
             <span className="db-game__status" data-testid="home-game-status">
+              {isPlaying && <Chips chips={[{ label: "Playing now", tone: "accent" }]} />}
               {checked ? <Chips chips={shown} /> : (
                 <span className="db-game__quiet">{checkingStatus ? "Checking mods…" : "Not checked"}</span>
               )}
@@ -387,16 +401,16 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                       <GameArt id="minecraft" name="Minecraft" />
                       <span className="db-game__text">
                         <span className="db-game__name">Minecraft</span>
-                        <span className="db-game__meta">
-                          {latest?.lastPlayed
-                            ? `${latest.name}, ${timeAgo(latest.lastPlayed)}`
-                            : instanceLoadError ? "Library check unavailable" : `${plural(instances.length, "instance", "instances")}`}
+                        <span className="db-game__meta" title={latest?.lastPlayed ? `Last played ${latest.name}, ${timeAgo(latest.lastPlayed)}` : undefined}>
+                          {stats.loading && !stats.data ? "Checking play time…" : stats.data?.totals.playSeconds ? `${formatHours(stats.data.totals.playSeconds)} played` : "No play time yet"}
+                          {" · "}
+                          {instanceLoadError ? "Library check unavailable" : plural(instances.length, "instance", "instances")}
                         </span>
                         <span className="db-game__status">
-                          {running ? <Chips chips={[{ label: "Playing now", tone: "accent" }]} /> : stats.data?.totals.playSeconds ? (
-                            <Chips chips={[{ label: `${formatHours(stats.data.totals.playSeconds)} played`, tone: "neutral", icon: "clock" }]} />
+                          {running ? <Chips chips={[{ label: "Playing now", tone: "accent" }]} /> : latest?.lastPlayed ? (
+                            <Chips chips={[{ label: `${latest.name}, ${timeAgo(latest.lastPlayed)}`, tone: "neutral", icon: "clock" }]} />
                           ) : (
-                            <span className="db-game__quiet">{stats.loading ? "Checking play time…" : "No play time yet"}</span>
+                            <span className="db-game__quiet">Not played yet</span>
                           )}
                         </span>
                       </span>
@@ -470,8 +484,10 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
               <div className="db-grid">
                 <div className="db-col">
                 <PlayStats stats={stats.data} loading={stats.loading} failed={stats.failed} range={range} onRange={setRange}
+                  gamePlay={gamePlay}
+                  onGame={(id) => (id === "minecraft" ? onMinecraft() : onGame(id as GameId))}
                   show={["trend", "most"]} games={[
-                    ...games.map(({ name, colour }) => ({ name, colour })),
+                    ...games.map(({ id, name, colour }) => ({ id, name, colour })),
                     ...extraGames.map(({ name }) => ({ name, colour: "var(--color-text-muted)" })),
                   ]} />
                 </div>

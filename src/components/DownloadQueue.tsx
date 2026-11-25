@@ -26,10 +26,25 @@ const STATUS: Record<GameQueueItem["status"], string> = {
  * and for a free Nexus account, which page to press the download button on. The sidebar's
  * Downloads button opens it even when nothing is queued.
  */
-export default function DownloadQueue() {
+export default function DownloadQueue({ hidden = false, onOpenAll }: { hidden?: boolean; onOpenAll?: () => void }) {
   const { queue, left, shown, hide } = useDownloads();
   const [open, setOpen] = useState(false);
+  // Shows from when something starts downloading until it's closed: earlier history stays
+  // on the Downloads page rather than in the corner.
+  const [active, setActive] = useState(false);
+  // When this run of downloads began: the panel counts only what was added since.
+  const [since, setSince] = useState(0);
   const box = useRef<HTMLElement>(null);
+  if (left && queue) {
+    const waiting = queue.items.filter((i) => i.status === "waiting" || i.status === "working" || i.status === "website");
+    const stamps = waiting.map((i) => Date.parse(i.addedAt ?? "")).filter(Boolean);
+    // Items from before times were kept: count from the newest thing in the history instead.
+    const latest = Math.max(0, ...queue.items.map((i) => Date.parse(i.finishedAt ?? i.addedAt ?? "") || 0));
+    const first = stamps.length ? Math.min(...stamps) : latest + 1;
+    const next = active && since ? Math.min(since, first) : first;
+    if (!active) setActive(true);
+    if (Number.isFinite(next) && next !== since) setSince(next);
+  }
 
   // Escape folds the list, then closes the panel; a click elsewhere closes a panel opened
   // from the sidebar. A running queue keeps its small progress bar either way.
@@ -53,10 +68,18 @@ export default function DownloadQueue() {
     };
   }, [shown, open, hide]);
 
-  const counts = queue?.counts;
-  const finished = counts ? counts.done + counts.failed + counts.skipped : 0;
-  const hasQueue = Boolean(counts && counts.total > 0 && (left || open || finished));
-  if (!hasQueue && !shown) return null;
+  const isOpen = (i: GameQueueItem) => i.status === "waiting" || i.status === "working" || i.status === "website";
+  const run = (queue?.items ?? []).filter((i) => isOpen(i) || (active && (Date.parse(i.addedAt ?? "") || 0) >= since));
+  const counts = queue
+    ? {
+        total: run.length,
+        failed: run.filter((i) => i.status === "failed").length,
+        finished: run.filter((i) => !isOpen(i)).length,
+      }
+    : null;
+  const finished = counts?.finished ?? 0;
+  const hasQueue = Boolean(counts && counts.total > 0 && (left || active));
+  if (hidden || (!hasQueue && !shown)) return null;
 
   // Opened from the sidebar with nothing queued.
   if (!hasQueue || !queue || !counts) {
@@ -99,8 +122,17 @@ export default function DownloadQueue() {
         >
           {open ? <ChevronDown size={18} aria-hidden="true" /> : <ChevronUp size={18} aria-hidden="true" />}
         </button>
-        {shown && (
-          <button type="button" className="ui-queue__icon-button" onClick={hide} aria-label="Close downloads">
+        {(shown || !left) && (
+          <button
+            type="button"
+            className="ui-queue__icon-button"
+            onClick={() => {
+              setActive(false);
+              setOpen(false);
+              hide();
+            }}
+            aria-label="Close downloads"
+          >
             <X size={16} aria-hidden="true" />
           </button>
         )}
@@ -150,16 +182,16 @@ export default function DownloadQueue() {
             Try failed again
           </Button>
         )}
-        {!left && (
-          <Button size="sm" variant="ghost" onClick={() => window.gamesAPI.queueControl("clear")}>
-            Clear
+        {onOpenAll && (
+          <Button size="sm" variant="ghost" onClick={onOpenAll}>
+            See all
           </Button>
         )}
       </div>
 
       {open && (
         <ul className="ui-queue__list">
-          {queue.items.map((item) => (
+          {run.map((item) => (
             <li key={item.id} className="ui-queue__row">
               <span className="ui-queue__row-name" title={item.error ?? undefined}>
                 {item.name} <span className="ui-queue__game">in {GAME_NAMES[item.gameId] ?? item.gameId}</span>

@@ -33,6 +33,7 @@ import "./shell.css";
 export type ShellTarget =
   | { kind: "home" }
   | { kind: "settings" }
+  | { kind: "downloads" }
   | { kind: "modmanager" }
   | { kind: "modGame"; page: "installed" | "browse" }
   | { kind: "mc"; page: McPage }
@@ -251,7 +252,7 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
       </div>
 
       <div className="ui-shell__foot">
-        <RunningGames tip={tip} onOpen={() => go({ kind: "mc", page: "library" })} />
+        <RunningGames tip={tip} onOpen={() => go({ kind: "mc", page: "library" })} onOpenGame={(id) => go({ kind: "game", id: id as GameId })} />
         <button
           type="button"
           className="ui-shell__item"
@@ -271,11 +272,12 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
         <button
           type="button"
           className="ui-shell__item"
-          aria-expanded={downloads.shown}
+          data-current={current === "downloads" ? "true" : undefined}
+          aria-current={current === "downloads" ? "page" : undefined}
           data-downloads-toggle=""
           aria-label={downloads.left ? `Downloads, ${downloads.left} to go` : "Downloads"}
           data-tip={tip(downloads.left ? `Downloads: ${downloads.left} to go` : "Downloads")}
-          onClick={downloads.toggle}
+          onClick={() => go({ kind: "downloads" })}
         >
           <span className="ui-shell__icon">
             <Download size={16} />

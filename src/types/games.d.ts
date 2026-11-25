@@ -34,6 +34,8 @@ declare global {
         curseforge: number | null;
         modCount: number;
         lastPlayed?: string | null;
+        /** Seconds played, timed from Play to the game closing; null before the first timed session. */
+        playSeconds?: number | null;
         /* Set when the game has updated since it was last played from here. */
         updated: { from: string | null; to: string | null } | null;
         /**
@@ -445,6 +447,9 @@ declare global {
         status: "waiting" | "working" | "website" | "done" | "failed" | "skipped";
         detail?: string | null;
         error?: string | null;
+        /** ISO times: when it was added (or tried again), and when it finished. */
+        addedAt?: string;
+        finishedAt?: string | null;
     };
     type GameQueue = {
         items: GameQueueItem[];
@@ -571,9 +576,23 @@ declare global {
         notes?: string[];
     };
 
+    /** A game started from the launcher that is open now. */
+    type GamePlaying = { id: string; name: string; since: string };
+    /** Timed play of games other than Minecraft (electron/games/playTracker.cjs). */
+    type GamePlayStats = {
+        games: Record<string, { playSeconds: number; sessions: number; lastPlayed: string | null }>;
+        /** The last 90 days, oldest first. */
+        daily: { date: string; seconds: number; byGame: Record<string, number> }[];
+    };
+
     interface Window {
         gamesAPI: {
             list: () => Promise<GameSummary[]>;
+            /** Games started from here that are open now. */
+            playing?: () => Promise<GamePlaying[]>;
+            playStats?: () => Promise<GamePlayStats>;
+            /** Called when a game opens or closes. -> stop listening. */
+            onPlaying?: (listener: (list: GamePlaying[]) => void) => () => void;
             /** source: every game with mods (all), Steam's whole store, or one mod site's list. */
             findGames: (query: string, page?: number, source?: GameFindSource, filters?: GameFindFilters) => Promise<GameFindResult>;
             /** Opens any game's page, built on the spot when it has none. -> the game's id. */
@@ -741,7 +760,8 @@ declare global {
             queue: () => Promise<GameQueue>;
             /* -> how many were added (ones already waiting aren't added twice). */
             queueAdd: (items: GameQueueAdd[]) => Promise<number>;
-            queueControl: (action: "skip" | "stop" | "open" | "clear" | "retry") => Promise<GameQueue>;
+            /** retry with an id tries that one again (failed or skipped); remove forgets a finished one. */
+            queueControl: (action: "skip" | "stop" | "open" | "clear" | "retry" | "remove", id?: string) => Promise<GameQueue>;
             onQueue: (callback: (queue: GameQueue) => void) => () => void;
             onModsChanged: (callback: (data: { gameId: GameId }) => void) => () => void;
 

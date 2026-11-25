@@ -71,9 +71,11 @@ function summary(game) {
         // Not found yet.
     }
     const played = protect.lastPlayed(game.id);
+    const timed = playStatsNow().games[game.id];
     return {
         id: game.id,
-        lastPlayed: played?.at ? new Date(played.at).toISOString() : null,
+        lastPlayed: timed?.lastPlayed && (!played?.at || Date.parse(timed.lastPlayed) > played.at) ? timed.lastPlayed : played?.at ? new Date(played.at).toISOString() : null,
+        playSeconds: timed?.playSeconds ?? null,
         name: game.name,
         tagline: game.taglines?.[process.platform] ?? game.tagline,
         colour: game.colour,
@@ -261,7 +263,23 @@ const statusCache = new Map();
 
 const pendingLaunches = new Set();
 
+// One count of every game's play time for a whole games:list, not one per game.
+let playStatsCache = null;
+function playStatsNow() {
+    if (!playStatsCache || Date.now() - playStatsCache.at > 2000) playStatsCache = { at: Date.now(), value: require("./playTracker.cjs").stats() };
+    return playStatsCache.value;
+}
+
 function registerGamesIpc() {
+    const tracker = require("./playTracker.cjs");
+    tracker.onChange((list) => {
+        playStatsCache = null;
+        for (const win of BrowserWindow.getAllWindows()) {
+            if (!win.isDestroyed()) win.webContents.send("games:playing", list);
+        }
+    });
+    ipcMain.handle("games:playing", () => tracker.playing());
+    ipcMain.handle("games:playStats", () => tracker.stats());
     // The download queue: started with what was left last time.
     queue.start({
         run: runQueued,
@@ -292,7 +310,7 @@ function registerGamesIpc() {
                 }))
         )
     );
-    ipcMain.handle("games:queueControl", (_e, action) => queue.control(String(action)));
+    ipcMain.handle("games:queueControl", (_e, action, id) => queue.control(String(action), typeof id === "string" ? id : undefined));
 
     // The check-up of a game's mod folders, and fixing what it finds.
     ipcMain.handle("games:health", (_e, id) => health.check(need(id).id));
@@ -556,6 +574,12 @@ function registerGamesIpc() {
                 if (!/^steam:\/\/rungameid\/\d+$/.test(String(url))) throw new Error("Invalid Steam game link.");
                 await openExternalChecked(url, { steam: true });
             } });
+            try {
+                // Times the session: Home's play time and the sidebar's "Playing" read it.
+                require("./playTracker.cjs").started({ id: game.id, name: game.name, watch: require("./running.cjs").watchFor(game, loc) });
+            } catch {
+                // It's extra: never a reason the game didn't start.
+            }
             try {
                 // The Discord status (when it's on in Settings) shows this game while it's open.
                 require("../minecraft/discord.cjs").gameStarted({

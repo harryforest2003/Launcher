@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { CircleCheck, CircleX } from "lucide-react";
+import { CircleCheck, CircleX, ExternalLink } from "lucide-react";
 import Badge from "./ui/Badge";
 import Button from "./ui/Button";
 import "../theme/appearance.css";
@@ -12,6 +12,8 @@ type Props = {
   /** What the key adds, and where to get one. */
   children: ReactNode;
   onChange: (statuses: ApiKeyStatuses) => void;
+  /** Where to make a key, and the steps there. */
+  getKey?: { url: string; steps?: string[] };
 };
 
 const message = (err: unknown) =>
@@ -22,7 +24,7 @@ const message = (err: unknown) =>
  * right. The launcher checks it with the service before saving it, and from then on shows it
  * masked, with Edit to replace or remove it.
  */
-export default function ApiKeyRow({ name, label, environmentVariable, status, children, onChange }: Props) {
+export default function ApiKeyRow({ name, label, environmentVariable, status, children, onChange, getKey }: Props) {
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -65,6 +67,26 @@ export default function ApiKeyRow({ name, label, environmentVariable, status, ch
         <p id={helpId} className="set-help">
           {children}
         </p>
+        {getKey && !status?.fromEnvironment && (
+          <details className="set-keyguide" data-testid={`api-key-guide-${name}`}>
+            <summary>How to get a {label} key</summary>
+            {getKey.steps?.length ? (
+              <ol>
+                {getKey.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            ) : null}
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<ExternalLink size={14} aria-hidden="true" />}
+              onClick={() => void window.gamesAPI.openUrl(getKey.url).catch((err) => setError(message(err)))}
+            >
+              Get a key on {label}
+            </Button>
+          </details>
+        )}
       </div>
 
       <div className="set-row-controls">

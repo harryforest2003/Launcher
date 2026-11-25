@@ -17,6 +17,7 @@ import { CircleAlert, CircleCheck, Download, ExternalLink, Play, TriangleAlert }
 import { Button, Notice, ProgressBar } from "../components/ui";
 import { useGameArt } from "./gameArt";
 import { timeAgo } from "./playedAgo";
+import GameCover from "../components/ui/GameCover";
 import "./dashboard/dashboard.css";
 import { errorText, installSummary } from "./games/shared";
 
@@ -415,7 +416,11 @@ export default function GameSection({ gameId, initialPage, onLauncher, onLaunche
               {page === "home" && (
                 <div className="game-overview">
                   <section className={`game-hero${detail.found ? "" : " game-hero--missing"}`} style={{ "--game-colour": detail.colour } as React.CSSProperties}>
-                    {heroArt && <img className="game-hero__backdrop" src={heroArt} alt="" aria-hidden="true" referrerPolicy="no-referrer" draggable={false} />}
+                    {heroArt ? (
+                      <img className="game-hero__backdrop" src={heroArt} alt="" aria-hidden="true" referrerPolicy="no-referrer" draggable={false} />
+                    ) : (
+                      <GameCover className="game-hero__backdrop" name={detail.name} variant="backdrop" />
+                    )}
                     <div className="game-hero__body">
                       <h1 className="game-hero__title">{detail.name}</h1>
                       <p className="game-hero__lead">{detail.tagline}</p>

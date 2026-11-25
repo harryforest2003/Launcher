@@ -388,6 +388,13 @@ const listen = (channel) => (callback) => {
 
 expose("gamesAPI", {
     list: () => ipcRenderer.invoke("games:list"),
+    playing: () => ipcRenderer.invoke("games:playing"),
+    playStats: () => ipcRenderer.invoke("games:playStats"),
+    onPlaying: (listener) => {
+        const relay = (_event, list) => listener(list);
+        ipcRenderer.on("games:playing", relay);
+        return () => ipcRenderer.removeListener("games:playing", relay);
+    },
     findGames: (query, page, source, filters) => ipcRenderer.invoke("games:findGames", query, page, source, filters),
     openGame: (entry) => ipcRenderer.invoke("games:openGame", entry),
     getOnSteam: (steamAppId) => ipcRenderer.invoke("games:getOnSteam", steamAppId),
@@ -526,7 +533,7 @@ expose("gamesAPI", {
     healthFix: (id, issueId) => ipcRenderer.invoke("games:healthFix", id, issueId),
     queue: () => ipcRenderer.invoke("games:queue"),
     queueAdd: (items) => ipcRenderer.invoke("games:queueAdd", items),
-    queueControl: (action) => ipcRenderer.invoke("games:queueControl", action),
+    queueControl: (action, id) => ipcRenderer.invoke("games:queueControl", action, id),
     onQueue: listen("games:queue"),
     onModsChanged: listen("games:modsChanged"),
 
@@ -539,6 +546,18 @@ expose("gamesAPI", {
 
 /* Home's dashboard: play time, recent activity, news (Minecraft or general gaming) and Steam deals. */
 // The launcher's own updates (updater.cjs).
+expose("appAPI", {
+    about: () => ipcRenderer.invoke("app:about"),
+    storage: () => ipcRenderer.invoke("app:storage"),
+    clearCache: () => ipcRenderer.invoke("app:clearCache"),
+    openDataFolder: () => ipcRenderer.invoke("app:openDataFolder"),
+    startup: () => ipcRenderer.invoke("app:startup"),
+    setStartup: (change) => ipcRenderer.invoke("app:setStartup", change),
+    testNotification: () => ipcRenderer.invoke("app:testNotification"),
+    exportSettings: (prefs) => ipcRenderer.invoke("app:exportSettings", prefs),
+    importSettings: () => ipcRenderer.invoke("app:importSettings"),
+});
+
 expose("updaterAPI", {
     state: () => ipcRenderer.invoke("updater:state"),
     check: () => ipcRenderer.invoke("updater:check"),

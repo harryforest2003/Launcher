@@ -561,6 +561,8 @@ declare global {
         fullscreen: boolean;
         /** Show the game being played on Discord, as the application with this ID. */
         discordStatus: boolean;
+        /** Desktop notifications: a launcher update is ready, a game closed. */
+        notifications?: boolean;
         discordClientId: string;
         /** The Library's groups of instances: { group name: instance names }. */
         instanceGroups?: Record<string, string[]>;

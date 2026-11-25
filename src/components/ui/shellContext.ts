@@ -29,7 +29,7 @@ export type PageNav =
       badges?: Partial<Record<GamePageKey, unknown>>;
     }
   | { area: "modGame"; game: string; page: "installed" | "browse"; go: (page: "installed" | "browse") => void }
-  | { area: "launcher"; page: "home" | "settings" | "modmanager"; handlers: Partial<Record<"home" | "settings" | "modmanager", () => void>> };
+  | { area: "launcher"; page: "home" | "settings" | "modmanager" | "downloads"; handlers: Partial<Record<"home" | "settings" | "modmanager" | "downloads", () => void>> };
 
 export type Shell = {
   register: (id: string, nav: PageNav) => void;

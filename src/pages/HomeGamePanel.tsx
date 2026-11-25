@@ -29,7 +29,8 @@ import { useAccountChoice } from "../components/playAsChoice";
 import type { GamePageKey, McPage } from "../components/ui/shellContext";
 import { loaderName } from "./dashboard/useInstances";
 import { useGameArt } from "./gameArt";
-import { initials, timeAgo } from "./playedAgo";
+import GameCover from "../components/ui/GameCover";
+import { timeAgo } from "./playedAgo";
 import { errorText } from "./games/shared";
 import "./library.css";
 
@@ -50,7 +51,7 @@ type Props = {
 
 const plain = (err: unknown) => errorText(err).replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 
-/* The drawer's banner: the game's picture, or its initials. */
+/* The drawer's banner: the game's picture, or one drawn from its name. */
 function Banner({ id, name }: { id: string; name: string }) {
   const [failed, setFailed] = useState(false);
   const src = useGameArt([id])(id);
@@ -59,7 +60,7 @@ function Banner({ id, name }: { id: string; name: string }) {
       {src && !failed ? (
         <img src={src} alt="" decoding="async" referrerPolicy="no-referrer" draggable={false} onError={() => setFailed(true)} />
       ) : (
-        <span className="hp-art__mark">{initials(name)}</span>
+        <GameCover name={name} />
       )}
     </div>
   );

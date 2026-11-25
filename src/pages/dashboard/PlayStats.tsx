@@ -34,12 +34,16 @@ type Props = {
   stats: DashboardStats | null;
   loading: boolean;
   failed?: boolean;
-  games?: { name: string; colour: string }[];
+  games?: { id?: string; name: string; colour: string }[];
+  /** Timed play of the other games, added to Minecraft's when games is set. */
+  gamePlay?: GamePlayStats | null;
   /** The time range, shared by every card on the page (the buttons are on the trend card). */
   range: Range;
   onRange: (range: Range) => void;
   /** Which cards to draw here, so the page can place them in different columns. */
   show: StatsPart[];
+  /** Opens a game when its bar is chosen (with games). */
+  onGame?: (id: string) => void;
   /** Opens an instance's page (or the Library) when a bar is chosen. */
   onInstance?: (name: string) => void;
   /** Opt-in: a tighter card with a one-line caption, for pages that pair it with another card. */
@@ -67,18 +71,32 @@ export default function PlayStats({
   loading,
   failed = false,
   games,
+  gamePlay,
   range,
   onRange,
   show,
   onInstance,
+  onGame,
   compact = false,
 }: Props) {
   const colors = useSeriesColors();
 
-  const daily = useMemo(() => stats?.daily ?? [], [stats]);
+  // Minecraft's days; with games, every timed game's seconds are added to each day.
+  const gameByDate = useMemo(() => new Map((gamePlay?.daily ?? []).map((d) => [d.date, d])), [gamePlay]);
+  const mcDaily = useMemo(
+    () => stats?.daily ?? (games ? (gamePlay?.daily ?? []).map((d) => ({ date: d.date, seconds: 0, byInstance: {} as Record<string, number> })) : []),
+    [stats, games, gamePlay],
+  );
+  const daily = useMemo(
+    () => (games ? mcDaily.map((d) => ({ ...d, seconds: d.seconds + (gameByDate.get(d.date)?.seconds ?? 0) })) : mcDaily),
+    [games, mcDaily, gameByDate],
+  );
   const days = useMemo(() => range === "all" ? daily : daily.slice(-Number(range)), [daily, range]);
+  const mcDays = useMemo(() => range === "all" ? mcDaily : mcDaily.slice(-Number(range)), [mcDaily, range]);
   const hasDaily = daily.length > 0 && daily.some((d) => d.seconds > 0);
-  const total = stats?.totals.playSeconds ?? null;
+  const gameTotals = Object.values(gamePlay?.games ?? {}).map((g) => g.playSeconds);
+  const mcTotal = stats?.totals.playSeconds ?? null;
+  const total = games && gameTotals.length ? (mcTotal ?? 0) + sum(gameTotals) : mcTotal;
   const anything = hasDaily || (total !== null && total > 0);
 
   const last7 = sum(daily.slice(-7).map((d) => d.seconds));
@@ -102,6 +120,22 @@ export default function PlayStats({
       )
       .sort((a, b) => b.seconds - a.seconds);
   }, [stats, range, days]);
+
+  // With games: each game's play over the range, Minecraft's from its own days.
+  const perGame = useMemo(() => {
+    if (!games) return [];
+    const mc = range === "all" ? mcTotal ?? 0 : sum(mcDays.map((d) => d.seconds));
+    const list = [
+      { id: "minecraft", name: "Minecraft", seconds: mc, sessions: stats?.totals.sessions ?? 0 },
+      ...Object.entries(gamePlay?.games ?? {}).map(([id, g]) => ({
+        id,
+        name: games.find((x) => x.id === id)?.name ?? id,
+        seconds: range === "all" ? g.playSeconds : sum(days.map((d) => gameByDate.get(d.date)?.byGame[id] ?? 0)),
+        sessions: range === "all" ? g.sessions : 0,
+      })),
+    ];
+    return list.filter((g) => g.seconds > 0).sort((a, b) => b.seconds - a.seconds);
+  }, [games, gamePlay, range, mcTotal, mcDays, days, gameByDate, stats]);
 
   const unknown = (stats?.instances ?? []).filter(
     (i) => i.playSeconds === null,
@@ -158,8 +192,16 @@ export default function PlayStats({
 
   const sources = stats ? sourceWords(stats.sources) : null;
   const [hidden, setHidden] = useState<string[]>([]);
+  // With games: Minecraft and every game played in the last 90 days, each its own line.
+  const gameName = (id: string) => games?.find((g) => g.id === id)?.name ?? id;
+  const playedGames = Object.keys(gamePlay?.games ?? {}).filter((id) => (gamePlay?.daily ?? []).some((d) => d.byGame[id] > 0));
+  const gameSeries = playedGames.map((id, i) => ({
+    id: gameName(id),
+    color: colors[(i + 1) % colors.length],
+    values: days.map((day) => gameByDate.get(day.date)?.byGame[id] ?? 0),
+  }));
   const chartSeries = games
-    ? [{ id: "Minecraft", color: colors[0], values: days.map((day) => day.seconds) }]
+    ? [{ id: "Minecraft", color: colors[0], values: mcDays.map((day) => day.seconds) }, ...gameSeries]
     : (stats?.instances ?? []).filter((instance) => daily.some((day) => day.byInstance[instance.name] > 0))
         .map(({ name }, i) => ({
           id: name,
@@ -243,9 +285,7 @@ export default function PlayStats({
 
           {!loading && (games || chartSeries.length > 0) && (
             <div className="db-series" aria-label="Chart legend">
-              {chartSeries.map((line) => games ? (
-                <span key={line.id}><i style={{ background: line.color }} />{line.id}</span>
-              ) : (
+              {chartSeries.map((line) => (
                 <button type="button" key={line.id} aria-pressed={!hidden.includes(line.id)} onClick={() =>
                   setHidden((current) => current.includes(line.id) ? current.filter((id) => id !== line.id) : [...current, line.id])
                 }><i style={{ background: line.color }} />{line.id}</button>
@@ -255,8 +295,8 @@ export default function PlayStats({
 
           {games && games.length > 0 && (
             <details className="db-coverage">
-              <summary>Why only Minecraft has play time</summary>
-              <p>The launcher times Minecraft sessions itself. {games.map((game) => game.name).join(", ")} start through their own stores, so their session lengths aren't recorded here.</p>
+              <summary>How play time is counted</summary>
+              <p>Minecraft is timed from its own logs and the sessions started here. Other games are timed when you press Play here: the launcher watches for the game's program and stops counting when it closes. Games started from Steam or their own launcher aren't counted.</p>
             </details>
           )}
           {loading ? (
@@ -290,7 +330,7 @@ export default function PlayStats({
           ) : (
             empty(
               hasDaily ? "No series selected" : "No play time yet",
-              hasDaily ? "Select an instance in the legend to show its play time." : "Recorded Minecraft sessions will appear here.",
+              hasDaily ? `Select ${games ? "a game" : "an instance"} in the legend to show its play time.` : games ? "Games you play from here will appear here." : "Recorded Minecraft sessions will appear here.",
             )
           )}
 
@@ -327,12 +367,12 @@ export default function PlayStats({
           {loading ? (
             loadingNote
           ) : games ? (
-            total !== null && (range === "all" ? total : inRange) > 0
-              ? <BarChart label="Recorded play time by game" items={[{
-                  id: "minecraft", label: "Minecraft", value: range === "all" ? total : inRange,
-                  valueLabel: formatDuration(range === "all" ? total : inRange),
-                }]} />
-              : empty("No recorded play time", "Try a longer date range or play Minecraft from the launcher.")
+            perGame.length
+              ? <BarChart label="Recorded play time by game" items={perGame.slice(0, 6).map((g) => ({
+                  id: g.id, label: g.name, value: g.seconds, valueLabel: formatDuration(g.seconds),
+                  sub: g.sessions ? `${g.sessions} ${g.sessions === 1 ? "session" : "sessions"}` : undefined,
+                }))} onSelect={onGame ? (item) => onGame(item.id) : undefined} />
+              : empty("No recorded play time", "Try a longer date range or play a game from the launcher.")
           ) : perInstance.length ? (
             <BarChart
               label={`Play time per instance, ${rangeWords}`}

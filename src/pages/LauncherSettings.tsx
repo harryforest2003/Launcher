@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import {
+  Archive,
+  Bell,
   Box,
+  Download,
+  HardDrive,
+  Info,
   Disc3,
   Gamepad2,
   KeyRound,
@@ -25,6 +30,7 @@ import SettingsLayout, { SettingsHeader } from "../components/SettingsLayout";
 import AppearanceSettings from "../theme/AppearanceSettings";
 import AccountSwitcher from "../components/AccountSwitcher";
 import { DiscordStatusSection } from "../components/DiscordStatusSettings";
+import { AboutSection, BackupSection, DownloadsSection, StartupSection, StorageSection } from "../components/LauncherAppSettings";
 import DisplaySettings from "../components/DisplaySettings";
 import { PLATFORMS } from "../components/platformAccountsData";
 import "../theme/appearance.css";
@@ -34,6 +40,8 @@ type Props = {
   onModManager: () => void;
   /** Opens Minecraft's own settings (Java, memory, accounts). Without it, the page says where they are. */
   onMinecraftSettings?: () => void;
+  /** Opens the Downloads page, from the Downloads section. */
+  onDownloads?: () => void;
 };
 
 const PLATFORM_ICONS: Record<string, LucideIcon> = {
@@ -154,6 +162,7 @@ export default function LauncherSettings({
   onHome,
   onModManager,
   onMinecraftSettings,
+  onDownloads,
 }: Props) {
   const [apiKeys, setApiKeys] = useState<Awaited<
     ReturnType<typeof window.instanceAPI.getApiKeys>
@@ -188,7 +197,7 @@ export default function LauncherSettings({
         <div className="app-page">
           <SettingsHeader
             title="Settings"
-            lead="How the launcher looks, your game accounts, and the mod sites Discover uses."
+            lead="How the launcher looks, your game accounts, the mod sites Discover uses, and the launcher itself."
           />
 
           {error && (
@@ -266,6 +275,37 @@ export default function LauncherSettings({
                 label: "Discord status",
                 icon: <MessageCircle size={16} aria-hidden="true" />,
                 content: <DiscordStatusSection />,
+              },
+              {
+                id: "about",
+                label: "About & updates",
+                group: "Launcher",
+                icon: <Info size={16} aria-hidden="true" />,
+                content: <AboutSection />,
+              },
+              {
+                id: "startup",
+                label: "Startup & notifications",
+                icon: <Bell size={16} aria-hidden="true" />,
+                content: <StartupSection />,
+              },
+              {
+                id: "downloads",
+                label: "Downloads",
+                icon: <Download size={16} aria-hidden="true" />,
+                content: <DownloadsSection onOpenDownloads={onDownloads} />,
+              },
+              {
+                id: "storage",
+                label: "Storage",
+                icon: <HardDrive size={16} aria-hidden="true" />,
+                content: <StorageSection />,
+              },
+              {
+                id: "backup",
+                label: "Back up settings",
+                icon: <Archive size={16} aria-hidden="true" />,
+                content: <BackupSection />,
               },
             ]}
           />
