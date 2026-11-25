@@ -837,7 +837,8 @@
   flex: 1 1 0;
   display: grid;
   place-items: center;
-  min-height: 0;
+  /* Room for the player to stay visible while the account controls below unfold. */
+  min-height: 140px;
   margin: 0 calc(-1 * var(--space-4));
   color: var(--color-text-muted);
 }

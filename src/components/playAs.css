@@ -35,3 +35,89 @@
   margin: var(--space-2) 0 0;
   color: var(--color-danger-text);
 }
+
+/* The foot of Minecraft home's "Playing as" card (MinecraftSessions.tsx): other open
+   instances, and, unfolded, starting one more on another account. When it unfolds the
+   skin render gives up the room; past that, the controls scroll inside the card. */
+.mc-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.mc-sessions__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.mc-sessions__controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.mc-sessions__launch {
+  grid-column: 1 / -1;
+}
+
+.mc-sessions__controls label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.mc-sessions__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mc-sessions__list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  padding-block: var(--space-1);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.mc-sessions__list li + li {
+  border-top: 1px solid var(--color-border);
+}
+
+.mc-sessions__list li strong {
+  flex: 1;
+  color: var(--color-text);
+}
+
+.mc-sessions__list li span {
+  color: var(--color-text-secondary);
+}
+
+.mc-sessions__hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.mc-sessions__more {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.mc-sessions__toggle {
+  flex: none;
+  align-self: stretch;
+  justify-content: center;
+}

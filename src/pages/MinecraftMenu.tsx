@@ -16,6 +16,8 @@ import PlayHero from "./dashboard/PlayHero";
 import PlayStats from "./dashboard/PlayStats";
 import NewsPanel from "./dashboard/NewsPanel";
 import MinecraftOffers from "./dashboard/MinecraftOffers";
+import MinecraftSessions from "../components/MinecraftSessions";
+import { ACCOUNTS_EVENT, watchAccountChanges } from "../components/ui/accountsSignal";
 import { useDashboard } from "./dashboard/useDashboard";
 import { defaultRange, type Range } from "./dashboard/range";
 import { loaderName, useInstances } from "./dashboard/useInstances";
@@ -107,30 +109,26 @@ function MinecraftMenu({
   const signInAttempt = useRef(0);
 
   useEffect(() => {
-    let current = true;
-    // Stays signed in between runs of the app.
-    window.instanceAPI
-      .getAccount()
-      .then((saved) => {
-        if (current && saved) {
-          setAccount({
-            loggedIn: true,
-            username: saved.name,
-            uuid: saved.uuid,
-            skin: saved.skin ?? undefined,
-          });
-        }
-      })
-      .catch(() => {});
-
-    // Switching accounts, from here or the sidebar, shows the one now active.
-    const unsubscribe = window.instanceAPI.onAccountsChanged((accounts) => {
-      current = false;
-      const active = accounts.find((entry) => entry.active);
-      setAccount(active ? { loggedIn: true, username: active.name, uuid: active.uuid, skin: active.skin ?? undefined } : null);
-    });
+    let live = true;
+    let request = 0;
+    const refreshAccount = async () => {
+      const current = ++request;
+      try {
+        const saved = await window.instanceAPI.getAccount();
+        if (live && current === request) setAccount(saved ? {
+          loggedIn: true, username: saved.name, uuid: saved.uuid, skin: saved.skin ?? undefined,
+        } : null);
+      } catch { /* Keep the last known account when a refresh fails. */ }
+    };
+    watchAccountChanges();
+    void refreshAccount();
+    window.addEventListener(ACCOUNTS_EVENT, refreshAccount);
+    window.addEventListener("focus", refreshAccount);
+    const unsubscribe = window.instanceAPI.onAccountsChanged(() => { void refreshAccount(); });
     return () => {
-      current = false;
+      live = false;
+      window.removeEventListener(ACCOUNTS_EVENT, refreshAccount);
+      window.removeEventListener("focus", refreshAccount);
       unsubscribe();
     };
   }, []);
@@ -287,7 +285,8 @@ function MinecraftMenu({
                   )}
                 </div>
 
-                {/* Who's playing, once: switching accounts is the sidebar's account card. */}
+                {/* Who's playing, once (switching accounts is the sidebar's account card), then the other
+                    instances open on other accounts and the way to start one more. */}
                 <div className="mh-player__info">
                   <span className="mh-player__label">Playing as</span>
                   <strong className="mh-player__name">{account.username}</strong>
@@ -300,6 +299,7 @@ function MinecraftMenu({
                     Sign out
                   </Button>
                 </div>
+                <MinecraftSessions instances={instances} onRefresh={reload} onLibrary={goLibrary} />
               </section>
             ) : (
               <section className="mh-signin mh-signin--bar" aria-label="Microsoft account">

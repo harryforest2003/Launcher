@@ -18,7 +18,7 @@
     "blockbench:build": "node scripts/build-blockbench.cjs",
     "app:install": "node scripts/install-app.cjs",
     "security:check": "node scripts/security-check.cjs",
-    "test": "node --test scripts/test-launch-feedback.cjs scripts/test-cyberpunk-mac.cjs scripts/test-generic-layout.cjs scripts/test-load-order.cjs scripts/test-where-to-get.cjs scripts/test-worlds.cjs scripts/test-graphics-presets.cjs scripts/test-wabbajack.cjs scripts/test-safety-check.cjs scripts/test-shared-instances.cjs scripts/test-game-usage.cjs scripts/test-legacy-loaders.cjs scripts/test-ely-by.cjs"
+    "test": "node --test scripts/test-launch-feedback.cjs scripts/test-cyberpunk-mac.cjs scripts/test-generic-layout.cjs scripts/test-load-order.cjs scripts/test-where-to-get.cjs scripts/test-worlds.cjs scripts/test-graphics-presets.cjs scripts/test-wabbajack.cjs scripts/test-safety-check.cjs scripts/test-shared-instances.cjs scripts/test-game-usage.cjs scripts/test-legacy-loaders.cjs scripts/test-ely-by.cjs scripts/test-launch-reservations.cjs"
   },
   "dependencies": {
     "js-yaml": "^4.3.2",

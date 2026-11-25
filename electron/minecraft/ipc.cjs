@@ -1,3 +1,4 @@
+const launchReservations = require("./launchReservations.cjs").createLaunchReservations();
 const fs = require("fs");
 const path = require("path");
 const { app, ipcMain, shell, dialog, BrowserWindow } = require("electron");
@@ -8,6 +9,7 @@ const instanceFiles = require("./instanceFiles.cjs");
 const worlds = require("./worlds.cjs");
 const javaRuntime = require("./javaRuntime.cjs");
 const modUpdates = require("./modUpdates.cjs");
+const worldBackups = require("./worldBackups.cjs");
 const loaderUpdates = require("./loaderUpdates.cjs");
 const modpackExport = require("./modpackExport.cjs");
 const modSearch = require("./modSearch.cjs");
@@ -114,7 +116,7 @@ function keyChanged(name) {
  * is given. The id has to be a saved account's. An account already in another game is
  * refused before its sign-in is renewed, and again, finally, as the game starts.
  */
-async function launchAs(name, accountId) {
+async function launchAs(name, accountId, { quickPlay = null } = {}) {
     const instance = instanceManager.getInstance(name);
     const id = account.checkAccountId(accountId) ?? account.listAccounts().find((entry) => entry.active)?.uuid ?? null;
 
@@ -124,10 +126,14 @@ async function launchAs(name, accountId) {
         throw new Error(`${who} is already playing "${busy}". Minecraft allows one game per account at a time, so play this one as another account, or close "${busy}" first.`);
     }
 
-    const acct = await account.accountForLaunch(instance.name, id);
-    const result = await instanceManager.launchInstance(name, acct);
-
-    return { ...result, online: acct.online, playerName: acct.name };
+    const release = launchReservations.reserve(instance.name, id);
+    try {
+        const acct = await account.accountForLaunch(instance.name, id);
+        const result = await instanceManager.launchInstance(name, acct, { quickPlay });
+        return { ...result, online: acct.online, playerName: acct.name };
+    } finally {
+        release();
+    }
 }
 
 function registerInstanceIpc() {
@@ -182,7 +188,9 @@ function registerInstanceIpc() {
     instanceManager.instanceEvents.on("started", ({ name, account: player }) => broadcast("instance:started", { name, account: player }));
     instanceManager.instanceEvents.on("progress", (payload) => broadcast("instance:progress", payload));
 
-    ipcMain.handle("instance:launch", (_event, name, accountId) => launchAs(name, accountId));
+    // options.quickPlay: { world } or { server } to open straight away.
+    ipcMain.handle("instance:launch", (_event, name, accountId, options) =>
+        launchAs(name, accountId, { quickPlay: options && typeof options === "object" ? options.quickPlay : null }));
 
     // Which account each open game plays as: { [instance]: { id, name } | null }.
     ipcMain.handle("instance:playing", () => instanceManager.playing());
@@ -244,13 +252,21 @@ function registerInstanceIpc() {
         return { ...done, dependencies: check.added, missingDependencies: check.notFound, disabledDependencies: check.disabled };
     };
 
-    ipcMain.handle("instance:applyUpdates", async (event, name, keys) => {
+    // Worlds backed up first, when the instance asks for that (its Worlds tab).
+    const backupFirst = (event, name) =>
+        worldBackups.backupBeforeUpdate(instanceManager.getInstance(name), {
+            running: instanceManager.isRunning(name),
+            onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
+        });
+
+    ipcMain.handle("instance:applyUpdates", async (event, name, keys, options) => {
+        await backupFirst(event, name);
         const done = await modUpdates.applyUpdates(
             name,
             instanceManager.getInstance(name),
             instanceManager.instanceFolder(name),
             Array.isArray(keys) ? keys.map(String) : [],
-            { onProgress: (progress) => send(event, "instance:progress", { name, ...progress }) }
+            { releasesOnly: options?.releasesOnly === true, onProgress: (progress) => send(event, "instance:progress", { name, ...progress }) }
         );
         return fetchNewDependencies(name, done);
     });
@@ -260,6 +276,7 @@ function registerInstanceIpc() {
     ipcMain.handle("instance:versionChangelog", (_e, name, key, versionId) => modUpdates.versionChangelog(name, String(key), String(versionId)));
 
     ipcMain.handle("instance:installVersion", async (event, name, key, versionId, force) => {
+        await backupFirst(event, name);
         const done = await modUpdates.installVersion(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name), String(key), String(versionId), {
             force: force === true,
             onProgress: (progress) => send(event, "instance:progress", { name, ...progress }),
@@ -325,6 +342,7 @@ function registerInstanceIpc() {
     );
 
     ipcMain.handle("instance:applyLoader", async (event, name, version, options) => {
+        await backupFirst(event, name);
         const onProgress = (progress) => send(event, "instance:progress", { name, ...progress });
         const done = await loaderUpdates.applyLoaderChange(name, instanceManager.getInstance(name), instanceManager.instanceFolder(name), String(version), {
             force: options?.force === true,

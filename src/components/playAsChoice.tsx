@@ -12,7 +12,7 @@ import { ACCOUNTS_EVENT, watchAccountChanges } from "./ui/accountsSignal";
  */
 
 type Playing = Record<string, GamePlayer | null>;
-type Seen = { accounts: MinecraftAccount[]; playing: Playing };
+type Seen = { accounts: MinecraftAccount[]; playing: Playing; loaded?: boolean; unavailable?: boolean };
 
 /** An account that's already in another game, and the instance that was to start. */
 export type AccountClash = { instance: string; account: GamePlayer; busyIn: string };
@@ -30,10 +30,10 @@ function clashFor(seen: Seen, instance: string, accountId?: string): AccountClas
 
 async function look(): Promise<Seen> {
   const [accounts, playing] = await Promise.all([
-    Promise.resolve(window.instanceAPI?.listAccounts?.()).catch(() => null),
-    Promise.resolve(window.instanceAPI?.playing?.()).catch(() => null),
+    Promise.resolve().then(() => window.instanceAPI?.listAccounts?.()).catch(() => null),
+    Promise.resolve().then(() => window.instanceAPI?.playing?.()).catch(() => null),
   ]);
-  return { accounts: Array.isArray(accounts) ? accounts : [], playing: playing && typeof playing === "object" ? playing : {} };
+  return { accounts: Array.isArray(accounts) ? accounts : [], playing: playing && typeof playing === "object" ? playing : {}, loaded: true, unavailable: !Array.isArray(accounts) || !playing };
 }
 
 /**
@@ -88,6 +88,9 @@ export function useAccountChoice() {
 
   return {
     accounts: seen.accounts,
+    playing: seen.playing,
+    loaded: Boolean(seen.loaded),
+    unavailable: Boolean(seen.unavailable),
     /** The instance this account's game is in, if any (other than `instance`). */
     busyIn: (accountId: string, instance?: string) => busyIn(seen, accountId, instance),
     // Gone once the game holding the account closes.
