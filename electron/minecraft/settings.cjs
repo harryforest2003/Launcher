@@ -31,6 +31,7 @@ const DEFAULTS = {
     fullscreen: false,
     discordStatus: false,      // show the game being played on Discord
     discordClientId: "",       // the Discord application it shows as
+    notifications: false,      // desktop notifications: an update is ready, a game closed
 };
 
 /* A window size: a whole number of pixels in range, or null for Minecraft's own. */
@@ -158,6 +159,7 @@ function settingsFromPage(patch) {
     if ("windowHeight" in clean) clean.windowHeight = windowSize(clean.windowHeight);
     if ("fullscreen" in clean) clean.fullscreen = clean.fullscreen === true;
     if ("discordStatus" in clean) clean.discordStatus = clean.discordStatus === true;
+    if ("notifications" in clean) clean.notifications = clean.notifications === true;
     if ("discordClientId" in clean) {
         const id = String(clean.discordClientId ?? "").trim();
         if (id && !/^\d{17,20}$/.test(id)) throw new Error("A Discord application ID is a number 17 to 20 digits long, from discord.com/developers/applications.");
