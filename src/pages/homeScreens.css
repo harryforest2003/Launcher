@@ -1078,8 +1078,12 @@
 .mh-section-head { flex-wrap: wrap; }
 
 .mh-page .mh-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Home's instances stay one row: whatever doesn't fit is in the Library. */
+.mh-page .mh-cards--row > li:nth-child(n + 3) { display: none; }
 @container mh (min-width: 900px) {
   .mh-page .mh-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .mh-page .mh-cards--row > li:nth-child(n + 3) { display: flex; }
+  .mh-page .mh-cards--row > li:nth-child(n + 5) { display: none; }
 }
 .mh-page .mh-card .mh-card__art { height: 48px; }
 .mh-page .mh-card--new { min-height: 0; height: 100%; justify-content: center; }

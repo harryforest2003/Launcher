@@ -136,11 +136,15 @@ function MinecraftMenu({
   }, []);
 
   const latest = instances[0];
-  // Every other instance stays one click from playing, most recently played first.
-  const others = instances.slice(1);
-  const [showAllInstances, setShowAllInstances] = useState(false);
-  const visibleOthers = showAllInstances ? others : others.slice(0, 3);
   const statFor = (name: string) => stats?.instances.find((i) => i.name === name);
+  // One row of the other instances played most (the Library has the rest): two cards when
+  // narrow, four when wide; homeScreens.css hides whatever doesn't fit the row.
+  const others = instances.slice(1);
+  const ROW = 4;
+  const visibleOthers = [...others]
+    .sort((a, b) => (statFor(b.name)?.playSeconds ?? 0) - (statFor(a.name)?.playSeconds ?? 0)
+      || String(b.lastPlayed ?? "").localeCompare(String(a.lastPlayed ?? "")))
+    .slice(0, ROW);
 
   // The world last played in the latest instance, when it has any.
   const latestName = latest?.name;
@@ -341,18 +345,15 @@ function MinecraftMenu({
                 <section aria-labelledby="mh-others">
                   <div className="mh-section-head">
                     <h2 className="mh-section-title" id="mh-others">
-                      {others.length ? "Your other instances" : "Your instances"}
+                      {others.length ? "Your most played instances" : "Your instances"}
                     </h2>
                     <span className="mh-section-actions">
-                      {others.length > 3 && <Button variant="ghost" size="sm" aria-expanded={showAllInstances} aria-controls="mh-recent-instances" onClick={() => setShowAllInstances((show) => !show)}>
-                        {showAllInstances ? "Show recent instances" : `Show all ${others.length} other instances`}
-                      </Button>}
                       <Button variant="ghost" size="sm" onClick={goLibrary}>
                         Open Library
                       </Button>
                     </span>
                   </div>
-                  <ul className="mh-cards" id="mh-recent-instances">
+                  <ul className="mh-cards mh-cards--row" id="mh-recent-instances">
                     {visibleOthers.map((instance) => {
                       const stat = statFor(instance.name);
                       const trend = recent(instance.name);
@@ -391,13 +392,14 @@ function MinecraftMenu({
                         </li>
                       );
                     })}
-                    <li>
+                    {/* Only while the row has room: the Library makes new instances too. */}
+                    {visibleOthers.length < ROW && <li>
                       <button type="button" className="mh-card mh-card--new" onClick={() => setCreatingInstance(true)}>
                         <FolderPlus size={20} aria-hidden="true" />
                         <span className="mh-card__name">New instance</span>
                         <span className="mh-row__facts">Create one, start from a modpack, or import from another launcher</span>
                       </button>
-                    </li>
+                    </li>}
                   </ul>
                 </section>
 
