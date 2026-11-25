@@ -5,12 +5,15 @@ const { spawn } = require("child_process");
 
 const { fetchJson, downloadFile, publishedSha1 } = require("./net.cjs");
 const { parseVersion, compare } = require("./compat.cjs");
+const liteLoader = require("./liteLoader.cjs");
 
 /*
  * Mod loader installation.
  *
  * Fabric and Quilt publish a ready-made profile JSON, so installing them
- * is just "fetch JSON, download the libraries it names".
+ * is just "fetch JSON, download the libraries it names". Legacy Fabric (Minecraft
+ * 1.13.2 and older) and Babric (Beta 1.7.3) are Fabric builds with the same metadata.
+ * LiteLoader (1.5.2 to 1.12.2) has none, so liteLoader.cjs makes its profile.
  *
  * Forge and NeoForge do not. Their metadata lives inside an installer
  * jar that has to be executed (it runs binary-patching processors), so
@@ -19,6 +22,16 @@ const { parseVersion, compare } = require("./compat.cjs");
 
 const FABRIC_META = "https://meta.fabricmc.net/v2";
 const QUILT_META = "https://meta.quiltmc.org/v3";
+const LEGACY_FABRIC_META = "https://meta.legacyfabric.net/v2";
+const BABRIC_META = "https://meta.babric.glass-launcher.net/v2";
+
+// Loaders with Fabric's kind of metadata: a list of builds and a profile per build.
+const FABRIC_LIKE = {
+    fabric: FABRIC_META,
+    quilt: QUILT_META,
+    "legacy-fabric": LEGACY_FABRIC_META,
+    babric: BABRIC_META,
+};
 const FORGE_PROMOS =
     "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
 const NEOFORGE_MAVEN =
@@ -28,8 +41,8 @@ const NEOFORGE_MAVEN =
    LATEST COMPATIBLE VERSION
 ========================================================= */
 
-async function latestFabric(mcVersion) {
-    const list = await fetchJson(`${FABRIC_META}/versions/loader/${mcVersion}`);
+async function latestFabric(mcVersion, base = FABRIC_META) {
+    const list = await fetchJson(`${base}/versions/loader/${mcVersion}`);
 
     if (!list?.length) return null;
 
@@ -92,6 +105,9 @@ async function latestNeoForge(mcVersion) {
 async function getLatestLoaderVersion(loader, mcVersion) {
     switch ((loader || "").toLowerCase()) {
         case "fabric": return latestFabric(mcVersion);
+        case "legacy-fabric": return latestFabric(mcVersion, LEGACY_FABRIC_META);
+        case "babric": return latestFabric(mcVersion, BABRIC_META);
+        case "liteloader": return liteLoader.latestVersion(mcVersion);
         case "quilt": return latestQuilt(mcVersion);
         case "forge": return latestForge(mcVersion);
         case "neoforge": return latestNeoForge(mcVersion);
@@ -117,8 +133,10 @@ async function listLoaderVersions(loader, mcVersion) {
 
     switch ((loader || "").toLowerCase()) {
         case "fabric":
-        case "quilt": {
-            const base = loader === "quilt" ? QUILT_META : FABRIC_META;
+        case "quilt":
+        case "legacy-fabric":
+        case "babric": {
+            const base = FABRIC_LIKE[loader.toLowerCase()];
             const entries = await fetchJson(`${base}/versions/loader/${mcVersion}`);
             // Fabric only flags its newest build as stable, so the name decides.
             list = (entries ?? []).map(entry => entry.loader?.version).filter(Boolean);
@@ -133,6 +151,8 @@ async function listLoaderVersions(loader, mcVersion) {
                 .filter(version => version.startsWith(`${mcVersion}-`));
             break;
         }
+        case "liteloader":
+            return liteLoader.listVersions(mcVersion);
         case "neoforge": {
             const prefix = neoforgePrefix(mcVersion);
             const meta = await fetchJson(NEOFORGE_MAVEN);
@@ -155,7 +175,7 @@ async function listLoaderVersions(loader, mcVersion) {
 ========================================================= */
 
 async function installJsonLoader(loader, mcVersion, loaderVersion) {
-    const base = loader === "quilt" ? QUILT_META : FABRIC_META;
+    const base = FABRIC_LIKE[loader];
 
     const profile = await fetchJson(
         `${base}/versions/loader/${mcVersion}/${loaderVersion}/profile/json`
@@ -357,10 +377,18 @@ async function installLoader({
         if (onLog) onLog(`Using latest ${loader} ${loaderVersion}`);
     }
 
-    if (kind === "fabric" || kind === "quilt") {
+    if (FABRIC_LIKE[kind]) {
         if (onLog) onLog(`Fetching ${kind} ${loaderVersion} profile...`);
         return {
             profile: await installJsonLoader(kind, mcVersion, loaderVersion),
+            loaderVersion,
+        };
+    }
+
+    if (kind === "liteloader") {
+        if (onLog) onLog(`Putting together LiteLoader ${loaderVersion}...`);
+        return {
+            profile: await liteLoader.profile(mcVersion, loaderVersion),
             loaderVersion,
         };
     }
@@ -377,7 +405,26 @@ async function installLoader({
     throw new Error(`Unknown loader "${loader}".`);
 }
 
+/*
+ * The Minecraft versions a loader works with, newest first, for loaders made for old
+ * versions only; null for the others, which follow every release.
+ */
+async function loaderGameVersions(loader) {
+    switch ((loader || "").toLowerCase()) {
+        case "legacy-fabric":
+        case "babric": {
+            const list = await fetchJson(`${FABRIC_LIKE[loader.toLowerCase()]}/versions/game`);
+            return (list ?? []).map(entry => entry.version).filter(Boolean);
+        }
+        case "liteloader":
+            return liteLoader.gameVersions();
+        default:
+            return null;
+    }
+}
+
 module.exports = {
+    loaderGameVersions,
     installerUrl,
     installLoader,
     getLatestLoaderVersion,

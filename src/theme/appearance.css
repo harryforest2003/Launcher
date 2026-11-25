@@ -1992,6 +1992,13 @@
   flex: 1 1 0;
 }
 
+/* Minecraft's account list and the sign-in forms under it keep one width, so the name and
+   explanation beside them keep their room. */
+.set-pane .platform-account-row > .set-frow-ctl > .ui-account {
+  width: 320px;
+  max-width: 100%;
+}
+
 /* A link inside a sentence that acts as a button. */
 .set-textlink {
   padding: 0;

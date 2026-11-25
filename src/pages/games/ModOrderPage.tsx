@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, GripVertical } from "lucide-react";
 import IconButton from "../../components/IconButton";
 import Toggle from "../../components/Toggle";
+import { Badge } from "../../components/ui";
+import "../../components/modList.css";
 import { errorText, note, panel, smallButton } from "./shared";
 
 type Props = { detail: GameDetail };
@@ -122,101 +124,100 @@ export default function ModOrderPage({ detail }: Props) {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-testid="mod-order">
-        {!order ? (
-          !error && <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>
-        ) : order.entries.length === 0 ? (
-          (order.file || kind === "modlist") && <div style={{ color: "var(--color-text-muted)", padding: 20, textAlign: "center" }}>No mods yet.</div>
-        ) : (
-          on.map((entry, index) => {
-            const movable = !entry.fixed;
-            return (
-              <div
-                key={entry.id}
-                data-testid="mod-order-row"
-                draggable={movable}
-                onDragStart={(event) => {
-                  setDragging(index);
-                  event.dataTransfer.effectAllowed = "move";
-                }}
-                onDragOver={(event) => {
-                  if (dragging === null || index < pinned) return;
-                  event.preventDefault();
-                  setOver(index);
-                }}
-                onDragLeave={() => setOver((now) => (now === index ? null : now))}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (dragging !== null) move(dragging, index);
-                  setDragging(null);
-                  setOver(null);
-                }}
-                onDragEnd={() => {
-                  setDragging(null);
-                  setOver(null);
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  padding: "4px 10px",
-                  minHeight: 44,
-                  contentVisibility: "auto",
-                  containIntrinsicSize: "auto 46px",
-                  background: "var(--color-surface)",
-                  border: `1px solid ${over === index && dragging !== null && dragging !== index ? "var(--color-accent-line)" : entry.problems.length ? "var(--color-warning-border)" : "var(--color-border)"}`,
-                  borderRadius: 10,
-                  opacity: dragging === index ? 0.5 : 1,
-                }}
-              >
-                <span style={{ color: "var(--color-text-muted)", cursor: movable ? "grab" : "default", display: "flex", visibility: movable ? "visible" : "hidden" }} aria-hidden="true">
-                  <GripVertical size={18} />
-                </span>
-                <span style={{ color: "var(--color-text-muted)", fontSize: 12, width: 28, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{index + 1}</span>
-                {order.toggles && <Toggle on label={`Turn off ${entry.name}`} disabled={entry.fixed} onChange={() => toggle(entry, false)} />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <span style={{ color: "var(--color-accent-text)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</span>
-                    {entry.fixed && <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 5, background: "var(--color-info-bg)", color: "var(--color-info-text)", flexShrink: 0 }}>The game's own</span>}
-                  </div>
-                  {entry.note && entry.note !== entry.name && (
-                    <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.note}</div>
-                  )}
-                  {entry.problems.map((problem) => (
-                    <div key={problem} style={{ color: "var(--color-warning-text)", fontSize: 12, marginTop: 2 }}>
-                      {problem}
+      {!order ? (
+        !error && <div className="mlx-empty">Loading...</div>
+      ) : order.entries.length === 0 ? (
+        (order.file || kind === "modlist") && <div className="mlx-empty">No mods yet.</div>
+      ) : (
+        on.length > 0 && (
+          <div className="mlx-table" data-testid="mod-order">
+            <div className="mlx-head" aria-hidden="true">
+              Loads in this order <span className="mlx-head__count">{on.length}</span>
+            </div>
+            {on.map((entry, index) => {
+              const movable = !entry.fixed;
+              const classes = [
+                "mlx-row mlx-row--order",
+                entry.problems.length && "mlx-row--warn",
+                over === index && dragging !== null && dragging !== index && "mlx-row--over",
+                dragging === index && "mlx-row--dragging",
+              ]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <div
+                  key={entry.id}
+                  data-testid="mod-order-row"
+                  className={classes}
+                  draggable={movable}
+                  onDragStart={(event) => {
+                    setDragging(index);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  onDragOver={(event) => {
+                    if (dragging === null || index < pinned) return;
+                    event.preventDefault();
+                    setOver(index);
+                  }}
+                  onDragLeave={() => setOver((now) => (now === index ? null : now))}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (dragging !== null) move(dragging, index);
+                    setDragging(null);
+                    setOver(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragging(null);
+                    setOver(null);
+                  }}
+                >
+                  <span className={movable ? "mlx-grip" : "mlx-grip mlx-grip--still"} aria-hidden="true">
+                    <GripVertical size={18} />
+                  </span>
+                  <span className="mlx-num">{index + 1}</span>
+                  {order.toggles && <Toggle on label={`Turn off ${entry.name}`} disabled={entry.fixed} onChange={() => toggle(entry, false)} />}
+                  <div className="mlx-main">
+                    <div className="mlx-title">
+                      <span className="mlx-name">{entry.name}</span>
+                      {entry.fixed && <Badge tone="info">The game's own</Badge>}
                     </div>
-                  ))}
+                    {entry.note && entry.note !== entry.name && <div className="mlx-sub">{entry.note}</div>}
+                    {entry.problems.map((problem) => (
+                      <div key={problem} className="mlx-problem">
+                        {problem}
+                      </div>
+                    ))}
+                  </div>
+                  {movable && (
+                    <>
+                      <IconButton tip="Load earlier" label={`Move ${entry.name} up`} disabled={index <= pinned} style={{ width: 30, height: 30 }} onClick={() => move(index, index - 1)}>
+                        <ChevronUp size={16} />
+                      </IconButton>
+                      <IconButton tip="Load later" label={`Move ${entry.name} down`} disabled={index === on.length - 1} style={{ width: 30, height: 30 }} onClick={() => move(index, index + 1)}>
+                        <ChevronDown size={16} />
+                      </IconButton>
+                    </>
+                  )}
                 </div>
-                {movable && (
-                  <>
-                    <IconButton tip="Load earlier" label={`Move ${entry.name} up`} disabled={index <= pinned} style={{ width: 34, height: 34 }} onClick={() => move(index, index - 1)}>
-                      <ChevronUp size={16} />
-                    </IconButton>
-                    <IconButton tip="Load later" label={`Move ${entry.name} down`} disabled={index === on.length - 1} style={{ width: 34, height: 34 }} onClick={() => move(index, index + 1)}>
-                      <ChevronDown size={16} />
-                    </IconButton>
-                  </>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
+              );
+            })}
+          </div>
+        )
+      )}
 
       {order && order.toggles && off.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-testid="mod-order-off">
-          <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 4 }}>Installed, turned off</div>
+        <div className="mlx-table" data-testid="mod-order-off">
+          <div className="mlx-head" aria-hidden="true">
+            Installed, turned off <span className="mlx-head__count">{off.length}</span>
+          </div>
           {off.map((entry) => (
-            <div
-              key={entry.id}
-              data-testid="mod-order-off-row"
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 10px", minHeight: 44, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, opacity: 0.75 }}
-            >
+            <div key={entry.id} data-testid="mod-order-off-row" className="mlx-row mlx-row--off">
               <Toggle on={false} label={`Turn on ${entry.name}`} disabled={!order.file} onChange={() => toggle(entry, true)} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ color: "var(--color-text-muted)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.name}</div>
-                {entry.note && entry.note !== entry.name && <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginTop: 2 }}>{entry.note}</div>}
+              <div className="mlx-main">
+                <div className="mlx-title">
+                  <span className="mlx-name">{entry.name}</span>
+                </div>
+                {entry.note && entry.note !== entry.name && <div className="mlx-sub">{entry.note}</div>}
               </div>
             </div>
           ))}

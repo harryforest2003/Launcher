@@ -28,7 +28,7 @@ type Listener = (data: any) => void;
 const STORAGE_KEY = "unity-web-preview-state";
 const PLAYER_NAME = "PreviewPlayer";
 
-type PreviewAccount = { name: string; uuid: string; offline?: boolean };
+type PreviewAccount = { name: string; uuid: string; offline?: boolean; service?: "ely.by" };
 
 type PreviewState = {
   instances: Instance[];
@@ -577,7 +577,20 @@ const launcherBridge = {
     { id: "forge", name: "Forge" },
     { id: "neoforge", name: "NeoForge" },
     { id: "quilt", name: "Quilt" },
+    { id: "legacy-fabric", name: "Legacy Fabric" },
+    { id: "babric", name: "Babric" },
+    { id: "liteloader", name: "LiteLoader" },
   ],
+  getLoaderVersions: async (loader: string) =>
+    loader === "liteloader" ? [{ version: "1.12.2-SNAPSHOT", stable: false }] : [{ version: "0.20.1", stable: true }],
+  getLoaderGameVersions: async (loader: string) =>
+    loader === "babric"
+      ? ["b1.7.3"]
+      : loader === "legacy-fabric"
+        ? ["1.13.2", "1.12.2", "1.11.2", "1.10.2", "1.9.4", "1.8.9", "1.7.10", "1.6.4", "1.5.2", "1.4.7", "1.3.2"]
+        : loader === "liteloader"
+          ? ["1.12.2", "1.11.2", "1.10.2", "1.9.4", "1.8.9", "1.7.10", "1.6.4", "1.5.2"]
+          : null,
   getProject,
   packContents,
   browseCatalog: (options: CatalogQuery) => webCatalog.browse(options),
@@ -849,6 +862,17 @@ const instanceBridge = {
     persist();
     return previewAccounts();
   },
+  // A preview Ely.by sign-in: any login and password work; a login with "2fa" in it asks for a code.
+  elySignIn: async (login: string, password: string, code?: string) => {
+    const name = login.trim().replace(/@.*/, "").replace(/\W/g, "_").slice(0, 16);
+    if (!name || !password) throw new Error("Enter your Ely.by login and password.");
+    if (/2fa/i.test(login) && !code) throw new Error("ELY_NEEDS_CODE: This Ely.by account uses two-step sign-in. Enter the code from your authenticator app.");
+    const uuid = `e1yb${Array.from(name.toLowerCase(), (c) => c.charCodeAt(0).toString(16)).join("")}`.padEnd(32, "0").slice(0, 32);
+    state.accounts = [...state.accounts.filter((account) => account.uuid !== uuid), { name, uuid, service: "ely.by" }];
+    state.active = uuid;
+    persist();
+    return previewAccounts();
+  },
 
   // Files, logs, Java, updates and exports belong to the desktop app; the preview shows
   // them empty.
@@ -1083,8 +1107,62 @@ const instanceBridge = {
     if (!code.trim().startsWith("unity1:")) throw new Error("That isn't a share code this launcher can read. Check it was copied whole.");
     return { name: "Shared pack", version: "1.21.1", loader: "fabric", loaderVersion: "0.16.9", files: 12, missing: ["handmade-tweak"] };
   },
+  safetyCheck: async () => ({
+    files: [
+      { name: "handmade-tweak.jar", title: "handmade-tweak", type: "mod", enabled: true, source: "unknown", level: "warning", findings: [{ level: "warning", text: "Loads code from the internet.", where: "com/example/Boot.class" }] },
+      { name: "sodium-fabric-0.6.0.jar", title: "Sodium", type: "mod", enabled: true, source: "modrinth", level: "ok", findings: [] },
+      { name: "jei-1.21.1.jar", title: "JEI", type: "mod", enabled: true, source: "curseforge", level: "ok", findings: [] },
+    ],
+    system: [],
+    counts: { danger: 0, warning: 1, unknown: 0, ok: 2 },
+    sitesChecked: true,
+    checkedAt: new Date().toISOString(),
+  }),
   importShareCode: async () => {
     throw new Error("Making an instance from a share code needs the desktop app.");
+  },
+  sharedPublish: async (name: string) => {
+    const instance = findInstance(name);
+    const previous = instance.shared?.role === "owner" ? instance.shared : null;
+    const shared = {
+      role: "owner" as const,
+      path: previous?.path ?? `/preview/Dropbox/Unity Launcher/Shared/${name}.unityshare`,
+      id: previous?.id ?? "preview-share",
+      revision: (previous?.revision ?? 0) + 1,
+      updated: new Date().toISOString(),
+    };
+    instance.shared = shared;
+    return { path: shared.path, revision: shared.revision, linked: 12, missing: ["handmade-tweak"] };
+  },
+  sharedChooseFile: async () => "/preview/Dropbox/Unity Launcher/Shared/Friends SMP.unityshare",
+  sharedRead: async (source: string) => {
+    if (!source.trim()) throw new Error("Paste a link to the shared file or choose it.");
+    return { name: "Friends SMP", version: "1.21.1", loader: "fabric", revision: 4, updated: new Date().toISOString(), files: 12, missing: [] };
+  },
+  sharedJoin: async () => {
+    throw new Error("Joining a shared instance needs the desktop app.");
+  },
+  sharedCheck: async (name: string): Promise<SharedCheck | null> => {
+    const shared = findInstance(name).shared;
+    if (!shared) return null;
+    if (shared.role === "owner") return { role: "owner", revision: shared.revision, updated: shared.updated, path: shared.path, fileFound: true };
+    return { role: "member", revision: shared.revision, latest: shared.revision + 1, updated: new Date().toISOString(), available: true, moved: null };
+  },
+  sharedUpdate: async (name: string) => {
+    const instance = findInstance(name);
+    if (instance.shared?.role !== "member") throw new Error("This instance doesn't follow a shared one.");
+    instance.shared = { ...instance.shared, revision: instance.shared.revision + 1 };
+    return { revision: instance.shared.revision, installed: 2, removed: 1, failed: [], blocked: [] };
+  },
+  sharedLeave: async (name: string) => {
+    delete findInstance(name).shared;
+  },
+  usage: async (name: string) => {
+    const instance = findInstance(name);
+    if (!instance.running) return null;
+    // Somewhere between half and most of the memory the instance is given, like a real game.
+    const share = 0.5 + 0.3 * Math.abs(Math.sin(Date.now() / 20000));
+    return { memory: Math.round(instance.ram * share * 1024 ** 3), cpu: 8 + Math.round(Math.abs(Math.sin(Date.now() / 7000)) * 30) };
   },
 
   onProgress: (callback: Listener) => subscribe("instance:progress", callback),

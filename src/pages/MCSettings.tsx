@@ -17,6 +17,7 @@ import BackgroundLogo from "../components/BackgroundLogo";
 import Sidebar from "../components/MCSidebar";
 import StarterModsSettings from "../components/StarterModsSettings";
 import OfflineAccountForm from "../components/OfflineAccountForm";
+import ElyAccountForm from "../components/ElyAccountForm";
 import { GameWindowSettings } from "../components/InstanceLaunchSettings";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
@@ -72,6 +73,7 @@ function MCSettings({
   // Signing in happens in the browser; pressing again starts it over.
   const [signingIn, setSigningIn] = useState(false);
   const [addingOffline, setAddingOffline] = useState(false);
+  const [addingEly, setAddingEly] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   const signInRun = useRef(0);
   const [confirmSignOut, setConfirmSignOut] = useState<string | null>(null);
@@ -648,7 +650,9 @@ function MCSettings({
                                   <div className="set-item-meta">
                                     {entry.offline
                                       ? "Offline test account: single-player and offline servers, default skin."
-                                      : entry.active
+                                      : entry.service === "ely.by"
+                                        ? "Ely.by account: servers that accept Ely.by, with its skin."
+                                        : entry.active
                                         ? "Minecraft launches as this account."
                                         : "Signed in on this computer."}
                                   </div>
@@ -715,16 +719,41 @@ function MCSettings({
                               setNotice(`Now playing as ${name}, offline.`);
                             }}
                           />
+                        ) : addingEly ? (
+                          <ElyAccountForm
+                            onCancel={() => setAddingEly(false)}
+                            onDone={(next, name) => {
+                              setAccounts(next);
+                              setAddingEly(false);
+                              setNotice(`Now playing as ${name}, with Ely.by.`);
+                            }}
+                          />
                         ) : (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            icon={<Plus size={14} aria-hidden="true" />}
-                            style={{ marginTop: "var(--space-2)" }}
-                            onClick={() => setAddingOffline(true)}
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "var(--space-1)",
+                              marginTop: "var(--space-2)",
+                            }}
                           >
-                            Add offline test account
-                          </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              icon={<Plus size={14} aria-hidden="true" />}
+                              onClick={() => setAddingEly(true)}
+                            >
+                              Add Ely.by account
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              icon={<Plus size={14} aria-hidden="true" />}
+                              onClick={() => setAddingOffline(true)}
+                            >
+                              Add offline test account
+                            </Button>
+                          </div>
                         )}
 
                         {signingIn && (

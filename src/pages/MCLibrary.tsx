@@ -37,6 +37,7 @@ import { AccountClashNotice, PlayAsMenu } from "../components/PlayAs";
 import { playAsItems, useAccountChoice } from "../components/playAsChoice";
 import { timeAgo } from "./playedAgo";
 import { formatDuration } from "../components/charts";
+import { MemoryFact } from "../components/GameUsage";
 import "./library.css";
 import { useScrollMemory } from "./useScrollMemory";
 
@@ -63,6 +64,9 @@ const LOADER_NAMES: Record<string, string> = {
   quilt: "Quilt",
   forge: "Forge",
   neoforge: "NeoForge",
+  "legacy-fabric": "Legacy Fabric",
+  babric: "Babric",
+  liteloader: "LiteLoader",
 };
 const LOADER_ORDER = Object.keys(LOADER_NAMES);
 
@@ -870,6 +874,11 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
           {chosen.lastPlayed ? `Last played ${timeAgo(chosen.lastPlayed)}` : played[chosen.name]?.seconds ? "Played before" : "Not played yet"}
           {chosen.created ? `, added ${formatDate(chosen.created)}` : ""}.
         </p>
+        {chosen.notes?.trim() && (
+          <p className="lx-notes" data-testid="library-panel-notes" title={chosen.notes}>
+            {chosen.notes}
+          </p>
+        )}
 
         <dl className="lx-facts">
           <div>
@@ -893,7 +902,9 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
           )}
           <div>
             <dt>Memory</dt>
-            <dd>{chosen.ram} GB</dd>
+            <dd>
+              <MemoryFact name={chosen.name} running={Boolean(chosen.running)} ram={chosen.ram} />
+            </dd>
           </div>
         </dl>
 

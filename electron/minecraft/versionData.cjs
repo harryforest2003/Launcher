@@ -110,6 +110,13 @@ function nativeArtifact(library) {
     if (!classifier) return null;
 
     const native = library.downloads?.classifiers?.[classifier];
+
+    // Legacy Fabric names its LWJGL natives by Maven coordinate and repository only.
+    if (!native && library.name && library.url) {
+        const relative = mavenToPath(`${library.name.split("@")[0]}:${classifier}`).split(path.sep).join("/");
+        return { path: relative, url: `${library.url.replace(/\/$/, "")}/${relative}`, sha1: null, size: null };
+    }
+
     if (!native?.url) return null;
 
     return {
@@ -186,6 +193,12 @@ function mergeVersions(vanilla, loader) {
         merged.minecraftArguments = loader.minecraftArguments;
     }
 
+    // Launchwrapper tweakers (LiteLoader's), added to the game's own arguments.
+    for (const tweaker of loader.tweakers ?? []) {
+        if (merged.arguments) merged.arguments.game.push("--tweakClass", tweaker);
+        else merged.minecraftArguments = `${merged.minecraftArguments ?? ""} --tweakClass ${tweaker}`.trim();
+    }
+
     // Keep the first occurrence of each library, so a loader's newer version
     // of a shared library replaces vanilla's.
     const seen = new Set();
@@ -212,8 +225,8 @@ function buildClasspath(versionJson, instanceFolder) {
     for (const library of versionJson.libraries ?? []) {
         if (!isLibraryAllowed(library)) continue;
 
-        // Pure-natives entries contribute no classpath jar.
-        if (library.natives && !library.downloads?.artifact && !library.url) {
+        // Pure-natives entries contribute no classpath jar (downloadLibraries skips them too).
+        if (library.natives && !library.downloads?.artifact) {
             continue;
         }
 

@@ -182,6 +182,6 @@ function problemsWith({ mods, changed, changedIds = new Set(), mcVersion, loader
 }
 
 /* The ids mods use to ask for each loader. */
-const LOADER_IDS = { fabric: ["fabricloader", "fabric-loader"], quilt: ["quilt_loader"], forge: ["forge"], neoforge: ["neoforge"] };
+const LOADER_IDS = { fabric: ["fabricloader", "fabric-loader"], "legacy-fabric": ["fabricloader", "fabric-loader"], babric: ["fabricloader", "fabric-loader"], quilt: ["quilt_loader"], forge: ["forge"], neoforge: ["neoforge"] };
 
 module.exports = { satisfies, problemsWith, describe, parseVersion, compare, LOADER_IDS, BUILT_IN_NAMES };

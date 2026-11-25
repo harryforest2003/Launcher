@@ -7,7 +7,7 @@ import Pagination from "../components/Pagination";
 import DiscoverRow from "./DiscoverRow";
 import { PLATFORM_NAMES } from "./platformSites";
 
-const LOADERS: Record<string, string> = { forge: "Forge", neoforge: "NeoForge", fabric: "Fabric", quilt: "Quilt" };
+const LOADERS: Record<string, string> = { forge: "Forge", neoforge: "NeoForge", fabric: "Fabric", quilt: "Quilt", "legacy-fabric": "Legacy Fabric", babric: "Babric", liteloader: "LiteLoader" };
 
 const compact = (n: number) => new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
 

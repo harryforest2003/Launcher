@@ -168,7 +168,15 @@ async function importInstanceCode(code, { name, onProgress = () => {} } = {}) {
         { onProgress: (progress) => onProgress({ name: instanceName, ...progress }) }
     );
 
-    return { name: instanceName, installed, blocked, failed, missing: shared.missing, notFound: notFound.length };
+    return {
+        name: instanceName,
+        installed,
+        blocked,
+        failed,
+        missing: shared.missing,
+        notFound: notFound.length,
+        files: files.map(({ type, fileName, sha1 }) => ({ type, fileName, sha1: sha1 ?? null })),
+    };
 }
 
-module.exports = { instanceShareCode, readInstanceCode, importInstanceCode };
+module.exports = { instanceShareCode, readInstanceCode, importInstanceCode, resolveFiles };

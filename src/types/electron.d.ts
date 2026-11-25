@@ -30,6 +30,10 @@ declare global {
             getForgeVersions(version: string): Promise<any[]>;
             getNeoForgeVersions(version: string): Promise<any[]>;
             getLoaders(): Promise<{ id: string; name: string }[]>;
+            /** Any loader's builds for a Minecraft version, newest first. */
+            getLoaderVersions(loader: string, version: string): Promise<{ version: string; stable: boolean }[]>;
+            /** The Minecraft versions a loader made for old versions works with; null when it follows every release. */
+            getLoaderGameVersions(loader: string): Promise<string[] | null>;
 
             // ---------- Projects ----------
             getProject(

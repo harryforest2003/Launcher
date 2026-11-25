@@ -89,3 +89,17 @@
 .ui-account__quiet .ui-account__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-account__quiet .ui-account__signin { flex-shrink: 0; padding-inline: var(--space-2); border-radius: var(--radius-md); }
 .ui-account__signin:disabled { cursor: default; }
+
+/* Minecraft's panel: the accounts (a click switches to one), a line, then the ways to add one. */
+.ui-account__list,
+.ui-account__adds { display: flex; flex-direction: column; gap: 1px; margin: 0 calc(var(--space-1-5) * -1); padding: 0; list-style: none; }
+.ui-account__panel .ui-menu__item { padding-inline: var(--space-1-5); }
+.ui-account__list { flex-shrink: 1; min-height: 0; overflow-y: auto; }
+.ui-account__item { min-height: 40px; }
+.ui-account__item .ui-account__text { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0; line-height: var(--leading-tight); }
+.ui-account__panel .ui-account__item .ui-account__name { white-space: nowrap; }
+.ui-account__item .ui-account__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-account__item[aria-current="true"] { background: var(--color-accent-subtle); }
+.ui-account__item[aria-current="true"]:hover:not(:disabled) { background: var(--color-accent-subtle-hover); }
+.ui-account__check { flex-shrink: 0; color: var(--color-accent-text); }
+.ui-account__panel .ui-menu__sep { margin: 0; }

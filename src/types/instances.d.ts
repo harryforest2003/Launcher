@@ -2,6 +2,39 @@ export {};
 
 declare global {
 
+    type SafetyFinding = { level: "danger" | "warning" | "note"; text: string; where?: string; path?: string };
+    /** One mod in a malware check. unknown: neither Modrinth nor CurseForge has this file. */
+    type SafetyFile = {
+        name: string;
+        title: string | null;
+        type: string;
+        enabled: boolean;
+        source: "modrinth" | "curseforge" | "unknown";
+        level: "danger" | "warning" | "unknown" | "ok";
+        findings: SafetyFinding[];
+    };
+    type SafetyReport = {
+        files: SafetyFile[];
+        /** fractureiser's leftovers found on this computer. */
+        system: SafetyFinding[];
+        counts: { danger: number; warning: number; unknown: number; ok: number };
+        /** false: CurseForge couldn't be asked, so some "unknown" files may be on it. */
+        sitesChecked: boolean;
+        checkedAt: string;
+    };
+
+    /** A shared instance: the owner publishes it to a file, members follow that file. */
+    type InstanceShared =
+        | { role: "owner"; path: string; id: string; revision: number; updated: string }
+        | { role: "member"; source: string; id: string; revision: number; updated: string; files?: { type: string; fileName: string; sha1: string | null }[] };
+
+    /* A running game's memory (bytes) and share of the computer's CPU since the last reading (0-100, null on the first). */
+    type GameUsage = { memory: number; cpu: number | null };
+
+    type SharedCheck =
+        | { role: "owner"; revision: number; updated: string; path: string; fileFound: boolean }
+        | { role: "member"; revision: number; latest: number; updated: string; available: boolean; moved: string | null };
+
     type Instance = {
         name: string;
         version: string;
@@ -35,6 +68,8 @@ declare global {
         backupWorldsBeforeUpdates?: boolean;
         /** The modpack it was made from, for updating it to another version of the pack. */
         modpack?: InstanceModpack;
+        /** Shared live: published by this computer, or following someone's. */
+        shared?: InstanceShared;
     };
 
     type InstanceModpack = {
@@ -98,7 +133,16 @@ declare global {
     type JavaTuning = "performance" | "standard";
 
     /** offline: a test account without Microsoft (single-player and offline servers, no skin). */
-    type MinecraftAccount = { name: string; uuid: string; skin: string | null; savedAt: string; active: boolean; offline?: boolean };
+    type MinecraftAccount = {
+        name: string;
+        uuid: string;
+        skin: string | null;
+        savedAt: string;
+        active: boolean;
+        offline?: boolean;
+        /** Signed in with this service instead of Microsoft. */
+        service?: "ely.by";
+    };
 
     /** The signed-in account an open game plays as: id is its MinecraftAccount uuid. */
     type GamePlayer = { id: string; name: string };
@@ -713,6 +757,26 @@ declare global {
                 code: string,
                 name?: string
             ): Promise<{ name: string; installed: number; blocked: { name: string; url: string | null }[]; failed: { name: string; error: string }[]; missing: string[]; notFound: number }>;
+            /** The instance's mods looked up on mod sites and read for signs of malware; only: just these file names. */
+            safetyCheck(name: string, only?: string[]): Promise<SafetyReport>;
+            /** Writes the instance to its shared file, one revision on; choose (or a first publish) asks where. null if cancelled. */
+            sharedPublish(name: string, options?: { choose?: boolean }): Promise<{ path: string; revision: number; linked: number; missing: string[] } | null>;
+            /** Picks a shared instance file. null if cancelled. */
+            sharedChooseFile(): Promise<string | null>;
+            /** What a shared file (a path or an https link) holds, before joining it. */
+            sharedRead(source: string): Promise<{ name: string; version: string; loader: string; revision: number; updated: string; files: number; missing: string[] }>;
+            /** A new instance that follows a shared file. */
+            sharedJoin(
+                source: string,
+                name?: string
+            ): Promise<{ name: string; installed: number; blocked: { name: string; url: string | null }[]; failed: { name: string; error: string }[]; missing: string[]; notFound: number; revision: number }>;
+            /** Owner: where it's published. Member: whether there's a newer revision. null when it isn't shared. */
+            sharedCheck(name: string): Promise<SharedCheck | null>;
+            /** Brings a member's instance to the latest revision; their own additions stay. */
+            sharedUpdate(name: string): Promise<{ revision: number; installed: number; removed: number; failed: { name: string; error: string }[]; blocked: { name: string; url: string | null }[] }>;
+            /** Stops sharing or following; nothing else changes. */
+            sharedLeave(name: string): Promise<void>;
+            usage(name: string): Promise<GameUsage | null>;
             /** A desktop shortcut asked for an instance to be played. */
             onShortcutLaunch(cb: (name: string) => void): () => void;
 
@@ -901,6 +965,8 @@ declare global {
             removeAccount(uuid: string): Promise<MinecraftAccount[]>;
             /** Adds a test account without Microsoft under this player name, and makes it active. */
             addOfflineAccount(name: string): Promise<MinecraftAccount[]>;
+            /** Signs in at Ely.by and makes the account active. Fails with "ELY_NEEDS_CODE: ..." when it wants the authenticator code. */
+            elySignIn(login: string, password: string, code?: string): Promise<MinecraftAccount[]>;
             onAccountsChanged(cb: (accounts: MinecraftAccount[]) => void): () => void;
 
             onProgress(cb: (p: InstallProgress) => void): () => void;

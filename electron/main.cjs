@@ -24,6 +24,7 @@ const fs = require("fs");
 const path = require("path");
 
 const minecraftAPI = require("./minecraftApi.cjs");
+const loaderInstall = require("./minecraft/loaders.cjs");
 
 const { curseforgeFetch } = require("./curseforge.cjs");
 const { browse, resolveProjectLink } = require("./minecraft/modSearch.cjs");
@@ -95,7 +96,8 @@ function normalizeCurseForgeProject(project, files = [], description = null) {
                 lower === "forge" ||
                 lower === "fabric" ||
                 lower === "quilt" ||
-                lower === "neoforge"
+                lower === "neoforge" ||
+                lower === "liteloader"
             ) {
                 loaders.add(cat);
             }
@@ -256,8 +258,14 @@ ipcMain.handle("minecraft:getLoaders", () => [
     { id: "fabric", name: "Fabric" },
     { id: "forge", name: "Forge" },
     { id: "neoforge", name: "NeoForge" },
-    { id: "quilt", name: "Quilt" }
+    { id: "quilt", name: "Quilt" },
+    { id: "legacy-fabric", name: "Legacy Fabric" },
+    { id: "babric", name: "Babric" },
+    { id: "liteloader", name: "LiteLoader" }
 ]);
+// Builds of any loader for a Minecraft version, and the versions an old-only loader works with.
+ipcMain.handle("minecraft:getLoaderVersions", (_, loader, v) => loaderInstall.listLoaderVersions(loader, v));
+ipcMain.handle("minecraft:getLoaderGameVersions", (_, loader) => loaderInstall.loaderGameVersions(loader));
 
 /*
  * The launcher's window in or out of full screen (F11, the controller's View button, the

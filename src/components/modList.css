@@ -1,0 +1,243 @@
+/*
+ * One look for every list of mods in the launcher: a Minecraft instance's content, another
+ * game's mods, a modpack's contents and a load order. Each list keeps its own columns;
+ * the card, header, rows, icon tile, name, version and second line come from here, so
+ * they match wherever a mod is listed.
+ */
+
+.mlx-table {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: clip;
+}
+
+.mlx-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.mlx-head__count {
+  font-weight: var(--weight-regular, 400);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* A small action in a header, such as "Tick all". */
+.mlx-head__link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent-text);
+  font: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.mlx-head__link:hover {
+  text-decoration: underline;
+}
+
+.mlx-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-1) var(--space-3);
+  border: none;
+  border-top: var(--border-width) solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--duration-fast, 0.12s) ease;
+}
+
+.mlx-table > .mlx-row:first-child,
+.mlx-table > :first-child > .mlx-row {
+  border-top: none;
+}
+
+.mlx-row:hover,
+.mlx-row:focus-within {
+  background: var(--color-hover);
+}
+
+button.mlx-row,
+.mlx-row--link {
+  cursor: pointer;
+}
+
+.mlx-row--off .mlx-main,
+.mlx-row--off .mlx-tile {
+  opacity: 0.6;
+}
+
+.mlx-row--warn {
+  box-shadow: inset var(--rail-width, 3px) 0 0 var(--color-warning-border);
+}
+
+/* The mod's picture, or its first letter when it has none. */
+.mlx-tile {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle);
+  border: var(--border-width) solid var(--color-accent-line);
+  color: var(--color-accent-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--weight-semibold);
+  overflow: hidden;
+}
+
+.mlx-tile img,
+img.mlx-tile {
+  object-fit: cover;
+}
+
+.mlx-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mlx-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mlx-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.3;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.mlx-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mlx-ver {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-regular, 400);
+  color: var(--color-text-muted);
+}
+
+.mlx-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.mlx-title .ui-badge,
+.mlx-sub .ui-badge {
+  flex: none;
+}
+
+/* A name that opens the mod's page. */
+.mlx-row--link:hover .mlx-name,
+button.mlx-row:hover .mlx-name,
+.mlx-name:focus-visible {
+  color: var(--color-accent-text);
+}
+
+/* Second lines that need a look: a problem with this mod. */
+.mlx-problem {
+  display: block;
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+  color: var(--color-warning-text);
+}
+
+/* Lists in an order the player sets: a handle to drag, the place number, and where it would land. */
+.mlx-row--order {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+}
+
+.mlx-grip {
+  display: flex;
+  flex: none;
+  color: var(--color-text-muted);
+  cursor: grab;
+}
+
+.mlx-grip--still {
+  visibility: hidden;
+}
+
+.mlx-num {
+  flex: none;
+  width: 28px;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.mlx-row--over {
+  box-shadow: inset 0 2px 0 var(--color-accent);
+}
+
+.mlx-row--dragging {
+  opacity: 0.5;
+}
+
+/* A list with a tick per mod: picking which ones to install. */
+.mlx-row--pick {
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.mlx-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.mlx-empty {
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mlx-row { transition: none; }
+}

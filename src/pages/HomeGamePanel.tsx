@@ -466,6 +466,11 @@ function MinecraftBody({ instances, reloadInstances, onMinecraft }: Props) {
                 )}
               </div>
               <AccountClashNotice choice={choice} instance={chosen.name} onPlayAs={(id) => play(chosen.name, id)} />
+              {chosen.notes?.trim() && (
+                <p className="lx-notes" data-testid="home-panel-notes" title={chosen.notes}>
+                  {chosen.notes}
+                </p>
+              )}
               {message && <Notice tone={message.tone}>{message.text}</Notice>}
             </>
           )}

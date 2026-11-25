@@ -16,7 +16,7 @@ const MAX_CODE = 400 * 1024;
 const MAX_JSON = 2 * 1024 * 1024;
 const MAX_ITEMS = 3000;
 const TYPES = ["mod", "resourcepack", "shader"];
-const LOADERS = ["vanilla", "fabric", "quilt", "forge", "neoforge"];
+const LOADERS = ["vanilla", "fabric", "quilt", "forge", "neoforge", "legacy-fabric", "babric", "liteloader"];
 
 function encode(data) {
     return PREFIX + zlib.deflateRawSync(Buffer.from(JSON.stringify(data)), { level: 9 }).toString("base64url");

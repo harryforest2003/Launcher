@@ -20,7 +20,10 @@ const CF_CLASS_TYPES = Object.fromEntries(
 // CurseForge modLoaderType values.
 export const CF_LOADER_TYPES = {
     forge: 1,
+    liteloader: 3,
     fabric: 4,
+    "legacy-fabric": 4,
+    babric: 4,
     quilt: 5,
     neoforge: 6,
 };

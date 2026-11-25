@@ -197,13 +197,13 @@ function launch({
         );
     }
 
-    const nativesDir = path.join(instanceFolder, "natives", versionJson.id);
-
-    // Natives may have been extracted under the vanilla id when a loader
-    // renamed the profile.
-    const resolvedNatives = fs.existsSync(nativesDir)
-        ? nativesDir
-        : path.join(instanceFolder, "natives");
+    // Natives are extracted under the vanilla id, which a loader's profile renames
+    // (fabric-loader-0.20.1-1.8.9); LWJGL 2 versions can't start without them.
+    const resolvedNatives =
+        [versionJson.id, mcVersion]
+            .filter(Boolean)
+            .map((id) => path.join(instanceFolder, "natives", id))
+            .find((dir) => fs.existsSync(dir)) ?? path.join(instanceFolder, "natives");
 
     const { jvm, game } = buildArguments(versionJson, {
         instanceFolder,

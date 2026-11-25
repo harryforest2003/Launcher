@@ -7,6 +7,9 @@ import { useContentUpdates } from "../components/useContentUpdates";
 import LoaderUpdate from "../components/LoaderUpdate";
 import ModpackUpdate from "../components/ModpackUpdate";
 import ShareCodeBox from "../components/ShareCodeBox";
+import InstanceNotes from "../components/InstanceNotes";
+import { MemoryBadge } from "../components/GameUsage";
+import { SharedInstanceCard, SharedUpdateNotice } from "../components/SharedInstance";
 import InstanceScreenshots from "../components/InstanceScreenshots";
 import InstanceWorlds from "../components/InstanceWorlds";
 import { GameWindowCard, LaunchCommandsCard } from "../components/InstanceLaunchSettings";
@@ -23,7 +26,15 @@ import "./library.css";
 import { AccountClashNotice, PlayAsMenu } from "../components/PlayAs";
 import { useAccountChoice } from "../components/playAsChoice";
 
-const LOADER_NAMES: Record<string, string> = { fabric: "Fabric Loader", quilt: "Quilt Loader", forge: "Forge", neoforge: "NeoForge" };
+const LOADER_NAMES: Record<string, string> = {
+  fabric: "Fabric Loader",
+  quilt: "Quilt Loader",
+  forge: "Forge",
+  neoforge: "NeoForge",
+  "legacy-fabric": "Legacy Fabric Loader",
+  babric: "Babric Loader",
+  liteloader: "LiteLoader",
+};
 
 type Props = {
   instanceName: string;
@@ -476,7 +487,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
             {instance.modpack && instance.installed && (
               <ModpackUpdate instance={instance} busy={busy === "modpack"} run={run} onNotice={setNotice} />
             )}
-            <Badge>{instance.ram} GB RAM</Badge>
+            <MemoryBadge name={instance.name} running={Boolean(instance.running)} ram={instance.ram} />
             <span className="id-meta-played">{instance.lastPlayed ? `Played ${new Date(instance.lastPlayed).toLocaleDateString()}` : "Not played yet"}</span>
           </div>
         </div>
@@ -592,7 +603,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
         </div>
       )}
 
-      {progress && progress.stage !== "done" && (busy === "repair" || busy === "cloud" || busy === "modpack" || (busy === "launch" && progress.stage === "java")) && (
+      {progress && progress.stage !== "done" && (busy === "repair" || busy === "cloud" || busy === "modpack" || busy === "shared-update" || (busy === "launch" && progress.stage === "java")) && (
         <div style={{ ...card, marginBottom: 16 }}>
           <div style={{ color: "var(--color-accent-text)", marginBottom: 8 }}>
             {progress.detail ?? progress.stage} ({progress.percent}%)
@@ -674,6 +685,7 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       </div>
 
       {/* ---------------- CONTENT ---------------- */}
+      {tab === "mods" && <SharedUpdateNotice instance={instance} busy={busy} run={run} onNotice={setNotice} />}
       {tab === "mods" && (
         <InstanceContentList
           instanceName={instanceName}
@@ -715,6 +727,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
       {tab === "settings" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 620 }}>
           <InstancePictureCard instanceName={instanceName} onError={setError} />
+
+          <InstanceNotes key={instanceName} instanceName={instanceName} notes={instance.notes ?? ""} style={card} onError={setError} />
 
           <div style={card} data-testid="instance-files">
             <p style={{ color: "var(--color-accent-text)", marginBottom: 10 }}>This instance</p>
@@ -864,6 +878,8 @@ export default function InstanceDetail({ instanceName, onBack }: Props) {
               />
             )}
           </div>
+
+          <SharedInstanceCard instance={instance} style={card} busy={busy} run={run} onNotice={setNotice} />
 
           {instance.loader !== "vanilla" && (
             <div style={card} data-testid="instance-server-pack">

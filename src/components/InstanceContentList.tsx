@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import "../pages/library.css";
+import "./modList.css";
 import ContentFilter from "./ContentFilter";
+import SafetyCheck from "./SafetyCheck";
 import { ALL_TYPES, NO_FILTERS, activeFilterCount, type FilterCounts, type Filters } from "./contentFilters";
 import { BinIcon, FilterIcon, PlusIcon } from "./Icons";
-import { Button, SearchField } from "./ui";
+import { Badge, Button, SearchField } from "./ui";
 import Toggle from "./Toggle";
 import { ItemUpdateStatus, UpdatesControls, UpdatesMessages } from "./UpdatesBar";
 import type { ContentUpdates } from "./useContentUpdates";
@@ -153,6 +155,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
         </Button>
 
         <UpdatesControls updates={updates} />
+        <SafetyCheck instanceName={instanceName} />
       </div>
 
       <UpdatesMessages updates={updates} />
@@ -179,8 +182,8 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
       ) : shown.length === 0 ? (
         <div className="ct-empty">Nothing matches your search or filters.</div>
       ) : (
-        <div data-testid="content-list" className="ct-table">
-          <div className="ct-head" aria-hidden="true">
+        <div data-testid="content-list" className="mlx-table">
+          <div className="mlx-head ct-head" aria-hidden="true">
             <span>Project</span>
             <span className="ct-file-head">File</span>
             <span>Actions</span>
@@ -189,47 +192,46 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
             <div
               key={key}
               data-testid="content-item"
-              className={`ct-row${item.enabled ? "" : " off"}${project ? " ct-row--link" : ""}`}
+              className={`mlx-row${item.enabled ? "" : " mlx-row--off"}${project ? " mlx-row--link" : ""}`}
               onClick={project ? (event) => !fromControl(event) && onOpenProject?.(project.source, project.id) : undefined}
             >
-              {icon ? (
-                <img src={icon} alt="" width={32} height={32} className="ct-icon" />
-              ) : (
-                <div aria-hidden="true" className="ct-icon">
-                  {name.charAt(0).toUpperCase()}
-                </div>
-              )}
+              <span className="mlx-tile" aria-hidden="true">
+                {icon ? <img src={icon} alt="" width={32} height={32} loading="lazy" draggable={false} /> : name.charAt(0).toUpperCase()}
+              </span>
 
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <div className="mlx-main">
+                <div className="mlx-title">
                   {project ? (
                     <button
                       type="button"
                       title={`Open ${name}'s page`}
-                      className="ct-name ct-name--link"
+                      className="mlx-name ct-name--link"
                       data-testid="content-open"
                       onClick={() => onOpenProject?.(project.source, project.id)}
                     >
                       {name}
                     </button>
                   ) : (
-                    <span title={item.fileName} className="ct-name">
+                    <span title={item.fileName} className="mlx-name">
                       {name}
                     </span>
                   )}
-                  {TYPE_BADGE[item.type] && (
-                    <span style={{ flexShrink: 0, fontSize: 10, color: "var(--color-accent-text)", border: "1px solid var(--color-border)", borderRadius: 6, padding: "1px 6px" }}>{TYPE_BADGE[item.type]}</span>
+                  {version && (
+                    <span className="mlx-ver">
+                      {version}
+                      {status?.state === "update" && <span className="ct-newer"> → {status.latest}</span>}
+                    </span>
+                  )}
+                  {TYPE_BADGE[item.type] && <Badge>{TYPE_BADGE[item.type]}</Badge>}
+                  {status?.kept && (
+                    <Badge tone="info" title="Kept at this version: Update All leaves it alone. Its pin chooses another version or stops keeping it.">
+                      Kept
+                    </Badge>
                   )}
                 </div>
-                <div className="ct-sub">
+                <div className="mlx-sub">
                   {[
                     author && `by ${author}`,
-                    version && (
-                      <span key="version">
-                        {version}
-                        {status?.state === "update" && <span style={{ color: "var(--color-success-text)" }}> → {status.latest}</span>}
-                      </span>
-                    ),
                     !source.startsWith("Not on") && source,
                     formatBytes(item.size),
                     item.type === "datapack" ? (item.world ? `World: ${item.world}` : "Not in a world yet") : null,

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Badge, EmptyState, Monogram, Notice, SearchField, Select, Skeleton } from "./ui";
+import { Badge, EmptyState, Notice, SearchField, Select, Skeleton } from "./ui";
 import { CHANNEL, channelOf, defaultVersion, newestFirst, versionLabel, type PackVersion } from "./packVersions";
 import "./packContents.css";
+import "./modList.css";
 
 type Props = {
   source: "modrinth" | "curseforge";
@@ -89,9 +90,9 @@ export default function PackContentsList({ source, projectId, versions, openProj
       </div>
 
       {loading ? (
-        <div className="pc-loading" aria-busy="true" aria-label="Reading the pack's file list">
+        <div className="mlx-table" aria-busy="true" aria-label="Reading the pack's file list">
           {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="pc-row pc-row--static">
+            <div key={i} className="mlx-row">
               <Skeleton shape="block" width={32} height={32} />
               <Skeleton lines={2} />
             </div>
@@ -113,9 +114,9 @@ export default function PackContentsList({ source, projectId, versions, openProj
           )}
           {query && !matching.length && <p className="pc-none">Nothing in this pack matches "{search.trim()}".</p>}
           {groups.map((group) => (
-            <section key={group.kind} className="pc-group" aria-label={group.label}>
-              <h3 className="pc-heading">
-                {group.label} <span>{group.items.length.toLocaleString()}</span>
+            <section key={group.kind} className="mlx-table pc-group" aria-label={group.label}>
+              <h3 className="mlx-head pc-heading">
+                {group.label} <span className="mlx-head__count">{group.items.length.toLocaleString()}</span>
               </h3>
               <ul className="pc-list">
                 {group.items.map((item, i) => (
@@ -135,17 +136,15 @@ export default function PackContentsList({ source, projectId, versions, openProj
 function PackRow({ item, openProject }: { item: PackItem; openProject: Props["openProject"] }) {
   const inner = (
     <>
-      {item.icon ? (
-        <img className="pc-icon" src={item.icon} alt="" width={32} height={32} loading="lazy" />
-      ) : (
-        <Monogram name={item.name} size={32} />
-      )}
-      <span className="pc-main">
-        <span className="pc-line">
-          <span className="pc-name">{item.name}</span>
-          {item.version && <span className="pc-ver">{item.version}</span>}
+      <span className="mlx-tile" aria-hidden="true">
+        {item.icon ? <img src={item.icon} alt="" width={32} height={32} loading="lazy" /> : item.name.charAt(0).toUpperCase()}
+      </span>
+      <span className="mlx-main">
+        <span className="mlx-title">
+          <span className="mlx-name">{item.name}</span>
+          {item.version && <span className="mlx-ver">{item.version}</span>}
         </span>
-        {(item.summary || item.fileName) && <span className="pc-summary">{item.summary || item.fileName}</span>}
+        {(item.summary || item.fileName) && <span className="mlx-sub">{item.summary || item.fileName}</span>}
       </span>
       <span className="pc-tags">
         {item.side && SIDE_LABEL[item.side] && <Badge>{SIDE_LABEL[item.side]}</Badge>}
@@ -162,13 +161,13 @@ function PackRow({ item, openProject }: { item: PackItem; openProject: Props["op
   if (item.source && item.projectId) {
     const { source, projectId } = item;
     return (
-      <button type="button" className="pc-row" data-testid="pack-item" onClick={() => openProject(source, projectId)} title={`Open ${item.name}`}>
+      <button type="button" className="mlx-row" data-testid="pack-item" onClick={() => openProject(source, projectId)} title={`Open ${item.name}`}>
         {inner}
       </button>
     );
   }
   return (
-    <div className="pc-row pc-row--static" data-testid="pack-item" title={item.fileName}>
+    <div className="mlx-row" data-testid="pack-item" title={item.fileName}>
       {inner}
     </div>
   );

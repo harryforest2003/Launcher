@@ -10,6 +10,8 @@ const discord = require("./discord.cjs");
 const modpackUpdate = require("./modpackUpdate.cjs");
 const packExports = require("./packExports.cjs");
 const instanceShare = require("./instanceShare.cjs");
+const sharedInstances = require("./sharedInstances.cjs");
+const gameUsage = require("./gameUsage.cjs");
 const platformPacks = require("./platformPacks.cjs");
 const { fetchJson, sha1 } = require("./net.cjs");
 const { desktopShortcut } = require("./shortcuts.cjs");
@@ -195,6 +197,53 @@ function registerExtrasIpc() {
         })
     );
 
+    /* ---------------- shared instances ---------------- */
+
+    const sendProgress = (event) => (progress) => {
+        if (!event.sender.isDestroyed()) event.sender.send("instance:progress", progress);
+    };
+
+    // Publishes the instance's current state. The file's place is only ever picked in a save
+    // dialog here, never named by the page. Null if cancelled.
+    ipcMain.handle("shared:publish", async (event, name, options = {}) => {
+        const instance = instanceManager.getInstance(name);
+        let target = instance.shared?.role === "owner" ? instance.shared.path : null;
+        if (!target || options?.choose) {
+            const picked = await dialog.showSaveDialog(BrowserWindow.fromWebContents(event.sender), {
+                title: `Share ${instance.name} live`,
+                defaultPath:
+                    target ||
+                    sharedInstances.suggestedPath(instance.name) ||
+                    path.join(app.getPath("downloads"), `${safeName(instance.name)}${sharedInstances.EXTENSION}`),
+                filters: [{ name: "Shared instance", extensions: [sharedInstances.EXTENSION.slice(1)] }],
+            });
+            if (picked.canceled || !picked.filePath) return null;
+            target = picked.filePath;
+        }
+        return sharedInstances.publish(name, { target });
+    });
+    // Picks a shared file to join. Null if cancelled.
+    ipcMain.handle("shared:chooseFile", async (event) => {
+        const picked = await dialog.showOpenDialog(BrowserWindow.fromWebContents(event.sender), {
+            title: "Join a shared instance",
+            properties: ["openFile"],
+            filters: [{ name: "Shared instance", extensions: [sharedInstances.EXTENSION.slice(1)] }],
+        });
+        return picked.canceled ? null : (picked.filePaths[0] ?? null);
+    });
+    // What a shared file holds, before joining it.
+    ipcMain.handle("shared:read", async (_event, source) => {
+        const remote = await sharedInstances.readShareFile(source);
+        const { files, missing } = instanceShare.readInstanceCode(remote.code);
+        return { name: remote.name, version: remote.version, loader: remote.loader, revision: remote.revision, updated: remote.updated, files, missing };
+    });
+    ipcMain.handle("shared:join", (event, source, name) =>
+        sharedInstances.join(source, { name: typeof name === "string" && name.trim() ? name.trim() : undefined, onProgress: sendProgress(event) })
+    );
+    ipcMain.handle("shared:check", (_event, name) => sharedInstances.check(name));
+    ipcMain.handle("shared:update", (event, name) => sharedInstances.update(name, { onProgress: sendProgress(event) }));
+    ipcMain.handle("shared:leave", (_event, name) => sharedInstances.leave(name));
+
     /* ---------------- Discord status ---------------- */
 
     discord.startDiscordStatus();
@@ -234,6 +283,44 @@ function registerExtrasIpc() {
         const accounts = account.listAccounts();
         for (const win of BrowserWindow.getAllWindows()) win.webContents.send("account:changed", accounts);
         return accounts;
+    });
+
+    /* ---------------- Ely.by accounts ---------------- */
+
+    // Signs in at Ely.by (with the authenticator code when it asks for one); the account
+    // becomes the active one. The password goes to Ely.by only and isn't kept.
+    ipcMain.handle("account:elySignIn", async (_e, login, password, code) => {
+        const account = require("./account.cjs");
+        const elyBy = require("../auth/elyBy.cjs");
+        try {
+            account.saveElyAccount(await elyBy.signIn(login, password, code));
+        } catch (err) {
+            // The page asks for the code when the message starts with this.
+            if (err?.code === "ELY_NEEDS_CODE") throw new Error(`ELY_NEEDS_CODE: ${err.message}`);
+            throw err;
+        }
+        const accounts = account.listAccounts();
+        for (const win of BrowserWindow.getAllWindows()) win.webContents.send("account:changed", accounts);
+        return accounts;
+    });
+
+    /* ---------------- malware check ---------------- */
+
+    // The instance's mods looked up on Modrinth and CurseForge and read for signs of malware,
+    // and this computer checked for fractureiser's files. only: just these file names.
+    // Memory and CPU of an instance's running game, or null when it isn't running.
+    ipcMain.handle("instance:usage", (_e, name) => {
+        const pid = instanceManager.runningPid(String(name ?? ""));
+        return pid ? gameUsage.usage(pid) : null;
+    });
+
+    ipcMain.handle("safety:check", (_e, name, only) => {
+        const instance = instanceManager.getInstance(name);
+        if (!instance) throw new Error("No such instance.");
+        return require("./safetyCheck.cjs").checkInstance(instanceManager.instanceFolder(name), {
+            version: instance.version,
+            only: Array.isArray(only) ? only.filter((file) => typeof file === "string") : undefined,
+        });
     });
 }
 

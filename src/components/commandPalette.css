@@ -1,5 +1,5 @@
 /* The search palette (Cmd/Ctrl+K): a box near the top of the window over a dimmed app. */
-.cp {
+.cmdp {
   padding: 0;
   margin: 12vh auto auto;
   width: min(640px, calc(100vw - 2 * var(--space-6)));
@@ -9,11 +9,11 @@
   color: var(--color-text);
   overflow: visible;
 }
-.cp::backdrop {
+.cmdp::backdrop {
   background: var(--color-scrim);
   backdrop-filter: blur(3px);
 }
-.cp__box {
+.cmdp__box {
   display: flex;
   flex-direction: column;
   max-height: calc(100vh - 16vh);
@@ -25,15 +25,15 @@
   overflow: hidden;
   animation: ui-pop var(--duration-base) var(--ease-out);
 }
-.cp__field {
+.cmdp__field {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: 0 var(--space-4);
   border-bottom: var(--border-width) solid var(--color-border);
 }
-.cp__glass { color: var(--color-text-muted); flex: none; }
-.cp__input {
+.cmdp__glass { color: var(--color-text-muted); flex: none; }
+.cmdp__input {
   flex: 1;
   min-width: 0;
   height: 52px;
@@ -44,17 +44,17 @@
   font: inherit;
   font-size: var(--font-size-md, 15px);
 }
-.cp__input::placeholder { color: var(--color-text-muted); }
-.cp__list {
+.cmdp__input::placeholder { color: var(--color-text-muted); }
+.cmdp__list {
   list-style: none;
   margin: 0;
   padding: var(--space-2);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.cp__list:empty { display: none; }
-.cp__section + .cp__section { margin-top: var(--space-2); }
-.cp__heading {
+.cmdp__list:empty { display: none; }
+.cmdp__section + .cmdp__section { margin-top: var(--space-2); }
+.cmdp__heading {
   padding: var(--space-1) var(--space-2);
   font-size: var(--font-size-xs);
   font-weight: var(--weight-semibold);
@@ -62,8 +62,8 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.cp__items { list-style: none; margin: 0; padding: 0; }
-.cp__item {
+.cmdp__items { list-style: none; margin: 0; padding: 0; }
+.cmdp__item {
   display: flex;
   align-items: center;
   gap: var(--space-2-5, 10px);
@@ -73,17 +73,17 @@
   cursor: pointer;
   font-size: var(--font-size-sm);
 }
-.cp__item[aria-selected="true"] {
+.cmdp__item[aria-selected="true"] {
   background: var(--color-accent-subtle);
   box-shadow: inset 0 0 0 var(--border-width) var(--color-accent-line);
 }
-.cp__icon { display: flex; color: var(--color-text-muted); flex: none; }
-.cp__item[aria-selected="true"] .cp__icon { color: var(--color-accent-text); }
-.cp__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cp__hint { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-muted); font-size: var(--font-size-xs); }
-.cp__enter { flex: none; color: var(--color-text-muted); }
-.cp__empty { margin: 0; padding: var(--space-6) var(--space-4); text-align: center; color: var(--color-text-muted); font-size: var(--font-size-sm); }
-.cp__foot {
+.cmdp__icon { display: flex; color: var(--color-text-muted); flex: none; }
+.cmdp__item[aria-selected="true"] .cmdp__icon { color: var(--color-accent-text); }
+.cmdp__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdp__hint { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.cmdp__enter { flex: none; color: var(--color-text-muted); }
+.cmdp__empty { margin: 0; padding: var(--space-6) var(--space-4); text-align: center; color: var(--color-text-muted); font-size: var(--font-size-sm); }
+.cmdp__foot {
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -92,9 +92,9 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
 }
-.cp__foot > span { display: inline-flex; align-items: center; gap: 4px; }
-.cp__foot-gap { flex: 1; }
-.cp__kbd {
+.cmdp__foot > span { display: inline-flex; align-items: center; gap: 4px; }
+.cmdp__foot-gap { flex: 1; }
+.cmdp__kbd {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -109,5 +109,5 @@
   color: var(--color-text-muted);
 }
 @media (prefers-reduced-motion: reduce) {
-  .cp__box { animation: none; }
+  .cmdp__box { animation: none; }
 }

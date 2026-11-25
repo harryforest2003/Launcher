@@ -11,6 +11,7 @@ const { analyzeCrash } = require("./minecraft/crashHelp.cjs");
 const { ensureRuntime, requiredJava } = require("./minecraft/javaRuntime.cjs");
 const { restoreVanillaLibraries } = require("./minecraft/versionData.cjs");
 const launchHooks = require("./minecraft/launchHooks.cjs");
+const authlibInjector = require("./minecraft/authlibInjector.cjs");
 
 const { instancesDir } = require("./paths.cjs");
 
@@ -735,6 +736,14 @@ async function launchInstance(name, account, { onProgress, quickPlay = null } = 
         };
         const javaPath = await chooseJava(instance, javaNeed, { onProgress: progress, note });
 
+        // An Ely.by account signs in through authlib-injector, which the game loads first.
+        if (account?.authlibInjector) {
+            progress({ stage: "launch", detail: "Getting authlib-injector" });
+            const jar = await authlibInjector.ensure(authlibInjector.folder(), { onLog: note });
+            extraJvmArgs.unshift(...authlibInjector.jvmArgs(jar, account.authlibInjector));
+            note(`Signing in through ${account.authlibInjector} with authlib-injector.`);
+        }
+
         // The instance's own commands, each written to the log before it runs.
         const hooks = launchHooks.cleanHooks(instance.launchHooks);
         const hookEnv = { ...hooks.env, ...launchHooks.instanceVariables({ instance, folder, gameDirectory, javaPath }) };
@@ -856,6 +865,11 @@ function isRunning(name) {
     return pruneDead(name);
 }
 
+/* The process id of an instance's running game, or null. */
+function runningPid(name) {
+    return pruneDead(name) ? running.get(name).pid ?? null : null;
+}
+
 function stopInstance(name) {
     if (!pruneDead(name)) {
         throw new Error(`"${name}" is not running.`);
@@ -914,6 +928,7 @@ module.exports = {
     instanceEvents,
     stopInstance,
     isRunning,
+    runningPid,
     instanceUsing,
     playing,
     withRunState,

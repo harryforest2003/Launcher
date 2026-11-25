@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { app, safeStorage } = require("electron");
 const { refreshLogin } = require("../auth/index.cjs");
+const elyBy = require("../auth/elyBy.cjs");
 
 /*
  * The signed-in Minecraft accounts, one of them active, so launching can pass a real
@@ -92,6 +93,38 @@ function addOfflineAccount(value) {
 }
 
 const isOffline = (entry) => entry?.type === "offline";
+const isEly = (entry) => entry?.type === "ely";
+
+/* Adds or renews an Ely.by account from its sign-in (elyBy.signIn), and makes it the active one. */
+function saveElyAccount(login) {
+    const account = {
+        name: login.name,
+        uuid: login.uuid,
+        skin: login.skin ?? null,
+        accessToken: login.accessToken,
+        clientToken: login.clientToken,
+        type: "ely",
+        savedAt: new Date().toISOString(),
+    };
+    const store = readStore();
+    writeStore({ active: account.uuid, accounts: [...store.accounts.filter((entry) => entry.uuid !== account.uuid), account] });
+    return account;
+}
+
+/*
+ * An Ely.by account with a working token: checked with Ely.by before each launch, and renewed
+ * when it has stopped working. Without internet the saved token is used as it is.
+ */
+async function freshEly(stored) {
+    try {
+        if (await elyBy.isValid(stored.accessToken)) return stored;
+        const login = await elyBy.renew(stored.accessToken, stored.clientToken);
+        return replaceAccount({ ...stored, name: login.name, skin: login.skin, accessToken: login.accessToken, clientToken: login.clientToken });
+    } catch (err) {
+        if (err instanceof TypeError || err?.name === "TimeoutError") return stored;
+        throw new Error(`${stored.name}'s Ely.by sign-in has expired and couldn't be renewed. Sign in again to launch. (${err.message})`);
+    }
+}
 
 /* Renewed tokens for one account, without changing which is active. */
 function replaceAccount(account) {
@@ -119,6 +152,8 @@ function clearAccount() {
 
 function removeAccount(uuid) {
     const store = readStore();
+    const leaving = store.accounts.find((entry) => entry.uuid === uuid);
+    if (isEly(leaving)) void elyBy.signOut(leaving.accessToken, leaving.clientToken);
     const accounts = store.accounts.filter((entry) => entry.uuid !== uuid);
     const active = store.active === uuid ? accounts[accounts.length - 1]?.uuid ?? null : store.active;
     writeStore({ active, accounts });
@@ -176,6 +211,9 @@ async function minecraftAccessToken() {
     if (isOffline(stored)) {
         throw new Error(`${stored.name} is an offline test account, so it has no skin or profile to change. Use a Microsoft account for that.`);
     }
+    if (isEly(stored)) {
+        throw new Error(`${stored.name} is an Ely.by account. Change its skin and name on ely.by.`);
+    }
     if (!stored?.accessToken) {
         throw new Error("Sign in with Microsoft on the Minecraft page first.");
     }
@@ -211,6 +249,20 @@ async function accountForLaunch(fallbackName = "Player", accountId = null) {
         return { id: stored.uuid, name: stored.name, uuid: stored.uuid, accessToken: "0", type: "legacy", online: false };
     }
 
+    if (isEly(stored) && stored.accessToken) {
+        const account = await freshEly(stored);
+        return {
+            id: account.uuid,
+            name: account.name,
+            uuid: account.uuid,
+            accessToken: account.accessToken,
+            type: "mojang",
+            online: true,
+            // Started with authlib-injector pointed at Ely.by (instanceManager).
+            authlibInjector: "ely.by",
+        };
+    }
+
     if (stored?.accessToken && stored.uuid) {
         const account = await freshAccount(stored);
 
@@ -236,7 +288,7 @@ async function accountForLaunch(fallbackName = "Player", accountId = null) {
 }
 
 // Never expose tokens to the page.
-const publicOf = (entry, active) => ({ name: entry.name, uuid: entry.uuid, skin: entry.skin, savedAt: entry.savedAt, active, ...(isOffline(entry) ? { offline: true } : {}) });
+const publicOf = (entry, active) => ({ name: entry.name, uuid: entry.uuid, skin: entry.skin, savedAt: entry.savedAt, active, ...(isOffline(entry) ? { offline: true } : {}), ...(isEly(entry) ? { service: "ely.by" } : {}) });
 
 function publicAccount() {
     const stored = readAccount();
@@ -250,6 +302,7 @@ function listAccounts() {
 
 module.exports = {
     saveAccount,
+    saveElyAccount,
     addOfflineAccount,
     offlineUuid,
     readAccount,

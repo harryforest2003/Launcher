@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const LOADERS: Record<string, string> = { fabric: "Fabric", quilt: "Quilt", forge: "Forge", neoforge: "NeoForge", vanilla: "Vanilla" };
+const LOADERS: Record<string, string> = {
+  fabric: "Fabric",
+  quilt: "Quilt",
+  forge: "Forge",
+  neoforge: "NeoForge",
+  "legacy-fabric": "Legacy Fabric",
+  babric: "Babric",
+  liteloader: "LiteLoader",
+  vanilla: "Vanilla",
+};
 
 /** "fabric" -> "Fabric", "neoforge" -> "NeoForge"; none -> "Vanilla". */
 export const loaderName = (loader: string | undefined) => (loader ? LOADERS[loader.toLowerCase()] ?? loader : "Vanilla");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { ClipboardPaste, Cloud, FileArchive, FolderOpen, Radar } from "lucide-react";
+import { ClipboardPaste, Cloud, FileArchive, FolderOpen, Radar, Users } from "lucide-react";
 import { Button, Notice } from "./ui";
 import "../pages/library.css";
 
@@ -12,7 +12,7 @@ type Props = {
   onImported: (name: string) => void;
 };
 
-type Mode = "idle" | "launchers" | "code" | "cloud";
+type Mode = "idle" | "launchers" | "code" | "shared" | "cloud";
 type SharedPreview = Awaited<ReturnType<typeof window.instanceAPI.readShareCode>>;
 
 function formatBytes(bytes: number) {
@@ -41,6 +41,9 @@ export default function ImportPanel({ onImported }: Props) {
   const [code, setCode] = useState("");
   const [shared, setShared] = useState<SharedPreview | null>(null);
   const [made, setMade] = useState<string | null>(null);
+
+  const [source, setSource] = useState("");
+  const [following, setFollowing] = useState<Awaited<ReturnType<typeof window.instanceAPI.sharedRead>> | null>(null);
 
   useEffect(() => {
     return window.instanceAPI.onProgress(setProgress);
@@ -165,6 +168,41 @@ export default function ImportPanel({ onImported }: Props) {
     });
   }
 
+  /* ---------------- shared instance ---------------- */
+
+  async function readShared(where: string) {
+    setSource(where);
+    setFollowing(null);
+    setMade(null);
+    if (!where.trim()) return;
+    await run("read-shared", async () => setFollowing(await window.instanceAPI.sharedRead(where)));
+  }
+
+  async function chooseShared() {
+    const picked = await window.instanceAPI.sharedChooseFile();
+    if (picked) await readShared(picked);
+  }
+
+  async function joinShared() {
+    await run("shared", async () => {
+      const done = await window.instanceAPI.sharedJoin(source);
+      const problems = [
+        done.blocked.length ? `Not allowed to download outside CurseForge, so get them from their pages: ${done.blocked.map((b) => b.name).join(", ")}.` : "",
+        done.failed.length ? `Couldn't download: ${done.failed.map((f) => f.name).join(", ")}.` : "",
+        done.notFound ? `${done.notFound} file${done.notFound === 1 ? " is" : "s are"} no longer on Modrinth or CurseForge.` : "",
+        done.missing.length ? `Not on either site, so ask whoever shared it for: ${done.missing.join(", ")}.` : "",
+      ].filter(Boolean);
+      setNotice(
+        `Made "${done.name}" with ${done.installed} file${done.installed === 1 ? "" : "s"}. It follows the shared instance, so changes show up on its Content tab.` +
+          (problems.length ? ` ${problems.join(" ")}` : "")
+      );
+      setSource("");
+      setFollowing(null);
+      if (problems.length) setMade(done.name);
+      else onImported(done.name);
+    });
+  }
+
   /* ---------------- cloud ---------------- */
 
   const loadCloud = useCallback(async () => {
@@ -251,6 +289,18 @@ export default function ImportPanel({ onImported }: Props) {
       },
       label: "Paste Code",
       current: mode === "code",
+    },
+    {
+      id: "shared",
+      icon: Users,
+      title: "Join a shared instance",
+      text: "A file from Share live on someone's instance. It stays in step: when they publish changes, you get an Update.",
+      action: () => {
+        setMode("shared");
+        setMade(null);
+      },
+      label: "Join Shared",
+      current: mode === "shared",
     },
     {
       id: "cloud",
@@ -358,6 +408,66 @@ export default function ImportPanel({ onImported }: Props) {
               </div>
               <Button variant="primary" disabled={!!busy} onClick={importCode}>
                 {busy === "code" ? "Making..." : "Make instance"}
+              </Button>
+            </div>
+          )}
+          {made && (
+            <Button size="sm" style={{ marginTop: "var(--space-3)" }} onClick={() => onImported(made)}>
+              Open {made}
+            </Button>
+          )}
+        </>
+      )}
+
+      {/* ---------------- shared instance ---------------- */}
+      {mode === "shared" && (
+        <>
+          <h2 className="im-section-title">Shared instance</h2>
+          <p className="im-lead">
+            Paste the link to the shared file, or choose it if it's in a folder you share. It only ever downloads from Modrinth and CurseForge.
+          </p>
+          <div style={{ display: "flex", gap: "var(--space-2)" }}>
+            <input
+              data-testid="shared-source"
+              className="ui-input"
+              aria-label="Link or path to the shared file"
+              placeholder="https://... or a .unityshare file"
+              value={source}
+              disabled={busy === "shared"}
+              onChange={(e) => {
+                setSource(e.target.value);
+                setFollowing(null);
+              }}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData("text").trim();
+                if (!text) return;
+                e.preventDefault();
+                void readShared(text);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void readShared(source);
+              }}
+              onBlur={() => {
+                if (!following && source.trim()) void readShared(source);
+              }}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <Button disabled={!!busy} onClick={() => void chooseShared()}>
+              Choose file...
+            </Button>
+          </div>
+          {following && (
+            <div className="im-row" data-testid="shared-preview" style={{ marginTop: "var(--space-3)" }}>
+              <div className="im-row-text">
+                <div className="im-row-name">{following.name}</div>
+                <div className="im-row-meta">
+                  Minecraft {following.version}, {following.loader === "vanilla" ? "Vanilla" : following.loader}, {following.files} file
+                  {following.files === 1 ? "" : "s"} to download. Version {following.revision}, published {when(following.updated)}
+                </div>
+                {following.missing.length > 0 && <div className="im-row-meta">Not included (on neither site): {following.missing.join(", ")}</div>}
+              </div>
+              <Button variant="primary" disabled={!!busy} onClick={joinShared}>
+                {busy === "shared" ? "Joining..." : "Join"}
               </Button>
             </div>
           )}

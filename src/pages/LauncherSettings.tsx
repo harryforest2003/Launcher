@@ -104,7 +104,7 @@ function GameAccounts({ onMinecraftSettings }: { onMinecraftSettings?: () => voi
   return (
     <div id="platform-accounts" className="set-stack">
       <p className="set-lead" style={{ marginTop: 0 }}>
-        Minecraft uses your selected Microsoft account. Other games use the account in their own platform launcher.
+        Minecraft uses the account you pick: Microsoft, Ely.by or an offline test account. Other games use the account in their own platform launcher.
         {onMinecraftSettings ? (
           <>
             {" "}Memory, Java and starter mods are in{" "}
@@ -119,7 +119,7 @@ function GameAccounts({ onMinecraftSettings }: { onMinecraftSettings?: () => voi
       </p>
       <div className="ui-panel set-panel">
         <div className="platform-account-row">
-          <AccountName icon={Box} name="Minecraft · Microsoft">
+          <AccountName icon={Box} name="Minecraft">
             Choose the account used to launch Minecraft.
           </AccountName>
           <div className="set-frow-ctl">

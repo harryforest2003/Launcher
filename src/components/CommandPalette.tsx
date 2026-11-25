@@ -25,7 +25,7 @@ type Props = {
   actions: PaletteCommand[];
 };
 
-const LOADER_NAMES: Record<string, string> = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt" };
+const LOADER_NAMES: Record<string, string> = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt", "legacy-fabric": "Legacy Fabric", babric: "Babric", liteloader: "LiteLoader" };
 const GROUP_ORDER: PaletteCommand["group"][] = ["Pages", "Games", "Minecraft instances", "Mods", "Actions"];
 const PER_GROUP = 6;
 
@@ -259,7 +259,7 @@ export default function CommandPalette({ onClose, go, actions }: Props) {
   return (
     <dialog
       ref={dialog}
-      className="cp"
+      className="cmdp"
       aria-label="Search the launcher"
       data-testid="command-palette"
       onCancel={(event) => {
@@ -270,11 +270,11 @@ export default function CommandPalette({ onClose, go, actions }: Props) {
         if (event.target === dialog.current) onClose();
       }}
     >
-      <div className="cp__box">
-        <div className="cp__field">
-          <Search size={16} aria-hidden="true" className="cp__glass" />
+      <div className="cmdp__box">
+        <div className="cmdp__field">
+          <Search size={16} aria-hidden="true" className="cmdp__glass" />
           <input
-            className="cp__input"
+            className="cmdp__input"
             autoFocus
             role="combobox"
             aria-expanded="true"
@@ -292,15 +292,15 @@ export default function CommandPalette({ onClose, go, actions }: Props) {
             onKeyDown={onKeyDown}
             data-testid="command-input"
           />
-          <kbd className="cp__kbd">Esc</kbd>
+          <kbd className="cmdp__kbd">Esc</kbd>
         </div>
-        <ul ref={list} id="cp-list" className="cp__list" role="listbox" aria-label="Results">
+        <ul ref={list} id="cp-list" className="cmdp__list" role="listbox" aria-label="Results">
           {results.map(({ group, items }, section) => (
-            <li key={group} role="presentation" className="cp__section">
-              <div className="cp__heading" aria-hidden="true">
+            <li key={group} role="presentation" className="cmdp__section">
+              <div className="cmdp__heading" aria-hidden="true">
                 {group}
               </div>
-              <ul role="group" aria-label={group} className="cp__items">
+              <ul role="group" aria-label={group} className="cmdp__items">
                 {items.map((command, row) => {
                   const at = starts[section] + row;
                   return (
@@ -310,17 +310,17 @@ export default function CommandPalette({ onClose, go, actions }: Props) {
                       data-index={at}
                       role="option"
                       aria-selected={at === current}
-                      className="cp__item"
+                      className="cmdp__item"
                       data-testid="command-option"
                       onMouseMove={() => at !== current && setActive(at)}
                       onClick={() => choose(command)}
                     >
-                      <span className="cp__icon" aria-hidden="true">
+                      <span className="cmdp__icon" aria-hidden="true">
                         {command.icon}
                       </span>
-                      <span className="cp__label">{command.label}</span>
-                      {command.hint && <span className="cp__hint">{command.hint}</span>}
-                      {at === current && <CornerDownLeft size={13} aria-hidden="true" className="cp__enter" />}
+                      <span className="cmdp__label">{command.label}</span>
+                      {command.hint && <span className="cmdp__hint">{command.hint}</span>}
+                      {at === current && <CornerDownLeft size={13} aria-hidden="true" className="cmdp__enter" />}
                     </li>
                   );
                 })}
@@ -329,19 +329,19 @@ export default function CommandPalette({ onClose, go, actions }: Props) {
           ))}
         </ul>
         {flat.length === 0 && (
-          <p className="cp__empty" role="status">
+          <p className="cmdp__empty" role="status">
             {typed && mods === null ? "Searching your mods..." : `Nothing matches "${query.trim()}".`}
           </p>
         )}
-        <div className="cp__foot" aria-hidden="true">
+        <div className="cmdp__foot" aria-hidden="true">
           <span>
-            <kbd className="cp__kbd">↑</kbd>
-            <kbd className="cp__kbd">↓</kbd> move
+            <kbd className="cmdp__kbd">↑</kbd>
+            <kbd className="cmdp__kbd">↓</kbd> move
           </span>
           <span>
-            <kbd className="cp__kbd">↵</kbd> open
+            <kbd className="cmdp__kbd">↵</kbd> open
           </span>
-          <span className="cp__foot-gap" />
+          <span className="cmdp__foot-gap" />
           <span>
             <Zap size={11} /> Installed mods appear as you type
           </span>

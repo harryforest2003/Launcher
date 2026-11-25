@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { marked } from "marked";
 import { sanitizeHtml } from "../../utils/sanitizeHtml";
+import { Badge } from "../../components/ui";
+import "../../components/modList.css";
 import { countText, errorText, note, sizeText, smallButton } from "./shared";
 
 type Props = {
@@ -8,10 +10,10 @@ type Props = {
   slug: string;
 };
 
-const STATE: Record<GameCollection["files"][number]["installed"], { label: string; colour: string }> = {
-  same: { label: "Installed", colour: "var(--color-success-text)" },
-  other: { label: "Another version installed", colour: "var(--color-warning-text)" },
-  no: { label: "", colour: "" },
+const STATE: Record<GameCollection["files"][number]["installed"], { label: string; tone: "success" | "warning" | "neutral" }> = {
+  same: { label: "Installed", tone: "success" },
+  other: { label: "Another version", tone: "warning" },
+  no: { label: "", tone: "neutral" },
 };
 
 /*
@@ -140,24 +142,24 @@ export default function CollectionPage({ detail, slug }: Props) {
             </div>
           )}
         </div>
-        <div style={{ width: 380, flexShrink: 0, background: "var(--color-surface)", borderRadius: 12, padding: 14, border: "1px solid var(--color-border)" }} data-testid="collection-files">
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <b style={{ flex: 1 }}>Mods in it</b>
-            <button
-              onClick={() => setPicked(new Set(collection.files.filter((f) => f.installed !== "same").map((f) => f.fileId)))}
-              style={{ background: "none", border: "none", color: "var(--color-accent-text)", cursor: "pointer", fontSize: 12, textDecoration: "underline" }}
-            >
+        <div className="mlx-table" style={{ width: 380, flexShrink: 0, alignSelf: "flex-start" }} data-testid="collection-files">
+          <div className="mlx-head">
+            <span style={{ flex: 1 }}>
+              Mods in it <span className="mlx-head__count">{collection.files.length}</span>
+            </span>
+            <button type="button" className="mlx-head__link" onClick={() => setPicked(new Set(collection.files.filter((f) => f.installed !== "same").map((f) => f.fileId)))}>
               Tick all
             </button>
-            <button onClick={() => setPicked(new Set())} style={{ background: "none", border: "none", color: "var(--color-accent-text)", cursor: "pointer", fontSize: 12, textDecoration: "underline" }}>
+            <button type="button" className="mlx-head__link" onClick={() => setPicked(new Set())}>
               None
             </button>
           </div>
-          <div style={{ maxHeight: 520, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ maxHeight: 520, overflowY: "auto" }}>
             {collection.files.map((file) => (
-              <label key={file.fileId} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 2px", fontSize: 12, cursor: "pointer" }}>
+              <label key={file.fileId} className="mlx-row mlx-row--pick">
                 <input
                   type="checkbox"
+                  className="mlx-check"
                   checked={picked.has(file.fileId)}
                   onChange={(event) =>
                     setPicked((now) => {
@@ -167,16 +169,15 @@ export default function CollectionPage({ detail, slug }: Props) {
                       return next;
                     })
                   }
-                  style={{ width: 14, height: 14, accentColor: "var(--color-accent)", flexShrink: 0 }}
                 />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  {file.name}
-                  <span style={{ color: "var(--color-text-muted)" }}>
-                    {file.version ? ` ${file.version}` : ""}
-                    {file.optional ? " • optional" : ""}
+                <span className="mlx-main">
+                  <span className="mlx-title">
+                    <span className="mlx-name">{file.name}</span>
+                    {file.version && <span className="mlx-ver">{file.version}</span>}
                   </span>
+                  {file.optional && <span className="mlx-sub">Optional</span>}
                 </span>
-                {STATE[file.installed].label && <span style={{ color: STATE[file.installed].colour, flexShrink: 0 }}>{STATE[file.installed].label}</span>}
+                {STATE[file.installed].label && <Badge tone={STATE[file.installed].tone}>{STATE[file.installed].label}</Badge>}
               </label>
             ))}
           </div>

@@ -48,6 +48,12 @@ expose("launcherAPI", {
     getLoaders: () =>
         ipcRenderer.invoke("minecraft:getLoaders"),
 
+    getLoaderVersions: (loader, version) =>
+        ipcRenderer.invoke("minecraft:getLoaderVersions", loader, version),
+
+    getLoaderGameVersions: (loader) =>
+        ipcRenderer.invoke("minecraft:getLoaderGameVersions", loader),
+
     // ---------- Project API ----------
     getProject: (source, id) =>
         ipcRenderer.invoke("project:get", source, id),
@@ -122,6 +128,15 @@ expose("instanceAPI", {
     shareCode: (name) => ipcRenderer.invoke("share:instanceCode", name),
     readShareCode: (code) => ipcRenderer.invoke("share:readInstanceCode", code),
     importShareCode: (code, name) => ipcRenderer.invoke("share:importInstance", code, name),
+    safetyCheck: (name, only) => ipcRenderer.invoke("safety:check", name, only),
+    sharedPublish: (name, options) => ipcRenderer.invoke("shared:publish", name, options),
+    sharedChooseFile: () => ipcRenderer.invoke("shared:chooseFile"),
+    sharedRead: (source) => ipcRenderer.invoke("shared:read", source),
+    sharedJoin: (source, name) => ipcRenderer.invoke("shared:join", source, name),
+    sharedCheck: (name) => ipcRenderer.invoke("shared:check", name),
+    sharedUpdate: (name) => ipcRenderer.invoke("shared:update", name),
+    sharedLeave: (name) => ipcRenderer.invoke("shared:leave", name),
+    usage: (name) => ipcRenderer.invoke("instance:usage", name),
     // A desktop shortcut asked for this instance to be played.
     onShortcutLaunch: (cb) => {
         const h = (_e, name) => cb(name);
@@ -212,6 +227,7 @@ expose("instanceAPI", {
     removeAccount: (uuid) => ipcRenderer.invoke("account:remove", uuid),
     // A test account without Microsoft; it becomes the active one.
     addOfflineAccount: (name) => ipcRenderer.invoke("account:addOffline", name),
+    elySignIn: (login, password, code) => ipcRenderer.invoke("account:elySignIn", login, password, code),
     onAccountsChanged: (cb) => {
         const h = (_e, list) => cb(list);
         ipcRenderer.on("account:changed", h);

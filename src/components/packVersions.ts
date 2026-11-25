@@ -20,7 +20,7 @@ export const CHANNEL: Record<Channel, { label: string; tone: Tone; hint: string 
   alpha: { label: "Alpha", tone: "danger", hint: "An alpha: early and unfinished, expect problems" },
 };
 
-const LOADER_NAMES: Record<string, string> = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt" };
+const LOADER_NAMES: Record<string, string> = { fabric: "Fabric", forge: "Forge", neoforge: "NeoForge", quilt: "Quilt", "legacy-fabric": "Legacy Fabric", babric: "Babric", liteloader: "LiteLoader" };
 
 export const channelOf = (version: PackVersion): Channel => {
   const type = version.version_type?.toLowerCase();

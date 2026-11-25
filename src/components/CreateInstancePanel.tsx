@@ -31,6 +31,9 @@ const LOADER_HINTS: Record<string, string> = {
   forge: "Classic big mods",
   neoforge: "Newer Forge mods",
   quilt: "Runs Fabric mods",
+  "legacy-fabric": "Fabric for 1.13 and older",
+  babric: "Fabric for Beta 1.7.3",
+  liteloader: "Light mods, 1.12 and older",
 };
 
 const DEFAULT_LOADERS: LoaderOption[] = [
@@ -39,6 +42,9 @@ const DEFAULT_LOADERS: LoaderOption[] = [
   { id: "forge", name: "Forge" },
   { id: "neoforge", name: "NeoForge" },
   { id: "quilt", name: "Quilt" },
+  { id: "legacy-fabric", name: "Legacy Fabric" },
+  { id: "babric", name: "Babric" },
+  { id: "liteloader", name: "LiteLoader" },
 ];
 
 // The listing to install from: CurseForge's when a pack is on both sites and allows it,
@@ -79,6 +85,9 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
   const [loaders, setLoaders] = useState<LoaderOption[]>([]);
   const [loaderVersions, setLoaderVersions] = useState<LoaderVersion[]>([]);
   const [loaderVersion, setLoaderVersion] = useState("");
+  // The Minecraft versions the chosen loader works with, for loaders made for old ones only.
+  const [supported, setSupported] = useState<{ for: string; list: string[] } | null>(null);
+  const loaderPick = useRef(0);
   const [jvmArgs, setJvmArgs] = useState("");
 
   const [creating, setCreating] = useState(false);
@@ -165,7 +174,10 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
       forge: window.launcherAPI.getForgeVersions,
       neoforge: window.launcherAPI.getNeoForgeVersions,
     };
-    const fetchVersions = loader && version ? versionsFor[loader] : undefined;
+    const fetchVersions =
+      loader && version && loader !== "vanilla"
+        ? (versionsFor[loader] ?? ((mc: string) => window.launcherAPI.getLoaderVersions(loader, mc)))
+        : undefined;
 
     (fetchVersions ? fetchVersions(version) : Promise.resolve([]))
       .then((list) => current && setLoaderVersions(list ?? []))
@@ -176,7 +188,28 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
     };
   }, [loader, version]);
 
-  const shownVersions = versions.filter((v) => showSnapshots || v.type === "release");
+  const onlySome = supported?.for === loader ? supported.list : null;
+  const shownVersions = onlySome
+    ? versions.filter((v) => onlySome.includes(v.id))
+    : versions.filter((v) => showSnapshots || v.type === "release");
+
+  // Old-only loaders narrow the version list, and move off a version they can't run.
+  function chooseLoader(id: string) {
+    setLoader(id);
+    setLoaderVersion("");
+    const pick = ++loaderPick.current;
+    window.launcherAPI
+      .getLoaderGameVersions(id)
+      .then((list) => {
+        if (pick !== loaderPick.current) return;
+        setSupported(list ? { for: id, list } : null);
+        if (!list || list.includes(version)) return;
+        const usable = versions.filter((v) => list.includes(v.id));
+        const next = usable.find((v) => v.type === "release") ?? usable[0];
+        if (next) setVersion(next.id);
+      })
+      .catch(() => pick === loaderPick.current && setSupported(null));
+  }
 
   function chooseTab(next: Tab) {
     setTab(next);
@@ -424,7 +457,7 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
               <div className="nc-row">
                 <div className="nc-q">
                   Minecraft version
-                  <small>The newest release is picked for you.</small>
+                  <small>{onlySome ? `The versions ${loaderLabel} works with.` : "The newest release is picked for you."}</small>
                 </div>
                 <div className="nc-a">
                   <SearchDropdown
@@ -435,7 +468,7 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
                     options={shownVersions.map((v) => ({ value: v.id, label: v.type === "release" ? v.id : `${v.id} (${v.type.replace("_", " ")})` }))}
                   />
                   <label className="nc-check">
-                    <input type="checkbox" checked={showSnapshots} onChange={(e) => setShowSnapshots(e.target.checked)} />
+                    <input type="checkbox" checked={showSnapshots} disabled={!!onlySome} onChange={(e) => setShowSnapshots(e.target.checked)} />
                     Show snapshots and old versions
                   </label>
                 </div>
@@ -455,10 +488,7 @@ export default function CreateInstancePanel({ onDone, onCancel, initialTab = "ve
                         role="radio"
                         aria-checked={loader === option.id}
                         className="nc-loader"
-                        onClick={() => {
-                          setLoader(option.id);
-                          setLoaderVersion("");
-                        }}
+                        onClick={() => chooseLoader(option.id)}
                       >
                         <b>{option.name}</b>
                         <span>{LOADER_HINTS[option.id] ?? "Mod loader"}</span>

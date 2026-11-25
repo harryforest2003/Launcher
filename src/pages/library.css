@@ -1628,27 +1628,7 @@
   margin: 0 0 var(--space-4);
 }
 
-.ct-table {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.ct-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-surface-sunken);
-  border-bottom: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-  font-weight: var(--weight-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
+/* The content list's own columns; the table, rows, tile and name come from modList.css. */
 .ct-head > span:first-child {
   flex: 1;
   padding-left: 44px;
@@ -1669,80 +1649,19 @@
   white-space: nowrap;
 }
 
-.ct-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-1) var(--space-3);
-  min-height: 52px;
-  transition: background-color 0.12s ease;
-}
-
-.ct-row + .ct-row {
-  border-top: 1px solid var(--color-border);
-}
-
-.ct-row:hover {
-  background: var(--color-surface-raised);
-}
-
-.ct-row.off {
-  opacity: 0.55;
-  filter: grayscale(1);
-}
-
-.ct-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md);
-  flex-shrink: 0;
-  object-fit: cover;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-accent-subtle);
-  color: var(--color-accent-text);
-  font-weight: var(--weight-bold);
-}
-
-.ct-name {
-  color: var(--color-text);
-  font-weight: var(--weight-bold);
-  font-size: var(--font-size-sm);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A row whose project has a page: the whole row opens it, the name is its button. */
-.ct-row--link {
-  cursor: pointer;
-}
-
+/* The name opens the project's page; the whole row does too. */
 .ct-name--link {
-  min-width: 0;
   padding: 0;
   border: 0;
   background: none;
-  font-family: inherit;
+  font: inherit;
+  color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.ct-row--link:hover .ct-name--link,
-.ct-name--link:focus-visible {
-  color: var(--color-accent-text);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.ct-sub {
-  font-size: var(--font-size-xs);
-  line-height: 1.4;
-  color: var(--color-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.ct-newer {
+  color: var(--color-success-text);
 }
 
 .ct-empty {
@@ -1907,4 +1826,64 @@
 .id-result-name:focus-visible {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* Malware check report (SafetyCheck.tsx). */
+.safety { display: flex; flex-direction: column; gap: var(--space-3); text-align: left; }
+.safety__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.safety__file { padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-md, 8px); background: var(--color-surface); }
+.safety__file[data-level="danger"] { border-color: var(--color-danger, #e5484d); }
+.safety__head { display: flex; align-items: center; gap: var(--space-2); justify-content: space-between; }
+.safety__name { font-weight: var(--weight-semibold); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.safety__meta { color: var(--color-text-muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.safety__findings { margin: var(--space-1) 0 0; padding-left: 1.2em; font-size: var(--font-size-sm); }
+.safety__findings li[data-level="danger"] { color: var(--color-danger-text, var(--color-danger, #e5484d)); }
+.safety__where, .safety__path { color: var(--color-text-muted); font-family: var(--font-mono, monospace); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.safety__toggle { align-self: flex-start; background: none; border: none; padding: 0; color: var(--color-accent-text); cursor: pointer; font: inherit; font-size: var(--font-size-sm); }
+.safety__small { margin: 0; color: var(--color-text-muted); font-size: var(--font-size-xs); }
+
+/* Shared instances: where the shared file is, to copy. */
+.shared__where {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.shared__path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* The chosen instance's notes, from its Settings tab: three lines at most. */
+.lx-notes {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: var(--rail-width, 3px) solid var(--color-accent-line);
+  background: var(--color-surface-sunken);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* A running game's CPU, under the memory it uses. */
+.game-usage__cpu {
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: var(--weight-regular, 400);
+  color: var(--color-text-muted);
 }
