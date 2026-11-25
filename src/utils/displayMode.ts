@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { PadKind } from "./padLayout";
 import "./displayMode.css";
 
 /*
@@ -8,6 +9,10 @@ import "./displayMode.css";
 
 const BIG_KEY = "launcher.bigScreen";
 const PAD_KEY = "launcher.controller";
+const CHOOSE_KEY = "launcher.padChoose";
+
+/** Which face button chooses: as the pad usually does (A on a Switch pad is on the right), or set. */
+export type PadChoose = "auto" | "bottom" | "right";
 /** Big screen's zoom: everything a quarter larger, for a TV across the room. */
 export const BIG_ZOOM = 1.25;
 
@@ -18,6 +23,9 @@ export type DisplayState = {
   controller: boolean;
   /** The connected controller's name, if any. */
   pad: string | null;
+  /** What kind it is, for its button names. */
+  padKind: PadKind;
+  padChoose: PadChoose;
 };
 
 const read = (key: string, fallback: boolean) => {
@@ -36,7 +44,23 @@ const write = (key: string, on: boolean) => {
   }
 };
 
-let state: DisplayState = { fullScreen: false, bigScreen: read(BIG_KEY, false), controller: read(PAD_KEY, true), pad: null };
+const readChoose = (): PadChoose => {
+  try {
+    const value = localStorage.getItem(CHOOSE_KEY);
+    return value === "bottom" || value === "right" ? value : "auto";
+  } catch {
+    return "auto";
+  }
+};
+
+let state: DisplayState = {
+  fullScreen: false,
+  bigScreen: read(BIG_KEY, false),
+  controller: read(PAD_KEY, true),
+  pad: null,
+  padKind: "generic",
+  padChoose: readChoose(),
+};
 const listeners = new Set<() => void>();
 const update = (patch: Partial<DisplayState>) => {
   state = { ...state, ...patch };
@@ -70,7 +94,16 @@ export function setControllerOn(on: boolean) {
   update({ controller: on });
 }
 
-export const setPadName = (pad: string | null) => update({ pad });
+export const setPad = (pad: string | null, padKind: PadKind = "generic") => update({ pad, padKind });
+
+export function setPadChoose(padChoose: PadChoose) {
+  try {
+    localStorage.setItem(CHOOSE_KEY, padChoose);
+  } catch {
+    // Kept until the launcher closes.
+  }
+  update({ padChoose });
+}
 
 /* Into or out of full screen: the window itself in the app, the page in a browser. */
 export async function setFullScreen(on: boolean) {

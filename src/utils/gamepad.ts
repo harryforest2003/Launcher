@@ -1,10 +1,14 @@
 import { toast } from "../components/ui";
-import { displayState, setPadName, toggleFullScreen } from "./displayMode";
+import { displayState, setPad, toggleFullScreen } from "./displayMode";
+import { choosesWithRight, dpadOf, layoutOf, PAD_NAMES, padKind, padLabels, type PadKind, type PadRole } from "./padLayout";
 
 /*
- * Moving around the launcher with a controller (standard layout: Xbox, PlayStation, Switch Pro).
- * D-pad or left stick: move between controls. A: choose. B: back (Escape). Menu: search.
- * View: full screen. LB / RB: the sidebar / the page. Right stick: scroll.
+ * Moving around the launcher with a controller: Xbox, PlayStation (DualShock 4, DualSense),
+ * Switch Pro or most others (padLayout.ts names their buttons and reads raw ones).
+ * D-pad or left stick: move between controls. A / ✕: choose. B / ○: back (Escape).
+ * Menu / Options: search. View / Create: full screen. LB / RB: the sidebar / the page.
+ * LT / RT: a page up / down. Right stick: scroll. A Switch pad chooses with A, on the right.
+ * Any connected controller works; the last one used names the buttons.
  * Only while the launcher's window has focus, so a game in front keeps its controller.
  */
 
@@ -188,7 +192,16 @@ function scrollBy(dx: number, dy: number) {
   (el && el !== document.body ? el : document.scrollingElement)?.scrollBy({ left: dx, top: dy });
 }
 
-const cleanName = (id: string) => id.replace(/\s*\(.*\)\s*$/, "").trim() || "Controller";
+/* "Wireless Controller (STANDARD GAMEPAD Vendor: 054c ...)" or "054c-09cc-Wireless Controller" -> a name to show. */
+function cleanName(id: string) {
+  const name = id.replace(/\s*\(.*\)\s*$/, "").replace(/^[0-9a-f]{4}-[0-9a-f]{4}-/i, "").trim();
+  // A DualShock 4 just calls itself "Wireless Controller".
+  if (!name || /^(wireless )?controller$/i.test(name)) {
+    const kind = padKind(id);
+    return kind === "generic" ? "Controller" : `${PAD_NAMES[kind]} controller`;
+  }
+  return name;
+}
 
 /* Starts listening for controllers; the returned function stops. */
 export function startGamepad({ onSearch }: { onSearch: () => void }) {
@@ -216,23 +229,59 @@ export function startGamepad({ onSearch }: { onSearch: () => void }) {
 
   const markPad = () => document.documentElement.classList.add("is-gamepad");
 
+  // The controller last used: its buttons' names show in Settings and the tips.
+  let activeId = "";
+  const chooseRight = (kind: PadKind) => {
+    const pick = displayState().padChoose;
+    return pick === "right" || (pick === "auto" && choosesWithRight(kind));
+  };
+
   const frame = (now: number) => {
     raf = 0;
-    const pad = [...navigator.getGamepads()].find((one) => one?.connected);
-    if (!pad) {
+    const pads = [...navigator.getGamepads()].filter((one): one is Gamepad => Boolean(one?.connected));
+    if (!pads.length) {
       held.clear();
       return;
     }
     const dt = lastFrame ? Math.min(now - lastFrame, 50) : 16;
     lastFrame = now;
     if (displayState().controller && document.hasFocus()) {
-      const on = (i: number) => Boolean(pad.buttons[i]?.pressed);
-      const [lx = 0, ly = 0, rx = 0, ry = 0] = pad.axes;
+      // Every controller at once: a button counts if it's down on any of them.
+      const roles = new Set<PadRole>();
+      const dpad = { up: false, down: false, left: false, right: false };
+      let [lx, ly, rx, ry] = [0, 0, 0, 0];
+      let used: Gamepad | null = null;
+      for (const pad of pads) {
+        const layout = layoutOf(pad);
+        const kind = padKind(pad.id);
+        let any = false;
+        for (const [role, index] of Object.entries(layout.buttons) as [PadRole, number][]) {
+          if (!pad.buttons[index]?.pressed) continue;
+          any = true;
+          // Choosing and going back follow the pad's own habit (or the setting).
+          const swapped = chooseRight(kind) && (role === "bottom" || role === "right");
+          roles.add(swapped ? (role === "bottom" ? "right" : "bottom") : role);
+        }
+        const d = dpadOf(pad);
+        for (const dir of ["up", "down", "left", "right"] as const) if (d[dir]) dpad[dir] = any = true;
+        const [plx = 0, ply = 0] = pad.axes;
+        const prx = pad.axes[layout.rightStick[0]] ?? 0;
+        const pry = pad.axes[layout.rightStick[1]] ?? 0;
+        if (Math.abs(plx) > Math.abs(lx)) lx = plx;
+        if (Math.abs(ply) > Math.abs(ly)) ly = ply;
+        if (Math.abs(prx) > Math.abs(rx)) rx = prx;
+        if (Math.abs(pry) > Math.abs(ry)) ry = pry;
+        if (any || Math.max(Math.abs(plx), Math.abs(ply)) > STICK) used = pad;
+      }
+      if (used && used.id !== activeId) {
+        activeId = used.id;
+        setPad(cleanName(used.id), padKind(used.id));
+      }
       const dirs: [Dir, boolean][] = [
-        ["up", on(12) || ly < -STICK],
-        ["down", on(13) || ly > STICK],
-        ["left", on(14) || lx < -STICK],
-        ["right", on(15) || lx > STICK],
+        ["up", dpad.up || ly < -STICK],
+        ["down", dpad.down || ly > STICK],
+        ["left", dpad.left || lx < -STICK],
+        ["right", dpad.right || lx > STICK],
       ];
       for (const [dir, down] of dirs) {
         if (fresh(dir, down, now, true)) {
@@ -240,18 +289,20 @@ export function startGamepad({ onSearch }: { onSearch: () => void }) {
           move(dir);
         }
       }
-      const press: [number, () => void][] = [
-        [0, choose],
-        [1, back],
-        [4, () => region("sidebar")],
-        [5, () => region("page")],
-        [8, () => void toggleFullScreen()],
-        [9, onSearch],
+      const press: [PadRole, () => void, boolean][] = [
+        ["bottom", choose, false],
+        ["right", back, false],
+        ["lb", () => region("sidebar"), false],
+        ["rb", () => region("page"), false],
+        ["lt", () => scrollBy(0, -window.innerHeight * 0.8), true],
+        ["rt", () => scrollBy(0, window.innerHeight * 0.8), true],
+        ["view", () => void toggleFullScreen(), false],
+        ["menu", onSearch, false],
       ];
-      for (const [button, run] of press) {
-        if (fresh(`b${button}`, on(button), now, false)) {
+      for (const [role, act, repeat] of press) {
+        if (fresh(role, roles.has(role), now, repeat)) {
           markPad();
-          run();
+          act();
         }
       }
       const sx = Math.abs(rx) > SCROLL_DEAD ? rx : 0;
@@ -271,15 +322,20 @@ export function startGamepad({ onSearch }: { onSearch: () => void }) {
 
   const onConnect = (event: GamepadEvent) => {
     const name = cleanName(event.gamepad.id);
-    setPadName(name);
+    const kind = padKind(event.gamepad.id);
+    activeId = event.gamepad.id;
+    setPad(name, kind);
     run();
     if (displayState().controller) {
-      toast({ title: `${name} connected`, body: "D-pad to move, A to choose, B to go back, Menu to search, View for full screen." });
+      const b = padLabels(kind);
+      const [yes, no] = chooseRight(kind) ? [b.right, b.bottom] : [b.bottom, b.right];
+      toast({ title: `${name} connected`, body: `D-pad to move, ${yes} to choose, ${no} to go back, ${b.menu} to search, ${b.view} for full screen.` });
     }
   };
   const onDisconnect = () => {
     const left = [...navigator.getGamepads()].find((one) => one?.connected);
-    setPadName(left ? cleanName(left.id) : null);
+    activeId = left?.id ?? "";
+    setPad(left ? cleanName(left.id) : null, left ? padKind(left.id) : "generic");
   };
   // The mouse or a real key press hands the focus ring back to the page's own style.
   const offPad = (event: Event) => {
@@ -296,7 +352,8 @@ export function startGamepad({ onSearch }: { onSearch: () => void }) {
   window.addEventListener("keydown", offPad, true);
   const already = [...navigator.getGamepads()].find((one) => one?.connected);
   if (already) {
-    setPadName(cleanName(already.id));
+    activeId = already.id;
+    setPad(cleanName(already.id), padKind(already.id));
     run();
   }
   return () => {
