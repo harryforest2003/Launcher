@@ -12,6 +12,7 @@ import {
   PanelLeftOpen,
   Puzzle,
   RefreshCw,
+  Search,
   Settings,
   SlidersHorizontal,
   Shirt,
@@ -25,6 +26,7 @@ import Monogram from "./Monogram";
 import { useDownloads } from "./downloadsContext";
 import { restartToUpdate, useAppUpdate } from "../appUpdate";
 import type { GamePageKey, McPage, PageNav } from "./shellContext";
+import { MOD_KEY } from "../../utils/modKey";
 import "./shell.css";
 
 export type ShellTarget =
@@ -43,13 +45,16 @@ type Props = {
   openGame: GameId | null;
   collapsed: boolean;
   onToggle: () => void;
+  /** Opens the search palette (also Cmd/Ctrl+K). */
+  onSearch: () => void;
   go: (target: ShellTarget) => void;
 };
+
 
 const MC_ITEMS: { page: McPage; label: string; icon: ReactNode }[] = [
   { page: "minecraft", label: "Home", icon: <House size={16} /> },
   { page: "library", label: "Library", icon: <LayoutGrid size={15} /> },
-  { page: "discover", label: "Discover Content", icon: <Compass size={15} /> },
+  { page: "discover", label: "Discover", icon: <Compass size={15} /> },
   { page: "skins", label: "Skin Selector", icon: <Shirt size={15} /> },
   { page: "skinbuilder", label: "Model Builder", icon: <Box size={15} /> },
   { page: "settings", label: "Settings", icon: <SlidersHorizontal size={15} /> },
@@ -58,7 +63,7 @@ const MC_ITEMS: { page: McPage; label: string; icon: ReactNode }[] = [
 const GAME_PAGES: { page: GamePageKey; label: string; icon: ReactNode; when?: "cc" | "loadorder" | "tools" }[] = [
   { page: "home", label: "Home", icon: <House size={16} /> },
   { page: "mods", label: "Mods", icon: <Puzzle size={15} /> },
-  { page: "discover", label: "Discover Mods", icon: <Compass size={15} /> },
+  { page: "discover", label: "Discover", icon: <Compass size={15} /> },
   { page: "cc", label: "Custom Content (CC)", icon: <Sparkles size={15} />, when: "cc" },
   { page: "loadorder", label: "Load Order", icon: <ListOrdered size={15} />, when: "loadorder" },
   { page: "tools", label: "Tools", icon: <Wrench size={15} />, when: "tools" },
@@ -108,7 +113,7 @@ function useFoundGames(refresh: unknown) {
   return games;
 }
 
-export default function AppSidebar({ current, nav, openGame, collapsed, onToggle, go }: Props) {
+export default function AppSidebar({ current, nav, openGame, collapsed, onToggle, onSearch, go }: Props) {
   const downloads = useDownloads();
   // Read again on every page change, so a game added in More Games shows up at once.
   const allGames = useFoundGames(`${current}:${openGame ?? ""}`);
@@ -248,7 +253,24 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
         <button
           type="button"
           className="ui-shell__item"
+          aria-haspopup="dialog"
+          aria-keyshortcuts={MOD_KEY === "⌘" ? "Meta+K" : "Control+K"}
+          aria-label="Search"
+          data-tip={tip(`Search (${MOD_KEY}K)`)}
+          data-testid="open-search"
+          onClick={onSearch}
+        >
+          <span className="ui-shell__icon">
+            <Search size={16} />
+          </span>
+          <span className="ui-shell__label">Search</span>
+          <kbd className="ui-shell__badge ui-shell__label ui-shell__kbd">{MOD_KEY}K</kbd>
+        </button>
+        <button
+          type="button"
+          className="ui-shell__item"
           aria-expanded={downloads.shown}
+          data-downloads-toggle=""
           aria-label={downloads.left ? `Downloads, ${downloads.left} to go` : "Downloads"}
           data-tip={tip(downloads.left ? `Downloads: ${downloads.left} to go` : "Downloads")}
           onClick={downloads.toggle}
@@ -270,7 +292,7 @@ export default function AppSidebar({ current, nav, openGame, collapsed, onToggle
           onClick={onToggle}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!collapsed}
-          data-tip={collapsed ? "Expand sidebar" : "Collapse sidebar (Ctrl+B)"}
+          data-tip={collapsed ? `Expand sidebar (${MOD_KEY}B)` : `Collapse sidebar (${MOD_KEY}B)`}
         >
           <span className="ui-shell__icon">
             {collapsed ? <PanelLeftOpen size={16} aria-hidden="true" /> : <PanelLeftClose size={16} aria-hidden="true" />}

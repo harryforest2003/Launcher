@@ -614,6 +614,13 @@
   text-align: center;
 }
 
+.ui-shell__badge.ui-shell__kbd {
+  background: transparent;
+  color: var(--color-text-muted);
+  border: var(--border-width) solid var(--color-border);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+}
 .ui-shell.is-collapsed .ui-shell__badge {
   display: none;
 }

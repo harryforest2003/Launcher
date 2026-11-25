@@ -1,5 +1,5 @@
 import BackgroundLogo from "../components/BackgroundLogo";
-import { onLaunchRequest } from "../utils/launchRequests";
+import { onLaunchRequest, onOpenInstanceRequest } from "../utils/launchRequests";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import CreateInstancePanel from "../components/CreateInstancePanel";
 import InstanceArt from "../components/InstanceArt";
@@ -238,6 +238,17 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
       onLaunchRequest((name) => {
         setCurrent(name);
         void playRef.current(name);
+      }),
+    []
+  );
+
+  // Home's drawer or the search palette asked for an instance's own page.
+  useEffect(
+    () =>
+      onOpenInstanceRequest((name) => {
+        setCurrent(name);
+        setDrawer(false);
+        setOpen(name);
       }),
     []
   );
@@ -657,7 +668,8 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
       );
     if (!instance.installed) return <span className="lx-meta warn">Not fully installed</span>;
     const ago = timeAgo(instance.lastPlayed);
-    return <span className="lx-meta">{ago ? `Played ${ago}` : "Not played yet"}</span>;
+    // Play time can be known without a date (older stats), so "not played" only when both are missing.
+    return <span className="lx-meta">{ago ? `Played ${ago}` : played[instance.name]?.seconds ? "Played before" : "Not played yet"}</span>;
   };
 
   const tile = (instance: Instance) => {
@@ -855,7 +867,7 @@ function Library({ onBack, goHome, goMinecraft, goDiscover, goLibrary, goSkinSel
         </div>
         <AccountClashNotice choice={choice} instance={chosen.name} onPlayAs={(id) => play(chosen.name, id)} />
         <p className="lx-play-hint">
-          {chosen.lastPlayed ? `Last played ${timeAgo(chosen.lastPlayed)}` : "Not played yet"}
+          {chosen.lastPlayed ? `Last played ${timeAgo(chosen.lastPlayed)}` : played[chosen.name]?.seconds ? "Played before" : "Not played yet"}
           {chosen.created ? `, added ${formatDate(chosen.created)}` : ""}.
         </p>
 

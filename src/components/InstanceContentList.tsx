@@ -182,7 +182,7 @@ export default function InstanceContentList({ instanceName, mcVersion, content, 
         <div data-testid="content-list" className="ct-table">
           <div className="ct-head" aria-hidden="true">
             <span>Project</span>
-            <span className="ct-file-head">Version</span>
+            <span className="ct-file-head">File</span>
             <span>Actions</span>
           </div>
           {shown.map(({ item, key, status, name, icon, author, version, source, project }) => (

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, GripVertical, Undo2 } from "lucide-react";
 import IconButton from "../../components/IconButton";
 import Toggle from "../../components/Toggle";
+import { SearchField } from "../../components/ui";
 import { errorText, fixNeeded, fixSentence, note, panel, smallButton } from "./shared";
 
 type Props = {
@@ -30,6 +31,8 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
   // Sorting by LOOT's rules: what it would move (shown first), and the order before, for Undo.
   const [lootPlan, setLootPlan] = useState<{ moved: GameLootMove[]; loops: string[] } | null>(null);
   const [lootBusy, setLootBusy] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [problemsOnly, setProblemsOnly] = useState(false);
   const [sorted, setSorted] = useState<{ count: number; previous: { name: string; active: boolean }[] } | null>(null);
 
   useEffect(() => {
@@ -108,6 +111,12 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
 
   const problems = order?.plugins.filter((p) => p.problems.length).length ?? 0;
   const canFix = fixNeeded(order?.fix);
+  /* A long load order gets a filter. Rows keep their real place, so moving one still moves it in the whole order. */
+  const needle = filter.trim().toLowerCase();
+  const filtering = needle !== "" || problemsOnly;
+  const rows = (order?.plugins ?? [])
+    .map((plugin, index) => ({ plugin, index }))
+    .filter(({ plugin }) => (!needle || plugin.name.toLowerCase().includes(needle) || plugin.masters.some((m) => m.toLowerCase().includes(needle))) && (!problemsOnly || plugin.problems.length > 0));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -220,17 +229,39 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
         <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Always loaded first, by the game: {order.fixed.join(", ")}</div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }} data-testid="load-order">
+      {order && order.plugins.length > 8 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <SearchField
+            label="Filter plugins"
+            placeholder="Filter plugins"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            wrapperClassName="lo-filter"
+            data-testid="load-order-filter"
+          />
+          {problems > 0 && (
+            <button type="button" className="sidebar-button" aria-pressed={problemsOnly} style={{ ...smallButton, ...(problemsOnly ? { background: "var(--color-warning-bg)", color: "var(--color-warning-text)", borderColor: "var(--color-warning-border)" } : {}) }} onClick={() => setProblemsOnly((on) => !on)}>
+              Problems only ({problems})
+            </button>
+          )}
+          <span style={{ fontSize: 12, color: "var(--color-text-muted)" }} aria-live="polite">
+            {filtering ? `${rows.length} of ${order.plugins.length} shown. Dragging is off while filtering; the arrows still move a plugin one place.` : `${order.plugins.length} plugins`}
+          </span>
+        </div>
+      )}
+      {filtering && rows.length === 0 && <div style={{ color: "var(--color-text-muted)", padding: 20, textAlign: "center" }}>No plugins match.</div>}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }} data-testid="load-order">
         {!order ? (
           !error && <div style={{ color: "var(--color-text-muted)" }}>Loading...</div>
         ) : order.plugins.length === 0 ? (
           <div style={{ color: "var(--color-text-muted)", padding: 20, textAlign: "center" }}>No plugins yet besides the game's own.</div>
         ) : (
-          order.plugins.map((plugin, index) => (
+          rows.map(({ plugin, index }) => (
             <div
               key={plugin.name}
               data-testid="plugin-row"
-              draggable
+              draggable={!filtering}
               onDragStart={(event) => {
                 setDragging(index);
                 event.dataTransfer.effectAllowed = "move";
@@ -253,15 +284,18 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: 12,
-                padding: "8px 12px",
+                gap: 10,
+                padding: "4px 10px",
+                minHeight: 44,
+                contentVisibility: "auto",
+                containIntrinsicSize: "auto 46px",
                 background: "var(--color-surface)",
                 border: `1px solid ${over === index && dragging !== null && dragging !== index ? "var(--color-accent-line)" : plugin.problems.length ? "var(--color-warning-border)" : "var(--color-border)"}`,
-                borderRadius: 10,
+                borderRadius: 8,
                 opacity: dragging === index ? 0.5 : plugin.active ? 1 : 0.65,
               }}
             >
-              <span style={{ color: "var(--color-text-muted)", cursor: "grab", display: "flex" }} aria-hidden="true">
+              <span style={{ color: "var(--color-text-muted)", cursor: filtering ? "default" : "grab", display: "flex", opacity: filtering ? 0.3 : 1 }} aria-hidden="true">
                 <GripVertical size={18} />
               </span>
               <span style={{ color: "var(--color-text-muted)", fontSize: 12, width: 28, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{index + 1}</span>
@@ -281,10 +315,10 @@ export default function LoadOrderPage({ detail, onGetRequirements }: Props) {
                   <div style={{ color: "var(--color-text-muted)", fontSize: 11, marginTop: 2 }}>Needs {plugin.masters.join(", ")}</div>
                 )}
               </div>
-              <IconButton tip="Load earlier" label={`Move ${plugin.name} up`} disabled={index === 0} style={{ width: 34, height: 34 }} onClick={() => move(index, index - 1)}>
+              <IconButton tip="Load earlier" label={`Move ${plugin.name} up`} disabled={index === 0} style={{ width: 30, height: 30 }} onClick={() => move(index, index - 1)}>
                 <ChevronUp size={16} />
               </IconButton>
-              <IconButton tip="Load later" label={`Move ${plugin.name} down`} disabled={index === order.plugins.length - 1} style={{ width: 34, height: 34 }} onClick={() => move(index, index + 1)}>
+              <IconButton tip="Load later" label={`Move ${plugin.name} down`} disabled={index === order.plugins.length - 1} style={{ width: 30, height: 30 }} onClick={() => move(index, index + 1)}>
                 <ChevronDown size={16} />
               </IconButton>
             </div>

@@ -159,7 +159,10 @@ export default function ModOrderPage({ detail }: Props) {
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
-                  padding: "8px 12px",
+                  padding: "4px 10px",
+                  minHeight: 44,
+                  contentVisibility: "auto",
+                  containIntrinsicSize: "auto 46px",
                   background: "var(--color-surface)",
                   border: `1px solid ${over === index && dragging !== null && dragging !== index ? "var(--color-accent-line)" : entry.problems.length ? "var(--color-warning-border)" : "var(--color-border)"}`,
                   borderRadius: 10,
@@ -208,7 +211,7 @@ export default function ModOrderPage({ detail }: Props) {
             <div
               key={entry.id}
               data-testid="mod-order-off-row"
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 12px", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 10, opacity: 0.75 }}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 10px", minHeight: 44, background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, opacity: 0.75 }}
             >
               <Toggle on={false} label={`Turn on ${entry.name}`} disabled={!order.file} onChange={() => toggle(entry, true)} />
               <div style={{ flex: 1, minWidth: 0 }}>

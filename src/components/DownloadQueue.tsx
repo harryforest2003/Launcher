@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Download, X } from "lucide-react";
 import Button from "./ui/Button";
 import { useDownloads } from "./ui/downloadsContext";
@@ -29,6 +29,29 @@ const STATUS: Record<GameQueueItem["status"], string> = {
 export default function DownloadQueue() {
   const { queue, left, shown, hide } = useDownloads();
   const [open, setOpen] = useState(false);
+  const box = useRef<HTMLElement>(null);
+
+  // Escape folds the list, then closes the panel; a click elsewhere closes a panel opened
+  // from the sidebar. A running queue keeps its small progress bar either way.
+  useEffect(() => {
+    if (!shown && !open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("dialog[open]")) return;
+      if (open) setOpen(false);
+      else hide();
+    };
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!shown || !target || box.current?.contains(target) || target.closest("[data-downloads-toggle]")) return;
+      hide();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [shown, open, hide]);
 
   const counts = queue?.counts;
   const finished = counts ? counts.done + counts.failed + counts.skipped : 0;
@@ -38,7 +61,7 @@ export default function DownloadQueue() {
   // Opened from the sidebar with nothing queued.
   if (!hasQueue || !queue || !counts) {
     return (
-      <section className="ui-queue" data-testid="download-queue" aria-label="Downloads">
+      <section ref={box} className="ui-queue" data-testid="download-queue" aria-label="Downloads">
         <div className="ui-queue__head">
           <Download size={16} aria-hidden="true" />
           <span className="ui-queue__title">Downloads</span>
@@ -58,7 +81,7 @@ export default function DownloadQueue() {
   const fraction = counts.total ? finished / counts.total : 0;
 
   return (
-    <section className="ui-queue" data-testid="download-queue" aria-label="Downloads">
+    <section ref={box} className="ui-queue" data-testid="download-queue" aria-label="Downloads">
       <div className="ui-queue__head">
         <Download size={16} aria-hidden="true" />
         <span className="ui-queue__title" aria-live="polite">

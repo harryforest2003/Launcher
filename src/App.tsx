@@ -16,11 +16,16 @@ import DownloadQueue from "./components/DownloadQueue";
 import { DownloadsContext, useDownloadQueueState } from "./components/ui/downloadsContext";
 import { SidebarBackLabel } from "./components/ui/sidebarContext";
 import AppSidebar, { type ShellTarget } from "./components/ui/AppSidebar";
-import { ShellContext, navKey, type McPage, type PageNav, type Shell } from "./components/ui/shellContext";
+import { ShellContext, navKey, type GamePageKey, type McPage, type PageNav, type Shell } from "./components/ui/shellContext";
 import Toaster from "./components/ui/Toaster";
 import FomodDialog from "./components/FomodDialog";
+import CommandPalette, { type PaletteCommand } from "./components/CommandPalette";
+import { Expand, Gamepad2, Monitor, PanelLeftClose } from "lucide-react";
+import { MOD_KEY } from "./utils/modKey";
+import { initDisplayMode, setBigScreen, setControllerOn, toggleFullScreen, useDisplayMode } from "./utils/displayMode";
+import { startGamepad } from "./utils/gamepad";
 import { leaveBlockbench } from "./components/leaveBlockbench";
-import { requestLaunch } from "./utils/launchRequests";
+import { requestLaunch, requestOpenInstance } from "./utils/launchRequests";
 
 export type Screen =
   | "home"
@@ -35,7 +40,7 @@ export type Screen =
   | "modmanager"
   | "game";
 
-type Route = { screen: Screen; gameId: GameId; modGame?: DetectedGame };
+type Route = { screen: Screen; gameId: GameId; modGame?: DetectedGame; /** The game page to open on, from Home's drawer or search. */ gamePage?: GamePageKey };
 
 // How long the old page takes to fade out before the new one comes in (ms).
 const LEAVE_MS = 110;
@@ -123,7 +128,7 @@ function App() {
   );
 
   const setScreen = useCallback((screen: Screen) => navigate((now) => ({ ...now, screen, modGame: undefined })), [navigate]);
-  const openGame = useCallback((gameId: GameId) => navigate(() => ({ screen: "game", gameId })), [navigate]);
+  const openGame = useCallback((gameId: GameId, gamePage?: GamePageKey) => navigate(() => ({ screen: "game", gameId, gamePage })), [navigate]);
 
   // The game sections' download queue: the corner panel and the sidebar's Downloads button.
   const downloads = useDownloadQueueState();
@@ -176,6 +181,64 @@ function App() {
       // Not remembered this time; it still folds.
     }
   }, [collapsed]);
+  // Search everything: Cmd/Ctrl+K from anywhere, even a text field.
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k" || event.altKey || event.shiftKey) return;
+      event.preventDefault();
+      setSearching((open) => !open);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // Full screen (F11), Big screen and moving around with a controller (Menu opens search).
+  const display = useDisplayMode();
+  useEffect(() => {
+    initDisplayMode();
+    return startGamepad({ onSearch: () => setSearching(true) });
+  }, []);
+  const paletteActions = useMemo<PaletteCommand[]>(
+    () => [
+      {
+        id: "action:sidebar",
+        group: "Actions",
+        label: collapsed ? "Expand sidebar" : "Collapse sidebar",
+        hint: `${MOD_KEY}B`,
+        keywords: "fold menu",
+        icon: <PanelLeftClose size={15} />,
+        run: toggleFold,
+      },
+      {
+        id: "action:fullscreen",
+        group: "Actions",
+        label: display.fullScreen ? "Leave full screen" : "Full screen",
+        hint: "F11",
+        keywords: "fullscreen window tv",
+        icon: <Expand size={15} />,
+        run: () => void toggleFullScreen(),
+      },
+      {
+        id: "action:bigscreen",
+        group: "Actions",
+        label: display.bigScreen ? "Turn off Big screen" : "Big screen: everything larger",
+        keywords: "zoom tv couch scale larger bigger",
+        icon: <Monitor size={15} />,
+        run: () => setBigScreen(!display.bigScreen),
+      },
+      {
+        id: "action:controller",
+        group: "Actions",
+        label: display.controller ? "Turn off controller navigation" : "Turn on controller navigation",
+        hint: display.pad ?? undefined,
+        keywords: "gamepad xbox playstation joystick",
+        icon: <Gamepad2 size={15} />,
+        run: () => setControllerOn(!display.controller),
+      },
+    ],
+    [collapsed, toggleFold, display.fullScreen, display.bigScreen, display.controller, display.pad]
+  );
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "b" || event.altKey || event.shiftKey) return;
@@ -216,7 +279,7 @@ function App() {
         navigate(() => shown);
         page.go(target.page ?? "home");
       }
-      else openGame(target.id);
+      else openGame(target.id, target.page);
     } else {
       const own = page?.area === "launcher" ? page.handlers[target.kind] : undefined;
       if (own) own();
@@ -236,6 +299,7 @@ function App() {
               openGame={shown.screen === "game" ? shown.gameId : null}
               collapsed={collapsed}
               onToggle={toggleFold}
+              onSearch={() => setSearching(true)}
               go={go}
             />
             <div className="ui-stage">
@@ -249,6 +313,7 @@ function App() {
           <Toaster />
           {/* A game mod's installer options, asked while it installs. */}
           <FomodDialog />
+          {searching && <CommandPalette onClose={() => setSearching(false)} go={go} actions={paletteActions} />}
         </ShellContext.Provider>
       </DownloadsContext.Provider>
     </SkinBuilderNavContext.Provider>
@@ -256,14 +321,14 @@ function App() {
 }
 
 function Screens({
-  route: { screen, gameId, modGame },
+  route: { screen, gameId, modGame, gamePage },
   setScreen,
   openGame,
   openModGame,
 }: {
   route: Route;
   setScreen: (screen: Screen) => void;
-  openGame: (id: GameId) => void;
+  openGame: (id: GameId, page?: GamePageKey) => void;
   openModGame: (game: DetectedGame) => void;
 }) {
 
@@ -324,7 +389,10 @@ function Screens({
     case "home":
       return (
         <HomeScreen
-          onMinecraft={navigation.goMinecraft}
+          onMinecraft={(page = "minecraft", instance) => {
+            if (instance) requestOpenInstance(instance);
+            setScreen(MC_SCREENS[instance ? "library" : page]);
+          }}
           onGame={openGame}
           onModGame={openModGame}
           onModManager={() => setScreen("modmanager")}
@@ -333,7 +401,7 @@ function Screens({
       );
 
     case "game":
-      return <GameSection key={gameId} gameId={gameId} onLauncher={navigation.goHome} onLauncherSettings={() => setScreen("launcherSettings")} />;
+      return <GameSection key={gameId} gameId={gameId} initialPage={gamePage} onLauncher={navigation.goHome} onLauncherSettings={() => setScreen("launcherSettings")} />;
 
     case "launcherSettings":
       return <LauncherSettings onHome={navigation.goHome} onModManager={() => setScreen("modmanager")} />;

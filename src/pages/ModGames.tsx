@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, Check, Download, ExternalLink } from "lucide-react";
+import { Check, Download, ExternalLink } from "lucide-react";
 import BackgroundLogo from "../components/BackgroundLogo";
 import LauncherSidebar from "../components/LauncherSidebar";
-import { Badge, Button, Notice, SearchField, Segmented, Select, Skeleton } from "../components/ui";
+import { Badge, Notice, SearchField, Segmented, Select, Skeleton } from "../components/ui";
 import ModManager from "./ModManager";
 import Pagination from "../components/Pagination";
 import { useGameArt } from "./gameArt";
@@ -300,17 +300,13 @@ export default function ModGames({ initialGame, onBack, onMinecraft, onGame, onS
           <ModManager game={selected} onBack={() => setSelected(null)} />
         ) : (
           <div className="app-page">
-            <Button variant="ghost" className="mg-back" icon={<ArrowLeft size={16} aria-hidden="true" />} onClick={onBack}>
-              Back to Home
-            </Button>
-
             <header className="mg-head">
               <div className="mg-head__text">
                 <h1 className="page-title">More Games</h1>
                 <p className="mg-head__lead" aria-live="polite">
                   {loading
                     ? "Looking for games…"
-                    : `${here.length} on this computer, on Home and in the sidebar${everyTotal ? ` · ${everyTotal.steam.toLocaleString()} games on Steam and ${everyTotal.modded.toLocaleString()} with mods to choose from` : ""}.`}
+                    : `Minecraft and ${here.length} more on this computer, on Home and in the sidebar${everyTotal ? ` · ${everyTotal.steam.toLocaleString()} games on Steam and ${everyTotal.modded.toLocaleString()} with mods to choose from` : ""}.`}
                 </p>
               </div>
               <SearchField

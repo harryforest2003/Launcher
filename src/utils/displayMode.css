@@ -1,0 +1,29 @@
+/*
+ * Moving with a controller: the focused control gets a ring you can see from the sofa,
+ * whatever the page's own focus style. The mouse or a key press turns it back off.
+ */
+html.is-gamepad :focus {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+html.is-gamepad [role="listbox"] [aria-selected="true"],
+html.is-gamepad .is-active[role="option"] {
+  outline: 2px solid var(--color-accent-line);
+  outline-offset: -2px;
+}
+html.is-gamepad,
+html.is-gamepad * {
+  cursor: none !important;
+}
+
+/* Settings: what each controller button does. */
+.set-pad-map {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--space-1-5) var(--space-4);
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--font-size-sm);
+}
+.set-pad-map > div { display: flex; gap: var(--space-2); }
+.set-pad-map dt { flex: none; width: 10.5em; font-weight: var(--weight-semibold); }
+.set-pad-map dd { margin: 0; color: var(--color-text-muted); }

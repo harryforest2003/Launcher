@@ -259,6 +259,18 @@ ipcMain.handle("minecraft:getLoaders", () => [
     { id: "quilt", name: "Quilt" }
 ]);
 
+/*
+ * The launcher's window in or out of full screen (F11, the controller's View button, the
+ * Settings switch). Passing nothing only asks. The page hears the change from the window's
+ * own events, which a Mac sends once its animation ends.
+ */
+ipcMain.handle("window:fullScreen", (event, on) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return false;
+    if (typeof on === "boolean") win.setFullScreen(on);
+    return win.isFullScreen();
+});
+
 ipcMain.handle("instances:get", () => getInstances());
 ipcMain.handle("instances:storage", () => getInstancesStorage());
 
@@ -384,6 +396,9 @@ function createWindow() {
     });
 
     win.maximize();
+
+    win.on("enter-full-screen", () => win.webContents.send("window:fullScreen", true));
+    win.on("leave-full-screen", () => win.webContents.send("window:fullScreen", false));
 
     win.webContents.once("did-finish-load", () => {
         pageReady = true;

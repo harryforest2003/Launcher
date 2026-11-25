@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CircleAlert,
   CircleCheck,
@@ -22,11 +22,14 @@ import { useInstances } from "./dashboard/useInstances";
 import { artOf, useGameArt } from "./gameArt";
 import { initials, timeAgo } from "./playedAgo";
 import { useScrollMemory } from "./useScrollMemory";
+import HomeGamePanel, { type HomePanelTarget } from "./HomeGamePanel";
+import type { GamePageKey, McPage } from "../components/ui/shellContext";
 import "./dashboard/dashboard.css";
 
 type Props = {
-  onMinecraft: () => void;
-  onGame: (id: GameId) => void;
+  /** A Minecraft page (its home if none); `instance` opens that instance in the Library. */
+  onMinecraft: (page?: McPage, instance?: string) => void;
+  onGame: (id: GameId, page?: GamePageKey) => void;
   onModGame: (game: DetectedGame) => void;
   onModManager: () => void;
   onSettings: () => void;
@@ -197,6 +200,16 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
   // The time range for the play time cards; until chosen, one that has play in it.
   const [chosenRange, setRange] = useState<Range | null>(null);
   const range = chosenRange ?? defaultRange(stats.data);
+  // The card whose drawer is open on the right: pick a profile and play without opening the game.
+  const [panel, setPanel] = useState<HomePanelTarget | null>(null);
+  const panelOpenedAt = useRef(0);
+  const openPanel = (target: HomePanelTarget, at: number) => {
+    panelOpenedAt.current = at;
+    setPanel(target);
+  };
+  const closePanel = useCallback(() => setPanel(null), []);
+  // A double-click opens the game itself: its second click lands on the drawer's scrim.
+  const openWorkspace = (target: HomePanelTarget) => (target.kind === "minecraft" ? onMinecraft() : onGame(target.id));
   const pageScroll = useScrollMemory("launcher-home", listed && detectedLoaded && instancesLoaded &&
     (view === "activity" ? !stats.loading && !activity.loading : !news.loading && !deals.loading));
 
@@ -285,7 +298,9 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
           type="button"
           className={`db-game${game.found ? "" : " db-game--missing"}`}
           data-testid="home-game"
-          onClick={() => onGame(game.id)}
+          data-home-card={game.id}
+          aria-haspopup="dialog"
+          onClick={(event) => openPanel({ kind: "game", id: game.id }, event.timeStamp)}
           aria-label={`${game.name}. ${game.found ? all.map((c) => c.label).join(", ") : "Not found on this computer"}. ${meta}.${game.cantRun ? ` ${game.cantRun}` : ""}`}
           style={{ "--game-colour": game.colour } as React.CSSProperties}
         >
@@ -325,9 +340,9 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
         <div ref={pageScroll} className="app-page db-page">
           <header className="db-header">
             <div>
-              <h1 className="db-header__title">Launcher home</h1>
+              <h1 className="db-header__title">Your games</h1>
               <p className="db-header__lead">
-                Choose a game to open its workspace.
+                Choose a game to play it, pick its profile, or open its pages.
                 <span className="db-header__count" aria-live="polite">
                   {listed && detectedLoaded
                     ? ` ${plural(found.length + extraGames.length + 1, "game", "games")} on this computer${notHere.length ? `, ${notHere.length} more in More Games` : ""}.`
@@ -346,7 +361,7 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
 
           <div className="db-col">
               <section className="db-games" aria-labelledby="db-games-title">
-                <h2 className="db-card__title db-sr" id="db-games-title">Your games</h2>
+                <h2 className="db-card__title db-sr" id="db-games-title">Games</h2>
                 {visibleCount === 0 && !showMore && <p className="db-empty" role="status">{!listed || !detectedLoaded || !instancesLoaded || (filter === "attention" && checkingStatus) ? "Checking your games…" : scanFailed || (filter === "attention" && statusFailed) ? "Results are incomplete. Retry the checks below." : filter === "attention" && !query.trim() ? "No checked games need attention." : "No games match these filters."}</p>}
                 {(query || filter !== "all") && (
                   <div className="db-filter-summary">
@@ -359,8 +374,10 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
                     <button
                       type="button"
                       className="db-game"
-                      onClick={onMinecraft}
+                      onClick={(event) => openPanel({ kind: "minecraft" }, event.timeStamp)}
                       data-testid="home-minecraft"
+                      data-home-card="minecraft"
+                      aria-haspopup="dialog"
                       style={
                         {
                           "--game-colour": "var(--color-accent-line)",
@@ -463,6 +480,33 @@ function HomeScreen({ onMinecraft, onGame, onModGame, onModManager, onSettings }
               </div>
           </div>
         </div>
+
+        {panel && (
+          <div
+            className="lx-scrim"
+            aria-hidden="true"
+            onClick={(event) => {
+              if (event.detail > 1 && event.timeStamp - panelOpenedAt.current < 700) openWorkspace(panel);
+              else closePanel();
+            }}
+          />
+        )}
+        {panel && (
+          <HomeGamePanel
+            key={panel.kind === "minecraft" ? "minecraft" : panel.id}
+            target={panel}
+            game={panel.kind === "game" ? games.find((g) => g.id === panel.id) : undefined}
+            chips={panel.kind === "game" ? (() => {
+              const game = games.find((g) => g.id === panel.id);
+              return game?.found && statuses[game.id] ? chips(game).filter((c) => !(game.cantRun && c.tone === "success")) : [];
+            })() : undefined}
+            instances={instances}
+            reloadInstances={() => void reloadInstances()}
+            onClose={closePanel}
+            onMinecraft={(page, instance) => onMinecraft(page, instance)}
+            onGame={(id, page) => onGame(id, page)}
+          />
+        )}
       </main>
     </div>
   );

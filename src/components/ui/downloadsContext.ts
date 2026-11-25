@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 /*
  * The game sections' download queue, shared by the corner panel (DownloadQueue) and the
@@ -38,5 +38,7 @@ export function useDownloadQueueState(): Downloads {
   }, []);
 
   const left = queue ? queue.counts.waiting + (queue.current ? 1 : 0) : 0;
-  return { queue, left, shown, toggle: () => setShown((now) => !now), hide: () => setShown(false) };
+  const toggle = useCallback(() => setShown((now) => !now), []);
+  const hide = useCallback(() => setShown(false), []);
+  return { queue, left, shown, toggle, hide };
 }

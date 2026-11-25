@@ -25,6 +25,7 @@ import SettingsLayout, { SettingsHeader } from "../components/SettingsLayout";
 import AppearanceSettings from "../theme/AppearanceSettings";
 import AccountSwitcher from "../components/AccountSwitcher";
 import { DiscordStatusSection } from "../components/DiscordStatusSettings";
+import DisplaySettings from "../components/DisplaySettings";
 import { PLATFORMS } from "../components/platformAccountsData";
 import "../theme/appearance.css";
 
@@ -227,6 +228,12 @@ export default function LauncherSettings({
                 label: "Readability",
                 icon: <Type size={16} aria-hidden="true" />,
                 content: <AppearanceSettings part="readability" />,
+              },
+              {
+                id: "display",
+                label: "Big screen",
+                icon: <Gamepad2 size={16} aria-hidden="true" />,
+                content: <DisplaySettings />,
               },
               {
                 id: "appearance-vision",

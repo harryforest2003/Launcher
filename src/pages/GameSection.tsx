@@ -22,6 +22,8 @@ import { errorText, installSummary } from "./games/shared";
 
 type Props = {
   gameId: GameId;
+  /** The page to open on (Home's drawer and search can open any of them). */
+  initialPage?: GamePage;
   onLauncher: () => void;
   onLauncherSettings: () => void;
 };
@@ -31,8 +33,8 @@ type Props = {
  * Valley): its mods, finding more, its settings, and playing it, warned first when the
  * game has updated since it was last played.
  */
-export default function GameSection({ gameId, onLauncher, onLauncherSettings }: Props) {
-  const [page, setPage] = useState<GamePage>("home");
+export default function GameSection({ gameId, initialPage, onLauncher, onLauncherSettings }: Props) {
+  const [page, setPage] = useState<GamePage>(initialPage ?? "home");
   const [openMod, setOpenMod] = useState<{ provider: GameModProvider; id: string } | null>(null);
   const [openCollection, setOpenCollection] = useState<string | null>(null);
   const deeper = Boolean(openMod || openCollection);

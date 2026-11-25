@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webFrame } = require("electron");
 
 /*
  * The launcher's bridge. main.cjs registers this for its session (not for one window), so
@@ -530,6 +530,21 @@ expose("updaterAPI", {
         const relay = (_event, state) => listener(state);
         ipcRenderer.on("updater:state", relay);
         return () => ipcRenderer.removeListener("updater:state", relay);
+    },
+});
+
+// Full screen and Big screen (displayMode.ts).
+expose("displayAPI", {
+    fullScreen: (on) => ipcRenderer.invoke("window:fullScreen", typeof on === "boolean" ? on : undefined),
+    onFullScreen: (listener) => {
+        const relay = (_event, on) => listener(Boolean(on));
+        ipcRenderer.on("window:fullScreen", relay);
+        return () => ipcRenderer.removeListener("window:fullScreen", relay);
+    },
+    // Chromium's own page zoom, so layouts sized to the window still fit it.
+    setZoom: (factor) => {
+        const zoom = Number(factor);
+        if (Number.isFinite(zoom) && zoom >= 0.5 && zoom <= 2) webFrame.setZoomFactor(zoom);
     },
 });
 

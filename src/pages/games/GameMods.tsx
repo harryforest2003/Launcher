@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bug, ChevronDown, ClipboardPaste, Folder, ListFilter, MoreHorizontal, Play, Power, Share2, Trash2, TriangleAlert, Undo2, Download, Plus, RefreshCw, FileUp, Ellipsis, X, Pin, PinOff } from "lucide-react";
+import { ArrowDown, ArrowUp, Bug, ChevronDown, ClipboardPaste, Folder, ListFilter, MoreHorizontal, Play, Power, Share2, Trash2, TriangleAlert, Undo2, Download, Plus, RefreshCw, FileUp, Ellipsis, X, Pin, PinOff } from "lucide-react";
+import { onModSearchRequest } from "../../utils/launchRequests";
 import SearchDropdown from "../../components/SearchDropdown";
 import FinderPanel from "./FinderPanel";
 import LoadOrderNotice from "./LoadOrderNotice";
@@ -57,6 +58,14 @@ type Props = {
 const ALL = "All mods";
 
 type Filter = "all" | "on" | "off" | "update" | "newer";
+type SortKey = "name" | "where" | "added";
+
+// Rows drawn at first, and added each time the end of the list scrolls near: a list of
+// thousands of mods opens at once and scrolls smoothly.
+const PAGE = 120;
+const DENSE_KEY = "unity-mods-dense";
+
+const whereOf = (mod: GameMod) => (mod.areas.length ? mod.areas.map((a) => a.area).join(", ") : (mod.where ?? "Game folder"));
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
@@ -115,6 +124,15 @@ export default function GameMods({
   }, [allNewer, mods]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  // The search palette opens this page on one mod: search for it with nothing else filtering.
+  useEffect(
+    () =>
+      onModSearchRequest(detail.id, (text) => {
+        setFilter("all");
+        setQuery(text);
+      }),
+    [detail.id]
+  );
   const [sharing, setSharing] = useState<"make" | "paste" | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -160,6 +178,84 @@ export default function GameMods({
       return true;
     });
   }, [mods, query, activeFilter, newer, currentSet]);
+
+  // Sorted by a column's header (first press A to Z or newest first, second press reverses),
+  // or as the game lists them until one is pressed.
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+  const sorted = useMemo(() => {
+    if (!sort) return shown;
+    const value = (mod: GameMod) => (sort.key === "name" ? mod.name : sort.key === "where" ? whereOf(mod) : (mod.installedAt ?? ""));
+    return [...shown].sort((a, b) => value(a).localeCompare(value(b), undefined, { sensitivity: "base", numeric: true }) * sort.dir || a.name.localeCompare(b.name));
+  }, [shown, sort]);
+  const sortBy = (key: SortKey) =>
+    setSort((now) => (now?.key === key ? (now.dir === (key === "added" ? -1 : 1) ? { key, dir: now.dir === 1 ? -1 : 1 } : null) : { key, dir: key === "added" ? -1 : 1 }));
+  const ariaSort = (key: SortKey) => (sort?.key === key ? (sort.dir === 1 ? "ascending" : "descending") : "none");
+
+  // Compact rows, remembered.
+  const [dense, setDense] = useState(() => {
+    try {
+      return localStorage.getItem(DENSE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleDense = () =>
+    setDense((now) => {
+      try {
+        localStorage.setItem(DENSE_KEY, now ? "0" : "1");
+      } catch {
+        // Not remembered this time.
+      }
+      return !now;
+    });
+
+  // How many rows are drawn: more as the end comes near; back to the first page when the list changes.
+  const listKey = `${query}|${activeFilter}|${sort?.key}|${sort?.dir}|${currentSet?.name ?? ""}`;
+  const [paging, setPaging] = useState({ key: listKey, limit: PAGE });
+  const limit = paging.key === listKey ? paging.limit : PAGE;
+  const more = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const end = more.current;
+    if (!end || limit >= sorted.length) return;
+    const watch = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) setPaging({ key: listKey, limit: limit + PAGE });
+    }, { rootMargin: "800px 0px" });
+    watch.observe(end);
+    return () => watch.disconnect();
+  }, [limit, sorted.length, listKey]);
+
+  // Ticked mods, for turning many on or off at once.
+  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const tickedHere = sorted.filter((mod) => ticked.has(mod.key));
+  const allTicked = sorted.length > 0 && tickedHere.length === sorted.length;
+  const tick = (key: string, on: boolean) =>
+    setTicked((now) => {
+      const next = new Set(now);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  const [bulkBusy, setBulkBusy] = useState(false);
+  async function setTickedEnabled(on: boolean) {
+    const change = tickedHere.filter((mod) => mod.enabled !== on);
+    if (!change.length) return;
+    setBulkBusy(true);
+    let failed = 0;
+    for (const mod of change) {
+      try {
+        await window.gamesAPI.setEnabled(detail.id, mod.key, on);
+      } catch {
+        failed += 1;
+      }
+    }
+    await reload();
+    setBulkBusy(false);
+    setMessage(
+      failed
+        ? { tone: "bad", text: `${change.length - failed} of ${change.length} mods turned ${on ? "on" : "off"}; ${failed} couldn't be changed.` }
+        : { tone: "good", text: `Turned ${on ? "on" : "off"} ${change.length} mod${change.length === 1 ? "" : "s"}.` }
+    );
+  }
 
   const mayNeedUpdate = mods.filter((mod) => mod.mayNeedUpdate && mod.enabled);
   const onCount = mods.filter((mod) => mod.enabled).length;
@@ -785,18 +881,67 @@ export default function GameMods({
         </section>
       )}
 
+      {/* Ticked mods: turn them all on or off at once */}
+      {tickedHere.length > 0 && (
+        <div className="gm-bulk" role="toolbar" aria-label="Ticked mods" data-testid="mod-bulk">
+          <span className="gm-bulk__count">{tickedHere.length} ticked</span>
+          <Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => setTickedEnabled(true)}>
+            Turn on
+          </Button>
+          <Button size="sm" variant="secondary" disabled={bulkBusy} onClick={() => setTickedEnabled(false)}>
+            Turn off
+          </Button>
+          <span className="gm-spacer" />
+          <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={() => setTicked(new Set())}>
+            Clear
+          </Button>
+        </div>
+      )}
+
       {/* LIST: a table, one row per mod, columns that line up */}
-      <div className="gm-table" role="table" aria-label="Mods" data-testid="mod-list">
+      <div className={`gm-table${dense ? " gm-table--dense" : ""}`} role="table" aria-label="Mods" aria-rowcount={sorted.length + 1} data-testid="mod-list">
         {shown.length > 0 && (
-          <div className="gm-row gm-row--head u-visually-hidden" role="row">
+          <div className="gm-row gm-row--head" role="row">
+            <div role="columnheader" className="gm-cell gm-cell--tick">
+              <input
+                type="checkbox"
+                className="gm-check"
+                aria-label={allTicked ? "Untick all shown mods" : `Tick all ${sorted.length} shown mods`}
+                checked={allTicked}
+                ref={(box) => {
+                  if (box) box.indeterminate = tickedHere.length > 0 && !allTicked;
+                }}
+                onChange={() => setTicked(allTicked ? new Set() : new Set(sorted.map((mod) => mod.key)))}
+              />
+            </div>
             <div role="columnheader" className="gm-cell gm-cell--toggle">
               <span className="u-visually-hidden">On or off</span>
             </div>
-            <div role="columnheader" className="gm-cell">Name</div>
-            <div role="columnheader" className="gm-cell gm-cell--area">Where</div>
-            <div role="columnheader" className="gm-cell gm-cell--added">Added</div>
+            {(
+              [
+                ["name", "Name", ""],
+                ["where", "Where", " gm-cell--area"],
+                ["added", "Added", " gm-cell--added"],
+              ] as const
+            ).map(([key, label, cls]) => (
+              <div key={key} role="columnheader" aria-sort={ariaSort(key)} className={`gm-cell${cls}`}>
+                <button type="button" className="gm-sort" data-testid={`sort-${key}`} onClick={() => sortBy(key)}>
+                  {label}
+                  {sort?.key === key && (sort.dir === 1 ? <ArrowUp size={12} aria-hidden="true" /> : <ArrowDown size={12} aria-hidden="true" />)}
+                </button>
+              </div>
+            ))}
             <div role="columnheader" className="gm-cell gm-cell--actions">
-              <span className="u-visually-hidden">Actions</span>
+              <button
+                type="button"
+                className="gm-sort"
+                data-testid="mods-dense"
+                aria-pressed={dense}
+                data-tip="Compact rows: more mods on screen"
+                onClick={toggleDense}
+              >
+                Compact
+              </button>
             </div>
           </div>
         )}
@@ -804,19 +949,22 @@ export default function GameMods({
           <div className="gm-empty">
             {mods.length === 0
               ? profileApi.active && allMods.length
-                ? `No mods in ${profileApi.active.name} yet. Add some from Downloads or Discover Mods, or pick another profile and put its mods in this one from each mod's ... menu.`
+                ? `No mods in ${profileApi.active.name} yet. Add some from Downloads or Discover, or pick another profile and put its mods in this one from each mod's ... menu.`
                 : detail.found
-                ? "No mods yet. Add one from Downloads, or find some in Discover Mods."
+                ? "No mods yet. Add one from Downloads, or find some in Discover."
                 : "Once the game's found, its mods show here."
               : "No mods match."}
           </div>
         ) : (
-          shown.map((mod) => {
+          sorted.slice(0, limit).map((mod) => {
             const update = newer.get(mod.key);
             const inSets = sets.filter((set) => set.keys.includes(mod.key));
             const extra = inSets.length ? `Sets: ${inSets.map((set) => set.name).join(", ")}` : "";
             return (
-              <div key={mod.key} role="row" data-testid="game-mod" className={`gm-row${mod.enabled ? "" : " gm-row--off"}${mod.mayNeedUpdate && mod.enabled ? " gm-row--warn" : ""}`}>
+              <div key={mod.key} role="row" data-testid="game-mod" className={`gm-row${mod.enabled ? "" : " gm-row--off"}${mod.mayNeedUpdate && mod.enabled ? " gm-row--warn" : ""}${ticked.has(mod.key) ? " gm-row--ticked" : ""}`}>
+                <div role="cell" className="gm-cell gm-cell--tick">
+                  <input type="checkbox" className="gm-check" aria-label={`Tick ${mod.name}`} checked={ticked.has(mod.key)} onChange={(event) => tick(mod.key, event.target.checked)} />
+                </div>
                 <div role="cell" className="gm-cell gm-cell--toggle">
                   <Toggle
                     on={mod.enabled}
@@ -856,7 +1004,7 @@ export default function GameMods({
                   />
                 </div>
                 <div role="cell" className="gm-cell gm-cell--area">
-                  {mod.areas.length ? mod.areas.map((a) => a.area).join(", ") : (mod.where ?? "Game folder")}
+                  {whereOf(mod)}
                 </div>
                 <div role="cell" className="gm-cell gm-cell--added">
                   {mod.installedAt ? shortDate(mod.installedAt) : "-"}
@@ -971,6 +1119,16 @@ export default function GameMods({
               </div>
             );
           })
+        )}
+        {limit < sorted.length && (
+          <div ref={more} className="gm-more" role="row">
+            <span role="cell">
+              Showing {limit} of {sorted.length}.{" "}
+              <button type="button" className="gm-sort" onClick={() => setPaging({ key: listKey, limit: sorted.length })}>
+                Show all
+              </button>
+            </span>
+          </div>
         )}
       </div>
     </div>
